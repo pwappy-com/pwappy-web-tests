@@ -61,7 +61,15 @@ jobs:
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
           PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-
+      
+      # テスト結果（動画、スクリーンショット等）をアップロード
+      - name: Upload Test Results (Normal)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-normal-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
 
   # --- Premiumプランのテスト (1日に1回) ---
   premium-test:
@@ -101,6 +109,15 @@ jobs:
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
           PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
+      
+      # テスト結果（動画、スクリーンショット等）をアップロード
+      - name: Upload Test Results (Premium)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-premium-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
 
 
   # --- 手動実行用のジョブ ---
@@ -149,3 +166,12 @@ jobs:
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
           PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
+
+      # テスト結果（動画、スクリーンショット等）をアップロード
+      - name: Upload Test Results (Manual)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-manual-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
