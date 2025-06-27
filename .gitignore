@@ -1,0 +1,21 @@
+# 依存関係パッケージ
+node_modules/
+
+# テスト実行時に生成されるディレクトリ
+test-results/
+playwright-report/
+playwright/.cache/
+
+# 環境変数ファイル
+.env
+.env.*
+!.env.example
+!.env.template
+
+# OS固有のファイル
+.DS_Store
+Thumbs.db
+
+# IDE/エディタの設定ファイル
+.vscode/
+.idea/

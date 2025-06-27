@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",          // 最新のECMAScript機能をサポート
+    "module": "NodeNext",        // 最新のNode.jsのモジュール解決方式を使用
+    "moduleResolution": "NodeNext",
+    "strict": true,              // 厳格な型チェックを有効にする（推奨）
+    "esModuleInterop": true,     // CommonJSモジュールとの相互運用性を向上
+    "skipLibCheck": true,        // ライブラリの型チェックをスキップして高速化
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,   // JSONファイルのインポートを許可
+    "noUnusedLocals": false,     // Playwrightでは未使用の変数が発生しやすいためfalseに
+    "noUnusedParameters": false  // 同上
+  },
+  "include": [
+    "tests/**/*.ts",             // testsディレクトリ以下のtsファイルを対象にする
+    "playwright.config.ts"       // Playwrightの設定ファイルも対象に含める
+  ]
+}
