@@ -15,7 +15,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
         { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: 'localhost', path: '/' },
         { name: 'pwappy_login', value: '1', domain: 'localhost', path: '/' },
       ]);
-      await page.goto('http://localhost:8080');
+      await page.goto(String(process.env.PWAPPY_TEST_BASE_URL));
       await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
