@@ -19,12 +19,14 @@ test.describe('削除・編集のガード条件テスト', () => {
      * 各テストの実行前に、認証とダッシュボードへのアクセスを行います。
      */
     test.beforeEach(async ({ page, context }) => {
+        const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
+        const domain = testUrl.hostname;
         await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: 'localhost', path: '/' },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: 'localhost', path: '/' },
-            { name: 'pwappy_login', value: '1', domain: 'localhost', path: '/' },
+            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
+            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
+            { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
         ]);
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL));
+        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
@@ -79,13 +81,13 @@ test.describe('削除・編集のガード条件テスト', () => {
 
         await test.step('クリーンアップ: バージョンを非公開にし、アプリを削除する', async () => {
             await unpublishVersion(page, appName, version);
-            
+
             // 削除ボタンが活性化したことを確認してから削除を実行
             await navigateToTab(page, 'workbench');
             const appRowWorkbench = page.locator('.app-list tbody tr', { hasText: appName });
             await expect(appRowWorkbench.getByRole('button', { name: '削除' })).toBeEnabled();
             await deleteApp(page, appName);
-            
+
             // 最終的にリストから消えたことを確認
             const appNameCell = page.locator('.app-list tbody tr td:first-child', { hasText: new RegExp(`^${appName}$`) });
             await expect(appNameCell).toBeHidden();

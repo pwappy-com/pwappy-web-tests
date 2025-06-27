@@ -18,12 +18,14 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
     // 各テストの実行前に認証情報を設定し、ダッシュボードの初期ページに遷移します。
     test.beforeEach(async ({ page, context }) => {
+        const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
+        const domain = testUrl.hostname;
         await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: 'localhost', path: '/' },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: 'localhost', path: '/' },
-            { name: 'pwappy_login', value: '1', domain: 'localhost', path: '/' },
+            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
+            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
+            { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
         ]);
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL));
+        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
@@ -41,7 +43,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
         await test.step('テスト: バリデーションと正常作成', async () => {
             await page.getByTitle('アプリケーションの追加').click();
-            
+
             const modal = page.locator('dashboard-modal-window#appModal');
             // モーダルダイアログが完全に表示されるのを待機します。
             await expect(modal.getByRole('heading', { name: 'アプリケーションの追加' })).toBeVisible();
@@ -96,7 +98,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         await test.step('テスト: アプリケーションを編集する', async () => {
             const appRow = page.locator('.app-list tbody tr', { hasText: appName });
             await appRow.getByRole('button', { name: '編集' }).click();
-            
+
             const modal = page.locator('dashboard-modal-window#appModal');
             // モーダルダイアログが完全に表示されるのを待機します。
             await expect(modal.getByRole('heading', { name: 'アプリケーションの編集' })).toBeVisible();
@@ -104,7 +106,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             // アプリケーション名を変更し、保存します。
             await modal.getByLabel('アプリケーション名').fill(editedAppName);
             await modal.getByRole('button', { name: '保存' }).click();
-            
+
             // 編集が反映され、一覧の表示が更新されることを確認します。
             await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
             await expectAppVisibility(page, editedAppName, true);
@@ -116,7 +118,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await expectAppVisibility(page, editedAppName, false);
         });
     });
-    
+
     test('WB-APP-ARC & AR-APP-REST: アプリケーションのアーカイブと復元', async ({ page }) => {
         const timestamp = Date.now().toString();
         const appName = `アーカイブテスト-${timestamp}`.slice(0, 30);
@@ -130,14 +132,14 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         await test.step('テスト: アプリケーションをアーカイブする', async () => {
             const appRow = page.locator('.app-list tbody tr', { hasText: appName });
             await appRow.getByRole('button', { name: 'アーカイブ' }).click();
-            
+
             // アーカイブ確認ダイアログで実行します。
             const confirmDialog = page.locator('message-box#archive-confirm');
             await expect(confirmDialog).toBeVisible();
             await confirmDialog.getByRole('button', { name: 'アーカイブ' }).click();
-            
+
             await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
-            
+
             // 成功メッセージが表示され、ワークベンチの一覧から消えることを確認します。
             const alertDialog = page.locator('alert-component');
             await expect(alertDialog).toBeVisible();
@@ -154,7 +156,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
         await test.step('テスト: アーカイブから復元する', async () => {
             await navigateToTab(page, 'archive');
-            
+
             const archiveRow = page.locator('.app-list tbody tr', { hasText: appName });
             await archiveRow.getByRole('button', { name: 'ワークベンチに復元' }).click();
 
@@ -162,9 +164,9 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             const confirmDialog = page.locator('message-box#restore-confirm');
             await expect(confirmDialog).toBeVisible();
             await confirmDialog.getByRole('button', { name: '復元' }).click();
-            
+
             await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
-            
+
             // 成功メッセージが表示されることを確認します。
             const alertDialog = page.locator('alert-component');
             await expect(alertDialog).toBeVisible();
@@ -209,7 +211,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await appNameInput.fill('');
             await modal.getByRole('button', { name: '保存' }).click();
             await expect(modal.locator('#error-app-name')).toContainText('必須項目です');
-            
+
             // アプリケーションキーを空にして保存し、エラーが表示されることを確認します。
             await appNameInput.fill(appName);
             await appKeyInput.fill('');
@@ -257,7 +259,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
     //     await test.step('クリーンアップ: バージョンを非公開にしてからアプリを削除する', async () => {
     //         // 公開中のバージョンを非公開にします。
     //         await unpublishVersion(page, appName, version);
-            
+
     //         // ワークベンチに戻り、削除ボタンが活性化していることを確認します。
     //         await navigateToTab(page, 'workbench');
     //         const appRowWorkbench = page.locator('.app-list tbody tr', { hasText: appName });
@@ -295,13 +297,13 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             // アプリAのキーを、既存のアプリBのキーに変更します。
             await modal.getByLabel('アプリケーションキー').fill(appB_Key);
             await modal.getByRole('button', { name: '保存' }).click();
-            
+
             // 重複エラーのアラートが表示されることを確認します。
             const alertDialog = page.locator('alert-component');
             await expect(alertDialog).toBeVisible();
             await expect(alertDialog).toContainText('アプリケーションキーが重複しています');
             await alertDialog.getByRole('button', { name: '閉じる' }).click();
-            
+
             // モーダルをキャンセルで閉じます。
             await modal.getByRole('button', { name: 'キャンセル' }).click();
             await expect(modal).toBeHidden();

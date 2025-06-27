@@ -20,12 +20,14 @@ test.describe('公開管理 E2Eシナリオ', () => {
      * 各テストの実行前に、認証とダッシュボードへのアクセスを行います。
      */
     test.beforeEach(async ({ page, context }) => {
+        const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
+        const domain = testUrl.hostname;
         await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: 'localhost', path: '/' },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: 'localhost', path: '/' },
-            { name: 'pwappy_login', value: '1', domain: 'localhost', path: '/' },
+            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
+            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
+            { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
         ]);
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL));
+        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
@@ -52,7 +54,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('状態遷移(1): バージョンを「公開準備中」にする', async () => {
             await startPublishPreparation(page, appName, version);
-            
+
             // 状態遷移後のUIを検証
             await expectVersionStatus(page, version, '公開準備中');
             const versionRowAfter = page.locator('.publish-list tbody tr', { hasText: version });
@@ -61,7 +63,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('状態遷移(2): 「公開準備完了」を経て「公開中」にし、その後「非公開」に戻す', async () => {
             test.setTimeout(180000); // 審査待ちが発生するためタイムアウトを延長
-            
+
             // 「公開準備完了」を経て「公開中」への遷移
             await completePublication(page, appName, version);
             await expectVersionStatus(page, version, '公開中');

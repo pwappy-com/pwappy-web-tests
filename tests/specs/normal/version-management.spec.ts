@@ -15,12 +15,14 @@ import {
 test.describe('バージョン管理 E2Eシナリオ', () => {
 
     test.beforeEach(async ({ page, context }) => {
+        const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
+        const domain = testUrl.hostname;
         await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: 'localhost', path: '/' },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: 'localhost', path: '/' },
-            { name: 'pwappy_login', value: '1', domain: 'localhost', path: '/' },
+            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
+            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
+            { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
         ]);
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL));
+        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
@@ -118,7 +120,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         await test.step('テスト: 1.0.0を1.1.0に編集しようとするとエラーになる', async () => {
             const versionRow = page.locator('.version-list tbody tr', { hasText: '1.0.0' });
             await versionRow.getByRole('button', { name: '編集' }).click();
-            
+
             const modal = page.locator('dashboard-modal-window#versionModal');
             await expect(modal.getByRole('heading', { name: 'バージョンの編集' })).toBeVisible();
             await modal.getByLabel('バージョン').fill('1.1.0');
@@ -153,7 +155,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
 
             const modal = page.locator('dashboard-modal-window#versionModal');
             await expect(modal.getByRole('heading', { name: 'バージョンの編集' })).toBeVisible();
-            
+
             const versionInput = modal.getByLabel('バージョン');
 
             await versionInput.fill('');

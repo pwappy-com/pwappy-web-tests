@@ -53,10 +53,12 @@ test.describe('エディタ内機能のテスト', () => {
      * 各テストの実行前に認証とダッシュボードへのアクセスを行います。
      */
     test.beforeEach(async ({ page, context }) => {
+        const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
+        const domain = testUrl.hostname;
         await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: 'localhost', path: '/' },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: 'localhost', path: '/' },
-            { name: 'pwappy_login', value: '1', domain: 'localhost', path: '/' },
+            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
+            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
+            { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
         ]);
         await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
@@ -520,7 +522,7 @@ test.describe('エディタ内機能のテスト', () => {
             // --- 'flex-grow' の操作 ---
             const flexGrowInput = targetInputPanel.locator('input[id="flex-grow"]');
             await expect(flexGrowInput).toBeVisible();
-            await flexGrowInput.fill('1');            
+            await flexGrowInput.fill('1');
             await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'flex-grow', value: '1' });
 
             // --- 'flex-shrink' の操作 ---
