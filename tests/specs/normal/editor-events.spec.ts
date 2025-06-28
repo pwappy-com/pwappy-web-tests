@@ -37,8 +37,8 @@ const test = base.extend<EditorFixtures>({
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
-        // await editorPage.close();
-        // await deleteApp(page, appName);
+        await editorPage.close();
+        await deleteApp(page, appName);
     },
 });
 

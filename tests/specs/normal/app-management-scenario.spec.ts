@@ -8,11 +8,7 @@ import 'dotenv/config';
 import {
     createApp,
     deleteApp,
-    navigateToTab,
-    expectAppVisibility,
-    publishVersion,
-    unpublishVersion
-} from '../../tools/dashboard-helpers';
+    expectAppVisibility} from '../../tools/dashboard-helpers';
 
 test.describe('アプリケーション管理 E2Eシナリオ', () => {
 

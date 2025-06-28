@@ -41,8 +41,8 @@ const test = base.extend<EditorFixtures>({
         await use(editorPage);
 
         // テスト終了後のクリーンアップ
-        //await editorPage.close();
-        //await deleteApp(page, appName);
+        await editorPage.close();
+        await deleteApp(page, appName);
     },
 });
 
