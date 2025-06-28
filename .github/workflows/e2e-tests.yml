@@ -1,15 +1,18 @@
+# ワークフローの名称
 name: Multi-OS E2E Tests
 
+# ワークフローが実行されるトリガーを定義
 on:
+  # 定期実行 (schedule)
   schedule:
-    # 毎時0分に実行 (Normalテスト用)
-    # UTCの17, 18, 19時 (JSTの2, 3, 4時台) を除外
+    # UTCの毎時0分に実行。ただし、UTC 17-19時 (JST 2-4時台) は除外 (Normalテスト用)
     - cron: '0 0-16,20-23 * * *'
-    # 毎日 UTCの0時0分 (日本時間の午前9時) に実行 (Premiumテスト用)
+    # UTCの毎日0時0分 (JST 9時) に実行 (Premiumテスト用)
     - cron: '0 0 * * *'
-  # 手動実行も可能にする
+  # 手動実行 (workflow_dispatch)
   workflow_dispatch:
     inputs:
+      # 手動実行時に実行するテストスイートを選択するドロップダウン
       test_suite:
         description: '実行するテストスイートを選択'
         required: true
@@ -19,28 +22,75 @@ on:
           - normal
           - premium
           - all
+      # 手動実行時に実行するOSを選択するドロップダウン
+      os:
+        description: '実行するOSを選択'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
 
+# ワークフローを構成するジョブを定義
 jobs:
-  e2e-test:
-    # 各OSでジョブを並列実行する(max-parallelで並列度指定)
-    strategy:
-      # 1つのOSで失敗しても他のOSのテストは続行する
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            browser: chromium
-          - os: windows-latest
-            browser: chromium
-          - os: macos-latest
-            browser: webkit
-      max-parallel: 1
-        
-    # matrixで指定されたOS上で実行
-    runs-on: ${{ matrix.os }}
-
+  # ===================================================================
+  # ジョブ 1: 実行するテストのマトリックスを動的に準備する
+  # ===================================================================
+  # ワークフローのトリガー条件に応じて、実行すべきOSとブラウザの組み合わせを決定し、
+  # 後続のテストジョブに引き渡します。
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    # このジョブの出力を定義。後続のジョブが 'needs.prepare-matrix.outputs.matrix' で参照可能になる。
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout tests repository
+      - name: Determine test matrix
+        id: set-matrix
+        run: |
+          # スケジュール実行か、手動実行で 'all' が選択された場合は、すべてのOSでテストする
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event.inputs.os }}" == "all" ]]; then
+            echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium"}, {"os": "windows-latest", "browser": "chromium"}, {"os": "macos-latest", "browser": "webkit"}]' >> $GITHUB_OUTPUT
+          else
+            # 手動実行で特定のOSが選択された場合は、そのOSに対応する組み合わせのみを生成する
+            case "${{ github.event.inputs.os }}" in
+              "ubuntu-latest")
+                echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium"}]' >> $GITHUB_OUTPUT
+                ;;
+              "windows-latest")
+                echo 'matrix=[{"os": "windows-latest", "browser": "chromium"}]' >> $GITHUB_OUTPUT
+                ;;
+              "macos-latest")
+                echo 'matrix=[{"os": "macos-latest", "browser": "webkit"}]' >> $GITHUB_OUTPUT
+                ;;
+            esac
+          fi
+
+  # ===================================================================
+  # ジョブ 2: E2Eテストの実行
+  # ===================================================================
+  # 'prepare-matrix' ジョブの結果に基づき、指定されたOSとブラウザの組み合わせでテストを実行します。
+  e2e-test:
+    # 'prepare-matrix' ジョブが完了してからこのジョブを開始する
+    needs: prepare-matrix
+    # 'prepare-matrix' がマトリックスを生成した場合のみジョブを実行する (エラー防止)
+    if: ${{ needs.prepare-matrix.outputs.matrix != '' }}
+    strategy:
+      # 1つのOSでテストが失敗しても、他のOSのテストは中断せずに続行する
+      fail-fast: false
+      # 同時に実行するジョブの数を1に制限し、直列実行を実現する
+      max-parallel: 1
+      # 'prepare-matrix' が出力したJSON文字列を解釈し、動的にマトリックスを構築する
+      matrix:
+        include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
+    
+    # マトリックスで指定されたOSのランナーでジョブを実行する
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -50,20 +100,17 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        # WindowsのPowerShellでもnpm installが実行されるように
-        shell: bash
         run: npm install
 
       - name: Install Playwright Browsers
-        shell: bash
-        run: npx playwright install --with-deps
+        # このジョブで必要なブラウザのみをインストールして効率化する
+        run: npx playwright install --with-deps ${{ matrix.browser }}
 
-      # どのテストスイートを実行するかを決定するステップ
+      # 実行するテストスイートのパスを決定する
       - name: Determine Test Suite
         id: get_suite
         shell: bash
         run: |
-          # スケジュール実行の場合
           if [ "${{ github.event_name }}" == "schedule" ]; then
             if [ "${{ github.event.schedule }}" == "0 0 * * *" ]; then
               echo "SUITE_NAME=premium" >> $GITHUB_ENV
@@ -72,7 +119,6 @@ jobs:
               echo "SUITE_NAME=normal" >> $GITHUB_ENV
               echo "TEST_PATH=tests/specs/normal" >> $GITHUB_ENV
             fi
-          # 手動実行の場合
           elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             SUITE="${{ github.event.inputs.test_suite }}"
             echo "SUITE_NAME=$SUITE" >> $GITHUB_ENV
@@ -80,36 +126,43 @@ jobs:
               echo "TEST_PATH=tests/specs/normal" >> $GITHUB_ENV
             elif [ "$SUITE" == "premium" ]; then
               echo "TEST_PATH=tests/specs/premium" >> $GITHUB_ENV
-            else # "all" の場合
-              echo "TEST_PATH=" >> $GITHUB_ENV # pathを空にすると全テストが実行される
+            else
+              echo "TEST_PATH=" >> $GITHUB_ENV
             fi
           fi
-
+          
       - name: Run Playwright tests for ${{ matrix.browser }} on ${{ matrix.os }}
+        # '--project' オプションで、実行するブラウザを明示的に指定する
         run: npx playwright test ${{ env.TEST_PATH }} --project=${{ matrix.browser }}
-        continue-on-error: true 
+        # テストが失敗してもワークフローを中断せず、後続のステップ（アーティファクトのアップロードなど）を実行する
+        continue-on-error: true
         env:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
           PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-      
+
       - name: Upload Test Results
+        # 先行ステップの成否にかかわらず、常に実行する
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          # アーティファクト名にOSとスイート名を含めて区別しやすくする
+          # アーティファクト名を一意にして、どのテスト結果か分かりやすくする
           name: playwright-report-${{ matrix.os }}-${{ matrix.browser }}-${{ env.SUITE_NAME }}-${{ github.run_id }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
 
+  # ===================================================================
+  # ジョブ 3: クリーンアップ
+  # ===================================================================
+  # すべてのテストジョブが完了した後に、1回だけ実行される後片付け用のジョブです。
   cleanup:
-    # `e2e-test` ジョブが（成功・失敗に関わらず）すべて完了するのを待つ
+    # 'e2e-test' のすべてのマトリックスジョブが完了するのを待つ
     needs: e2e-test
-    # テストが失敗してもクリーンアップは必ず実行する
+    # 'e2e-test' が失敗した場合でも、このクリーンアップジョブは必ず実行する
     if: always()
-    # クリーンアップは特定のOSで実行すればよいので、ubuntu-latestを指定
+    # クリーンアップは特定の環境で一度だけ実行すればよいため、ubuntu-latestに固定
     runs-on: ubuntu-latest
 
     steps:
