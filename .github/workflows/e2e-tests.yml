@@ -5,8 +5,8 @@ name: Multi-OS E2E Tests
 on:
   # 定期実行 (schedule)
   schedule:
-    # UTCの毎時0分に実行。ただし、UTC 17-19時 (JST 2-4時台) は除外 (Normalテスト用)
-    - cron: '0 0-16,20-23 * * *'
+    # UTCの毎時0分に実行。ただし、UTC 16-19時 (JST 1-4時台) は除外 (Normalテスト用)
+    - cron: '0 0-15,20-23 * * *'
     # UTCの毎日0時0分 (JST 9時) に実行 (Premiumテスト用)
     - cron: '0 0 * * *'
   # 手動実行 (workflow_dispatch)
@@ -137,6 +137,7 @@ jobs:
         # テストが失敗してもワークフローを中断せず、後続のステップ（アーティファクトのアップロードなど）を実行する
         continue-on-error: true
         env:
+          DEBUG: pw:api
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
