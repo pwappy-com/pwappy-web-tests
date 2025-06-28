@@ -1,4 +1,4 @@
-name: Scheduled E2E Tests
+name: Multi-OS E2E Tests
 
 on:
   schedule:
@@ -21,12 +21,18 @@ on:
           - all
 
 jobs:
-  # --- Normalプランのテスト (1時間に1回) ---
-  normal-test:
-    # ワークフローが `schedule` でトリガーされ、かつ現在の時（hour）が0でない場合に実行
-    # `github.event.schedule` は cron の文字列
-    if: github.event_name == 'schedule' && github.event.schedule != '0 0 * * *'
-    runs-on: ubuntu-latest
+  e2e-test:
+    # 各OSでジョブを並列実行する
+    strategy:
+      # 1つのOSで失敗しても他のOSのテストは続行する
+      fail-fast: false
+      matrix:
+        # ここで実行したいOSを指定
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        
+    # matrixで指定されたOS上で実行
+    runs-on: ${{ matrix.os }}
+
     steps:
       - name: Checkout tests repository
         uses: actions/checkout@v4
@@ -38,14 +44,43 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
+        # WindowsのPowerShellでもnpm installが実行されるように
+        shell: bash
         run: npm install
 
       - name: Install Playwright Browsers
+        shell: bash
         run: npx playwright install --with-deps
 
-      - name: Run Normal tests
-        run: npx playwright test tests/specs/normal
-        # `continue-on-error: true` でテストが失敗しても後続のクリーンアップは実行
+      # どのテストスイートを実行するかを決定するステップ
+      - name: Determine Test Suite
+        id: get_suite
+        shell: bash
+        run: |
+          # スケジュール実行の場合
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            if [ "${{ github.event.schedule }}" == "0 0 * * *" ]; then
+              echo "SUITE_NAME=premium" >> $GITHUB_ENV
+              echo "TEST_PATH=tests/specs/premium" >> $GITHUB_ENV
+            else
+              echo "SUITE_NAME=normal" >> $GITHUB_ENV
+              echo "TEST_PATH=tests/specs/normal" >> $GITHUB_ENV
+            fi
+          # 手動実行の場合
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            SUITE="${{ github.event.inputs.test_suite }}"
+            echo "SUITE_NAME=$SUITE" >> $GITHUB_ENV
+            if [ "$SUITE" == "normal" ]; then
+              echo "TEST_PATH=tests/specs/normal" >> $GITHUB_ENV
+            elif [ "$SUITE" == "premium" ]; then
+              echo "TEST_PATH=tests/specs/premium" >> $GITHUB_ENV
+            else # "all" の場合
+              echo "TEST_PATH=" >> $GITHUB_ENV # pathを空にすると全テストが実行される
+            fi
+          fi
+
+      - name: Run Playwright tests
+        run: npx playwright test ${{ env.TEST_PATH }}
         continue-on-error: true 
         env:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
@@ -53,8 +88,7 @@ jobs:
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
           PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
 
-      - name: Run Cleanup Script (after Normal)
-        # `if: always()` で、先行ステップが失敗しても必ず実行
+      - name: Run Cleanup Script
         if: always()
         run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
         env:
@@ -63,119 +97,12 @@ jobs:
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
           PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
       
-      # テスト結果（動画、スクリーンショット等）をアップロード
-      - name: Upload Test Results (Normal)
+      - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-normal-${{ github.run_id }}
-          path: test-results/
-          retention-days: 7
-          if-no-files-found: ignore
-
-  # --- Premiumプランのテスト (1日に1回) ---
-  premium-test:
-    # ワークフローが `schedule` でトリガーされ、かつcronが毎日実行のものである場合に実行
-    if: github.event_name == 'schedule' && github.event.schedule == '0 0 * * *'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout tests repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-
-      - name: Run Premium tests
-        run: npx playwright test tests/specs/premium
-        continue-on-error: true
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-
-      - name: Run Cleanup Script (after Premium)
-        if: always()
-        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-      
-      # テスト結果（動画、スクリーンショット等）をアップロード
-      - name: Upload Test Results (Premium)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-premium-${{ github.run_id }}
-          path: test-results/
-          retention-days: 7
-          if-no-files-found: ignore
-
-
-  # --- 手動実行用のジョブ ---
-  manual-test:
-    # ワークフローが `workflow_dispatch` でトリガーされた場合のみ実行
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout tests repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-
-      - name: Run selected test suite
-        # 手動実行時に選択されたスイートに応じてテストパスを決定
-        run: |
-          if [ "${{ github.event.inputs.test_suite }}" = "normal" ]; then
-            npx playwright test tests/specs/normal
-          elif [ "${{ github.event.inputs.test_suite }}" = "premium" ]; then
-            npx playwright test tests/specs/premium
-          else
-            npx playwright test
-          fi
-        continue-on-error: true
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-
-      - name: Run Cleanup Script (after Manual)
-        if: always()
-        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-
-      # テスト結果（動画、スクリーンショット等）をアップロード
-      - name: Upload Test Results (Manual)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-manual-${{ github.run_id }}
+          # アーティファクト名にOSとスイート名を含めて区別しやすくする
+          name: playwright-report-${{ matrix.os }}-${{ env.SUITE_NAME }}-${{ github.run_id }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
