@@ -23,7 +23,7 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* タイムアウトのデフォルト(30秒) */
-  timeout: 120 * 1000,
+  timeout: 60 * 1000,
   expect: {
     /**
      * expect(locator).toBeVisible() のようなアサーションの最大時間。
