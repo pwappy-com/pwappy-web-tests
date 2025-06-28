@@ -71,6 +71,7 @@ jobs:
           name: playwright-report-normal-${{ github.run_id }}
           path: test-results/
           retention-days: 7
+          if-no-files-found: ignore
 
   # --- Premiumプランのテスト (1日に1回) ---
   premium-test:
@@ -119,6 +120,7 @@ jobs:
           name: playwright-report-premium-${{ github.run_id }}
           path: test-results/
           retention-days: 7
+          if-no-files-found: ignore
 
 
   # --- 手動実行用のジョブ ---
@@ -176,3 +178,4 @@ jobs:
           name: playwright-report-manual-${{ github.run_id }}
           path: test-results/
           retention-days: 7
+          if-no-files-found: ignore
