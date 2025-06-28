@@ -22,13 +22,18 @@ on:
 
 jobs:
   e2e-test:
-    # 各OSでジョブを並列実行する
+    # 各OSでジョブを並列実行する(max-parallelで並列度指定)
     strategy:
       # 1つのOSで失敗しても他のOSのテストは続行する
       fail-fast: false
       matrix:
-        # ここで実行したいOSを指定
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            browser: chromium
+          - os: windows-latest
+            browser: chromium
+          - os: macos-latest
+            browser: webkit
       max-parallel: 1
         
     # matrixで指定されたOS上で実行
@@ -80,18 +85,9 @@ jobs:
             fi
           fi
 
-      - name: Run Playwright tests
-        run: npx playwright test ${{ env.TEST_PATH }}
+      - name: Run Playwright tests for ${{ matrix.browser }} on ${{ matrix.os }}
+        run: npx playwright test ${{ env.TEST_PATH }} --project=${{ matrix.browser }}
         continue-on-error: true 
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-
-      - name: Run Cleanup Script
-        if: always()
-        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
         env:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
@@ -103,7 +99,36 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           # アーティファクト名にOSとスイート名を含めて区別しやすくする
-          name: playwright-report-${{ matrix.os }}-${{ env.SUITE_NAME }}-${{ github.run_id }}
+          name: playwright-report-${{ matrix.os }}-${{ matrix.browser }}-${{ env.SUITE_NAME }}-${{ github.run_id }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
+
+  cleanup:
+    # `e2e-test` ジョブが（成功・失敗に関わらず）すべて完了するのを待つ
+    needs: e2e-test
+    # テストが失敗してもクリーンアップは必ず実行する
+    if: always()
+    # クリーンアップは特定のOSで実行すればよいので、ubuntu-latestを指定
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository for cleanup
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js for cleanup
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies for cleanup
+        run: npm install
+
+      - name: Run Cleanup Script
+        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
+        env:
+          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
+          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
+          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
+          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
