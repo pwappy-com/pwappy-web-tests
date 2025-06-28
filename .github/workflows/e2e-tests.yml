@@ -29,6 +29,7 @@ jobs:
       matrix:
         # ここで実行したいOSを指定
         os: [ubuntu-latest, macos-latest, windows-latest]
+      max-parallel: 1
         
     # matrixで指定されたOS上で実行
     runs-on: ${{ matrix.os }}
