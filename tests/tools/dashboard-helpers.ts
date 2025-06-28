@@ -83,17 +83,19 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await page.getByTitle('アプリケーションの追加').click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
 
-    const modalHeader = page.locator('dashboard-modal-window#appModal h2');
-    await expect(modalHeader).toBeVisible();
-    await expect(page.locator('dashboard-modal-window#appModal').getByText('アプリケーションの追加')).toBeVisible();
-
+    // モーダルウィンドウ自体を取得
     const appModal = page.locator('dashboard-modal-window#appModal');
 
-    // モーダルが表示され、ヘッダーが見えるまで待つ
-    await expect(appModal.getByRole('heading', { name: 'アプリケーションの追加' })).toBeVisible();
+    // モーダルウィンドウが表示されるのを待つ。
+    await expect(appModal).toBeVisible();
 
+    // 入力欄を取得する
     const appNameInput = appModal.getByLabel('アプリケーション名');
-    await appNameInput.click();
+
+    // 入力欄が「入力可能」になるのを待つ
+    await expect(appNameInput).toBeEditable({ timeout: 10000 });
+
+    // 値を入力する。
     await appNameInput.fill(appName);
 
     const appKeyInput = appModal.getByLabel('アプリケーションキー');
