@@ -3,7 +3,8 @@ name: Scheduled E2E Tests
 on:
   schedule:
     # 毎時0分に実行 (Normalテスト用)
-    - cron: '0 * * * *'
+    # UTCの17, 18, 19時 (JSTの2, 3, 4時台) を除外
+    - cron: '0 0-16,20-23 * * *'
     # 毎日 UTCの0時0分 (日本時間の午前9時) に実行 (Premiumテスト用)
     - cron: '0 0 * * *'
   # 手動実行も可能にする
