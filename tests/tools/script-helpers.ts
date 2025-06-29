@@ -79,6 +79,8 @@ export async function editScript(
         // Chrome (Chromium) の場合の処理
         // Monaco Editorは内部的に<textarea>を持っているので、それに対してfillするのが速くて確実
         await monacoEditor.locator('textarea').fill(scriptContent);
+    } else if (browserName === 'webkit') {
+        await editorPage.locator('textarea').fill(scriptContent);
     } else if (browserName === 'firefox') {
         // Firefox の場合の処理
         // Firefoxではfillが効かないことがあるため、キーボード入力をシミュレートする
@@ -86,7 +88,7 @@ export async function editScript(
         await expect(viewLine).toBeVisible();
         await viewLine.pressSequentially(scriptContent);
     } else {
-        // WebKit やその他のブラウザ用のフォールバック（Firefoxと同じ方法を試す）
+        // その他のブラウザ用のフォールバック（Firefoxと同じ方法を試す）
         console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
         const viewLine = monacoEditor.locator('.view-line').first();
         await expect(viewLine).toBeVisible();
@@ -283,6 +285,8 @@ export async function editScriptContent(page: Page, scriptName: string, scriptCo
         // Chrome (Chromium) の場合の処理
         // Monaco Editorは内部的に<textarea>を持っているので、それに対してfillするのが速くて確実
         await monacoEditor.locator('textarea').fill(scriptContent);
+    } else if (browserName === 'webkit') {
+        await page.locator('textarea').fill(scriptContent);
     } else if (browserName === 'firefox') {
         // Firefox の場合の処理
         // Firefoxではfillが効かないことがあるため、キーボード入力をシミュレートする
@@ -293,7 +297,7 @@ export async function editScriptContent(page: Page, scriptName: string, scriptCo
         await viewLine.press('Delete');
 
     } else {
-        // WebKit やその他のブラウザ用のフォールバック（Firefoxと同じ方法を試す）
+        // その他のブラウザ用のフォールバック（Firefoxと同じ方法を試す）
         console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
         const viewLine = monacoEditor.locator('.view-line').first();
         await expect(viewLine).toBeVisible();

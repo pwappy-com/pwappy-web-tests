@@ -36,6 +36,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         await test.step('セットアップ: アプリを作成し、バージョン管理画面を開く', async () => {
             await createApp(page, appName, appKey);
             const appRow = page.locator('.app-list tbody tr', { hasText: appName });
+            await expect(appRow).toBeVisible();
             await appRow.getByRole('button', { name: '選択' }).click();
             await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
             await expectVersionVisibility(page, autoCreatedVersion, true);

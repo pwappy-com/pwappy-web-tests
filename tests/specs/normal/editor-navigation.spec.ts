@@ -127,18 +127,20 @@ test.describe('エディタ内機能のテスト', () => {
                 // Chrome (Chromium) の場合の処理
                 // Monaco Editorは内部的に<textarea>を持っているので、それに対してfillするのが速くて確実
                 await styleEditor.locator('textarea').fill(styleValue);
+            } else if (browserName === 'webkit') {
+                await styleEditor.locator('textarea').fill(styleValue);
             } else if (browserName === 'firefox') {
                 // Firefox の場合の処理
                 // Firefoxではfillが効かないことがあるため、キーボード入力をシミュレートする
                 const viewLine = styleEditor.locator('.view-line').first(); // 確実に最初の行を掴む
                 await expect(viewLine).toBeVisible();
-                await viewLine.pressSequentially(styleValue, { delay: 50 }); // 安定させるために少しdelayを入れるのも有効
+                await viewLine.pressSequentially(styleValue); // 安定させるために少しdelayを入れるのも有効
             } else {
-                // WebKit やその他のブラウザ用のフォールバック（Firefoxと同じ方法を試す）
+                // その他のブラウザ用のフォールバック（Firefoxと同じ方法を試す）
                 console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
                 const viewLine = styleEditor.locator('.view-line').first();
                 await expect(viewLine).toBeVisible();
-                await viewLine.pressSequentially(styleValue, { delay: 50 });
+                await viewLine.pressSequentially(styleValue);
             }
 
 

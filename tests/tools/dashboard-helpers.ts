@@ -18,17 +18,16 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     // これにより、コンテナのサイズが0x0である問題やShadow DOMの問題を回避できる。
     await expect(appModal.locator('span[slot="header-title"]')).toBeVisible();
 
-    // 入力欄を取得する
-    const appNameInput = appModal.getByLabel('アプリケーション名');
-
-    // 入力欄が「入力可能」になるのを待つ
+    const appNameInput = appModal.locator('#input-app-name');
     await expect(appNameInput).toBeEditable({ timeout: 10000 });
     await appNameInput.fill(appName);
 
-    const appKeyInput = appModal.getByLabel('アプリケーションキー');
-    // 入力欄が「入力可能」になるのを待つ
+    const appKeyInput = appModal.locator('#input-app-key');
     await expect(appKeyInput).toBeEditable({ timeout: 10000 });
     await appKeyInput.fill(appKey);
+
+    await expect(appNameInput).toHaveValue(appName);
+    await expect(appKeyInput).toHaveValue(appKey);
 
     await appModal.getByRole('button', { name: '保存' }).click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
@@ -99,7 +98,7 @@ export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish'
 }
 
 /**
- * 【修正】アプリケーションがリストに表示されているか/いないかを確認します。
+ * アプリケーションがリストに表示されているか/いないかを確認します。
  * @param page ダッシュボードのPageオブジェクト
  * @param appName 確認するアプリケーション名
  * @param isVisible trueなら表示されていること、falseなら非表示であることを期待
@@ -325,6 +324,7 @@ export async function setupAppWithVersions(page: Page, { appName, appKey, versio
     await createApp(page, appName, appKey);
 
     const appRow = page.locator('.app-list tbody tr', { hasText: appName });
+    await expect(appRow).toBeVisible();
     await appRow.getByRole('button', { name: '選択' }).click();
     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
 

@@ -185,7 +185,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Cleanup Script
-        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
+        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=chromium
         env:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
