@@ -67,10 +67,31 @@ export async function editScript(
     const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
     await expect(monacoEditor).toBeVisible();
 
+    // エディタの内容を全選択して削除する
     await monacoEditor.locator('.view-lines').click(); // フォーカスを当てる
     await editorPage.keyboard.press('Control+A');
     await editorPage.keyboard.press('Delete');
-    await monacoEditor.locator('textarea').fill(scriptContent);
+
+    // 現在のブラウザ名を取得
+    const browserName = editorPage.context().browser()?.browserType().name();
+
+    if (browserName === 'chromium') {
+        // Chrome (Chromium) の場合の処理
+        // Monaco Editorは内部的に<textarea>を持っているので、それに対してfillするのが速くて確実
+        await monacoEditor.locator('textarea').fill(scriptContent);
+    } else if (browserName === 'firefox') {
+        // Firefox の場合の処理
+        // Firefoxではfillが効かないことがあるため、キーボード入力をシミュレートする
+        const viewLine = monacoEditor.locator('.view-line').first(); // 確実に最初の行を掴む
+        await expect(viewLine).toBeVisible();
+        await viewLine.pressSequentially(scriptContent);
+    } else {
+        // WebKit やその他のブラウザ用のフォールバック（Firefoxと同じ方法を試す）
+        console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
+        const viewLine = monacoEditor.locator('.view-line').first();
+        await expect(viewLine).toBeVisible();
+        await viewLine.pressSequentially(scriptContent);
+    }
 
     // 「スクリプトの保存」ボタンをクリック
     const saveButton = scriptContainer.getByTitle('スクリプトの保存');
@@ -87,6 +108,7 @@ export async function editScript(
  */
 export async function verifyScriptInPreview(editorPage: Page, expectedContent: string): Promise<void> {
     const previewFrame = getPreviewFrame(editorPage);
+    await previewFrame.locator('body').waitFor({ state: 'visible' });
     const scripts = previewFrame.locator('script');
 
     // 全てのscriptタグを結合したテキストを取得
@@ -122,7 +144,7 @@ export async function verifyScriptInTestPage(testPage: Page, expectedContents: s
     if (Array.isArray(expectedContents)) {
         for (const content of expectedContents) {
             // 文字列を正規化してから比較する
-            
+
             const normalizedExpected = normalizeWhitespace(content);
 
             // 結合したテキストの中に期待する内容が含まれているか検証
@@ -170,7 +192,7 @@ export async function verifyAndCloseAlert(
 ): Promise<void> {
     // ステップ1: ダイアログ要素そのものが表示されるのを待つ
     const alertDialog = pageOrFrame.locator('ons-alert-dialog').filter({ hasText: expectedText });
-    
+
     await expect(alertDialog).toBeVisible({ timeout: 10000 });
 
     // ステップ2: ダイアログに期待するテキストが含まれるのを待つ
@@ -199,7 +221,7 @@ export async function addNewScript(page: Page, scriptName: string, scriptType: '
     const scriptContainer = page.locator('script-container');
 
     // スクリプト追加ボタンをクリック
-    const scriptListContainer =  scriptContainer.locator('#script-list-container');
+    const scriptListContainer = scriptContainer.locator('#script-list-container');
 
     // スクリプト追加ボタンを取得
     const scriptAddButton = scriptListContainer.getByTitle("スクリプトの追加");
@@ -238,7 +260,7 @@ export async function editScriptContent(page: Page, scriptName: string, scriptCo
 
     // 編集対象のスクリプト行を探し、編集ボタンをクリック
     const scriptRow = scriptContainer.locator('.editor-row', { hasText: scriptName });
-    
+
     await scriptRow.getByTitle('スクリプトの編集').click();
 
     // Monaco Editorが表示されるのを待つ
@@ -249,11 +271,37 @@ export async function editScriptContent(page: Page, scriptName: string, scriptCo
 
     await expect(monacoEditor).toBeVisible();
 
-    // エディタのテキストを全選択して削除し、新しい内容を入力
+    // エディタの内容を全選択して削除する
     await monacoEditor.locator('.view-lines').click(); // フォーカスを当てる
     await page.keyboard.press('Control+A');
     await page.keyboard.press('Delete');
-    await monacoEditor.locator('textarea').fill(scriptContent);
+
+    // 現在のブラウザ名を取得
+    const browserName = page.context().browser()?.browserType().name();
+
+    if (browserName === 'chromium') {
+        // Chrome (Chromium) の場合の処理
+        // Monaco Editorは内部的に<textarea>を持っているので、それに対してfillするのが速くて確実
+        await monacoEditor.locator('textarea').fill(scriptContent);
+    } else if (browserName === 'firefox') {
+        // Firefox の場合の処理
+        // Firefoxではfillが効かないことがあるため、キーボード入力をシミュレートする
+        const viewLine = monacoEditor.locator('.view-line').first(); // 確実に最初の行を掴む
+        await expect(viewLine).toBeVisible();
+        await viewLine.pressSequentially(scriptContent);
+        await viewLine.press('Shift+Control+End');
+        await viewLine.press('Delete');
+
+    } else {
+        // WebKit やその他のブラウザ用のフォールバック（Firefoxと同じ方法を試す）
+        console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
+        const viewLine = monacoEditor.locator('.view-line').first();
+        await expect(viewLine).toBeVisible();
+        await viewLine.pressSequentially(scriptContent);
+        await viewLine.press('Shift+Control+End');
+        await viewLine.press('Delete');
+    }
+
 
     // 保存ボタンをクリック
     await scriptContainer.locator('#fab-save').click();
@@ -268,5 +316,5 @@ export async function editScriptContent(page: Page, scriptName: string, scriptCo
  * @returns 正規化された文字列
  */
 export const normalizeWhitespace = (str: string): string => {
-  return str.replace(/\s+/g, ' ').trim();
+    return str.replace(/\s+/g, ' ').trim();
 };

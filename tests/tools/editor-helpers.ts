@@ -1,4 +1,3 @@
-import { template } from '@babel/core';
 import { expect, type Page, type Locator, FrameLocator } from '@playwright/test';
 
 // =================================================================

@@ -160,6 +160,9 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
      * ページのライフサイクルイベント（init, show, hide, destroy）をテストします。
      */
     test('ページのライフサイクルイベント(init/show/hide/destroy)にスクリプトを割り当て', async ({ editorPage }) => {
+        // このテストは時間がかかるのでタイムアウトを伸ばす
+        test.setTimeout(120000);
+
         let appNode: Locator, page1Node: Locator, page2Node: Locator;
         let appId: string, page1Id: string, page2Id: string;
 
