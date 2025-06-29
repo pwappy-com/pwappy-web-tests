@@ -11,7 +11,7 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await page.getByTitle('アプリケーションの追加').click();
 
     // モーダルウィンドウ自体を取得
-     const appModal = page.locator('dashboard-modal-window#appModal');
+    const appModal = page.locator('dashboard-modal-window#appModal');
 
     // モーダルの「コンテナ」ではなく、モーダルの「中身」が表示されるのを待つ。
     // この場合、ヘッダータイトルが最も確実。
@@ -23,16 +23,12 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
 
     // 入力欄が「入力可能」になるのを待つ
     await expect(appNameInput).toBeEditable({ timeout: 10000 });
-
-    // 値を入力する。
     await appNameInput.fill(appName);
 
     const appKeyInput = appModal.getByLabel('アプリケーションキー');
     // 入力欄が「入力可能」になるのを待つ
     await expect(appKeyInput).toBeEditable({ timeout: 10000 });
-    await appKeyInput.click();
-    //await appKeyInput.fill(appKey);
-    await appKeyInput.pressSequentially(appKey);
+    await appKeyInput.fill(appKey);
 
     await appModal.getByRole('button', { name: '保存' }).click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
