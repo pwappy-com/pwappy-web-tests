@@ -62,7 +62,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('状態遷移(2): 「公開準備完了」を経て「公開中」にし、その後「非公開」に戻す', async () => {
-            test.setTimeout(180000); // 審査待ちが発生するためタイムアウトを延長
+            test.setTimeout(120000); // 審査待ちが発生するためタイムアウトを延長
 
             // 「公開準備完了」を経て「公開中」への遷移
             await completePublication(page, appName, version);

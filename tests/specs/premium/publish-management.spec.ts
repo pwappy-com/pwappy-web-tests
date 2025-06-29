@@ -37,7 +37,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('テスト: 公開状態の遷移（非公開 -> 準備中 -> 準備完了 -> 公開 -> 非公開）', async () => {
-            test.setTimeout(180000);
+            test.setTimeout(120000);
 
             // 公開準備を開始
             await startPublishPreparation(page, appName, version);

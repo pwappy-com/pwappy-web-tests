@@ -70,7 +70,7 @@ test.describe('JSDocからのプロパティ解析機能のテスト', () => {
      */
     test('JSDocの@propertyがプロパティパネルに正しく反映される', async ({ editorPage }) => {
         
-        test.setTimeout(180000);
+        test.setTimeout(120000);
 
         const scriptName = 'MyTestComponent';
         const tagName = 'my-test-component';
@@ -169,8 +169,8 @@ customElements.define('${tagName}', ${scriptName});
      * イベントパネルにカスタムイベントとして正しく表示されるかを検証します。
      */
     test('JSDocの@firesがイベントパネルに正しく反映される', async ({ editorPage }) => {
-        test.setTimeout(180000);
-        
+        test.setTimeout(120000);
+
         const scriptName = 'MyEventComponent';
         const tagName = 'my-event-component';
         const eventName = 'my-custom-event';

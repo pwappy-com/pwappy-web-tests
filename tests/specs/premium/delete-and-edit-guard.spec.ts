@@ -60,7 +60,7 @@ test.describe('削除・編集のガード条件テスト', () => {
         });
 
         await test.step('状態遷移: バージョンを「公開中」にする', async () => {
-            test.setTimeout(180000); // 審査待ちが発生するためタイムアウトを延長
+            test.setTimeout(120000); // 審査待ちが発生するためタイムアウトを延長
             await completePublication(page, appName, version);
         });
 
