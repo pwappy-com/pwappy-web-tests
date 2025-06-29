@@ -224,6 +224,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
             await modal.getByRole('button', { name: 'キャンセル' }).click();
             await expect(modal).toBeHidden();
+
+            await page.waitForLoadState('domcontentloaded');
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
