@@ -68,7 +68,12 @@ export async function editScript(
     await expect(monacoEditor).toBeVisible();
 
     // エディタの内容を全選択して削除する
-    await monacoEditor.locator('.view-lines').click(); // フォーカスを当てる
+    //await monacoEditor.locator('.view-lines').click(); // フォーカスを当てる
+    const viewLines = monacoEditor.locator('.view-lines');
+    await expect(viewLines).toBeVisible();
+    // 最初の1行目を取得
+    const firstLine = viewLines.locator('.view-line').first();
+    await firstLine.click(); // フォーカスを当てる
     await editorPage.keyboard.press('Control+A');
     await editorPage.keyboard.press('Delete');
 

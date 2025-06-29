@@ -47,7 +47,7 @@ const test = base.extend<EditorFixtures>({
 });
 
 // --- テストスイート ---
-test.describe('JSDocからのプロパティ解析機能のテスト', () => {
+test.describe.only('JSDocからのプロパティ解析機能のテスト', () => {
 
     /**
      * 各テストの実行前に、認証とダッシュボードへのアクセスを行います。

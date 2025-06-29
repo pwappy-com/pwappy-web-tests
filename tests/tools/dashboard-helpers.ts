@@ -19,12 +19,13 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await expect(appModal.locator('span[slot="header-title"]')).toBeVisible();
 
     const appNameInput = page.locator('#input-app-name');
+    await expect(appNameInput).toBeFocused();
     await expect(appNameInput).toBeEditable({ timeout: 10000 });
     await appNameInput.fill(appName);
 
     const appKeyInput = page.locator('#input-app-key');
     await expect(appKeyInput).toBeEditable({ timeout: 10000 });
-    await appKeyInput.fill(appKey);
+    await appKeyInput.pressSequentially(appKey);
 
     await expect(appNameInput).toHaveValue(appName);
     await expect(appKeyInput).toHaveValue(appKey);
