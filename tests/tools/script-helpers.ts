@@ -74,7 +74,7 @@ export async function editScript(
     // 最初の1行目を取得
     const firstLine = viewLines.locator('.view-line').first();
     await firstLine.click(); // フォーカスを当てる
-    await editorPage.keyboard.press('Control+A');
+    await editorPage.keyboard.press('ControlOrMeta+A');
     await editorPage.keyboard.press('Delete');
 
     // 現在のブラウザ名を取得
@@ -277,46 +277,6 @@ export async function editScriptContent(page: Page, scriptName: string, scriptCo
     const monacoEditor = editorContainer.locator('.monaco-editor[role="code"]');
 
     await expect(monacoEditor).toBeVisible();
-
-    // // 現在のブラウザ名を取得
-    // const browserName = page.context().browser()?.browserType().name();
-
-    // // エディタの内容を全選択して削除する
-    // await monacoEditor.locator('.view-lines').click(); // フォーカスを当てる
-    // if (browserName === 'webkit') {
-    //     await page.keyboard.press('Command+A');
-    // } else {
-    //     await page.keyboard.press('Control+A');
-    // }
-    // await page.keyboard.press('Delete');
-
-    // if (browserName === 'chromium') {
-    //     // Chrome (Chromium) の場合の処理
-    //     // Monaco Editorは内部的に<textarea>を持っているので、それに対してfillするのが速くて確実
-    //     await monacoEditor.locator('textarea').fill(scriptContent);
-    // } else if (browserName === 'webkit') {
-    //     const viewLine = monacoEditor.locator('.view-line').first(); // 確実に最初の行を掴む
-    //     await expect(viewLine).toBeVisible();
-    //     await viewLine.pressSequentially(scriptContent);
-    //     await viewLine.press('Shift+Command+ArrowDown');
-    //     await viewLine.press('Delete');
-    // } else if (browserName === 'firefox') {
-    //     // Firefox の場合の処理
-    //     // Firefoxではfillが効かないことがあるため、キーボード入力をシミュレートする
-    //     const viewLine = monacoEditor.locator('.view-line').first(); // 確実に最初の行を掴む
-    //     await expect(viewLine).toBeVisible();
-    //     await viewLine.pressSequentially(scriptContent);
-    //     await viewLine.press('Shift+Control+End');
-    //     await viewLine.press('Delete');
-    // } else {
-    //     // その他のブラウザ用のフォールバック（Firefoxと同じ方法を試す）
-    //     console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
-    //     const viewLine = monacoEditor.locator('.view-line').first();
-    //     await expect(viewLine).toBeVisible();
-    //     await viewLine.pressSequentially(scriptContent);
-    //     await viewLine.press('Shift+Control+End');
-    //     await viewLine.press('Delete');
-    // }
 
     // 現在のブラウザ名を取得
     const browserName = page.context().browser()?.browserType().name();
