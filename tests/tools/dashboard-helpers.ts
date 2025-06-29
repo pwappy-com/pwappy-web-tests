@@ -1,75 +1,3 @@
-// import { expect, type Page, type BrowserContext } from '@playwright/test';
-
-// /**
-//  * ダッシュボード画面で新しいアプリケーションを作成します。
-//  * @param page ダッシュボードのPageオブジェクト
-//  * @param appName 作成するアプリケーション名
-//  * @param appKey 作成するアプリケーションキー
-//  */
-// export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
-//     await page.getByTitle('アプリケーションの追加').click();
-//     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//     const appModal = page.locator('dashboard-modal-window#appModal');
-//     const appNameInput = appModal.getByLabel('アプリケーション名');
-//     await appNameInput.click(); 
-//     await appNameInput.fill(appName);
-//     const appKeyInput = appModal.getByLabel('アプリケーションキー');
-//     await appKeyInput.click(); 
-//     await appKeyInput.fill(appKey);
-//     await appModal.getByRole('button', { name: '保存' }).click();
-//     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//     await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
-// };
-
-// /**
-//  * ダッシュボード画面で指定されたアプリケーションを削除します。
-//  * 主にテストのクリーンアップ処理で使用されます。
-//  * @param page ダッシュボードのPageオブジェクト
-//  * @param appName 削除するアプリケーション名
-//  */
-// export async function deleteApp(page: Page, appName: string): Promise<void> {
-//     await page.bringToFront();
-//     await page.reload({ waitUntil: 'domcontentloaded' });
-//     await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
-
-//     const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-//     if (await appRow.count() > 0) {
-//         await appRow.getByRole('button', { name: '削除' }).click();
-//         await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//         const confirmDialog = page.locator('message-box#delete-confirm');
-//         await expect(confirmDialog).toBeVisible();
-//         await confirmDialog.getByRole('button', { name: '削除する' }).click();
-//         await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//         await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
-//     }
-// };
-
-// /**
-//  * ダッシュボードから指定したアプリケーションのエディタを新しいタブで開きます。
-//  * @param page ダッシュボードのPageオブジェクト
-//  * @param context BrowserContextオブジェクト
-//  * @param appName エディタを開く対象のアプリケーション名
-//  * @param version バージョン番号 (デフォルト: '1.0.0')
-//  * @returns 開かれたエディタのPageオブジェクト
-//  */
-// export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
-//     const appList = page.locator('.app-list tbody tr', { hasText: appName });
-//     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//     await appList.getByRole('button', { name: '選択' }).click();
-//     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
-
-//     const [editorPage] = await Promise.all([
-//         context.waitForEvent('page'),
-//         page.locator('.version-list tbody tr', { hasText: version }).getByRole('button', { name: 'エディタ' }).click(),
-//     ]);
-
-//     await editorPage.waitForLoadState('domcontentloaded');
-//     await expect(editorPage.locator('template-container')).toBeVisible();
-//     return editorPage;
-// };
-
-
 import { expect, type Page, type BrowserContext } from '@playwright/test';
 
 /**
@@ -81,13 +9,14 @@ import { expect, type Page, type BrowserContext } from '@playwright/test';
  */
 export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
     await page.getByTitle('アプリケーションの追加').click();
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
 
     // モーダルウィンドウ自体を取得
-    const appModal = page.locator('dashboard-modal-window#appModal');
+     const appModal = page.locator('dashboard-modal-window#appModal');
 
-    // モーダルウィンドウが表示されるのを待つ。
-    await expect(appModal).toBeVisible();
+    // モーダルの「コンテナ」ではなく、モーダルの「中身」が表示されるのを待つ。
+    // この場合、ヘッダータイトルが最も確実。
+    // これにより、コンテナのサイズが0x0である問題やShadow DOMの問題を回避できる。
+    await expect(appModal.locator('span[slot="header-title"]')).toBeVisible();
 
     // 入力欄を取得する
     const appNameInput = appModal.getByLabel('アプリケーション名');
