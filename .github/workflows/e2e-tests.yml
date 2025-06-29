@@ -179,6 +179,11 @@ jobs:
       - name: Install dependencies for cleanup
         run: npm install
 
+      - name: Install Playwright Browsers
+      
+        # このジョブで必要なブラウザのみをインストールして効率化する
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
       - name: Run Cleanup Script
         run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
         env:

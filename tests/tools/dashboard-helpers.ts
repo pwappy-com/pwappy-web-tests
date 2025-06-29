@@ -28,6 +28,8 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await appNameInput.fill(appName);
 
     const appKeyInput = appModal.getByLabel('アプリケーションキー');
+    // 入力欄が「入力可能」になるのを待つ
+    await expect(appKeyInput).toBeEditable({ timeout: 10000 });
     await appKeyInput.click();
     await appKeyInput.fill(appKey);
 
