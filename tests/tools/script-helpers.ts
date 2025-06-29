@@ -283,11 +283,7 @@ export async function editScriptContent(page: Page, scriptName: string, scriptCo
 
     // エディタの内容を全選択して削除する
     await monacoEditor.locator('.view-lines').click(); // フォーカスを当てる
-    if (browserName === 'webkit') {
-        await page.keyboard.press('Meta+A');
-    } else {
-        await page.keyboard.press('Control+A');
-    }
+    await page.keyboard.press('ControlOrMeta+A');
     await page.keyboard.press('Delete');
 
     if (browserName === 'chromium') {
