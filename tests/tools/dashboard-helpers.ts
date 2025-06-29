@@ -31,7 +31,8 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     // 入力欄が「入力可能」になるのを待つ
     await expect(appKeyInput).toBeEditable({ timeout: 10000 });
     await appKeyInput.click();
-    await appKeyInput.fill(appKey);
+    //await appKeyInput.fill(appKey);
+    await appKeyInput.pressSequentially(appKey);
 
     await appModal.getByRole('button', { name: '保存' }).click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
