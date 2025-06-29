@@ -8,7 +8,8 @@ import 'dotenv/config';
 import {
     createApp,
     deleteApp,
-    expectAppVisibility} from '../../tools/dashboard-helpers';
+    expectAppVisibility
+} from '../../tools/dashboard-helpers';
 
 test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
@@ -203,17 +204,23 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             // モーダルダイアログが完全に表示されるのを待機します。
             await expect(modal.getByRole('heading', { name: 'アプリケーションの編集' })).toBeVisible();
 
-            const appNameInput = modal.getByLabel('アプリケーション名');
-            const appKeyInput = modal.getByLabel('アプリケーションキー');
+            const appNameInput = page.locator('#input-app-name');
+            await expect(appNameInput).toBeEditable({ timeout: 10000 });
+
+            const appKeyInput = page.locator('#input-app-key');
+            await expect(appKeyInput).toBeEditable({ timeout: 10000 });
 
             // アプリケーション名を空にして保存し、エラーが表示されることを確認します。
             await appNameInput.fill('');
+            await expect(appNameInput).toHaveValue('');
             await modal.getByRole('button', { name: '保存' }).click();
             await expect(modal.locator('#error-app-name')).toContainText('必須項目です');
 
             // アプリケーションキーを空にして保存し、エラーが表示されることを確認します。
             await appNameInput.fill(appName);
             await appKeyInput.fill('');
+            await expect(appNameInput).toHaveValue(appName);
+            await expect(appKeyInput).toHaveValue('');
             await modal.getByRole('button', { name: '保存' }).click();
             await expect(modal.locator('#error-app-key')).toContainText('必須項目です');
 

@@ -64,8 +64,8 @@ export async function addComponent(
 ): Promise<Locator>;
 
 /**
- * ツールボックスからコンポーненトをDOMツリーの指定場所にドラッグ＆ドロップします。
- * (実装本体)
+ * ツールボックスからコンポーネントをDOMツリーの指定場所にドラッグ＆ドロップします。
+ * 
  * @param editorPage エディタのPageオブジェクト
  * @param componentName Toolboxに表示されているコンポーネント名
  * @param target D&Dのドロップ先（セレクタ文字列またはLocatorオブジェクト）

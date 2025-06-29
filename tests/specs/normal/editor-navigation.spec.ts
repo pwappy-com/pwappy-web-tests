@@ -185,7 +185,14 @@ test.describe('エディタ内機能のテスト', () => {
             await expect(previewButton).toHaveAttribute(attrName, '');
 
             // クリアボタンをクリックすると、入力欄自体が非表示になる
-            await targetInput.locator('+ .clear-button').click();
+            // 属性編集モーダルがもし表示されていたら、それが閉じるのを待つ
+            await expect(editorPage.locator('#attributeList')).toBeHidden();
+
+            const clearButton = targetInput.locator('+ .clear-button');
+            // ボタンがクリック可能になるまで待機（念のため）
+            await expect(clearButton).toBeEnabled();
+            // クリックを実行
+            await clearButton.click();
             await expect(previewButton).not.toHaveAttribute(attrName);
             await expect(targetInput).toBeHidden();
         });
@@ -222,7 +229,7 @@ test.describe('エディタ内機能のテスト', () => {
             await selectNodeInDomTree(buttonNode);
             await openAttributeEditor(editorPage);
             await addAttributeDefinition(editorPage, { name: attrName, template: 'input[text]', scope: 'tag' });
-            await editorPage.locator('property-container').getByTitle('属性を編集').click(); // モーダルを閉じる
+            //await editorPage.locator('property-container').getByTitle('属性を編集').click(); // モーダルを閉じる
         });
 
         await test.step('検証: 属性の値の変更、空文字設定、クリアができること', async () => {
@@ -242,7 +249,15 @@ test.describe('エディタ内機能のテスト', () => {
             await expect(previewButton).toHaveAttribute(attrName, '');
 
             // 「タグに」追加した属性の場合、クリアボタンは値を空にするだけで、入力欄は消えない
-            await targetInput.locator('+ .clear-button').click();
+            // 属性編集モーダルがもし表示されていたら、それが閉じるのを待つ
+            await editorPage.locator('property-container').click();
+            await expect(editorPage.locator('#attributeList')).toBeHidden();
+
+            const clearButton = targetInput.locator('+ .clear-button');
+            // ボタンがクリック可能になるまで待機（念のため）
+            await expect(clearButton).toBeEnabled();
+            // クリックを実行
+            await clearButton.click();
             await expect(previewButton).not.toHaveAttribute(attrName);
             await expect(targetInput).toHaveValue('');
             await expect(targetInput).toBeVisible();
@@ -469,7 +484,14 @@ test.describe('エディタ内機能のテスト', () => {
             await targetInput.press('Tab');
             await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: '' });
 
-            await targetInput.locator('+ .clear-button').click();
+            // 属性編集モーダルがもし表示されていたら、それが閉じるのを待つ
+            await expect(editorPage.locator('#attributeList')).toBeHidden();
+
+            const clearButton = targetInput.locator('+ .clear-button');
+            // ボタンがクリック可能になるまで待機（念のため）
+            await expect(clearButton).toBeEnabled();
+            // クリックを実行
+            await clearButton.click();
             await expect(targetInput).toBeVisible();
             await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: null });
         });

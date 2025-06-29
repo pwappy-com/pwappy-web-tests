@@ -18,11 +18,11 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     // これにより、コンテナのサイズが0x0である問題やShadow DOMの問題を回避できる。
     await expect(appModal.locator('span[slot="header-title"]')).toBeVisible();
 
-    const appNameInput = appModal.locator('#input-app-name');
+    const appNameInput = page.locator('#input-app-name');
     await expect(appNameInput).toBeEditable({ timeout: 10000 });
     await appNameInput.fill(appName);
 
-    const appKeyInput = appModal.locator('#input-app-key');
+    const appKeyInput = page.locator('#input-app-key');
     await expect(appKeyInput).toBeEditable({ timeout: 10000 });
     await appKeyInput.fill(appKey);
 
