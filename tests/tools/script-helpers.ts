@@ -324,7 +324,7 @@ export async function editScriptContent(page: Page, scriptName: string, scriptCo
     // エディタの内容を全選択して削除する
     await monacoEditor.locator('.view-lines').click(); // フォーカスを当てる
     if (browserName === 'webkit') {
-        await page.keyboard.press('Command+A');
+        await page.keyboard.press('Meta+A');
     } else {
         await page.keyboard.press('Control+A');
     }
@@ -338,7 +338,7 @@ export async function editScriptContent(page: Page, scriptName: string, scriptCo
         const viewLine = monacoEditor.locator('.view-line').first(); // 確実に最初の行を掴む
         await expect(viewLine).toBeVisible();
         await viewLine.pressSequentially(scriptContent);
-        await viewLine.press('Shift+Command+ArrowDown');
+        await viewLine.press('Shift+Meta+ArrowDown');
         await viewLine.press('Delete');
     } else if (browserName === 'firefox') {
         // Firefox の場合の処理
