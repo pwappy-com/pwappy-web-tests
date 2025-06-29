@@ -80,7 +80,7 @@ export async function editScript(
         // Monaco Editorは内部的に<textarea>を持っているので、それに対してfillするのが速くて確実
         await monacoEditor.locator('textarea').fill(scriptContent);
     } else if (browserName === 'webkit') {
-        await editorPage.locator('textarea').fill(scriptContent);
+        await monacoEditor.locator('textarea').fill(scriptContent);
     } else if (browserName === 'firefox') {
         // Firefox の場合の処理
         // Firefoxではfillが効かないことがあるため、キーボード入力をシミュレートする
@@ -286,7 +286,7 @@ export async function editScriptContent(page: Page, scriptName: string, scriptCo
         // Monaco Editorは内部的に<textarea>を持っているので、それに対してfillするのが速くて確実
         await monacoEditor.locator('textarea').fill(scriptContent);
     } else if (browserName === 'webkit') {
-        await page.locator('textarea').fill(scriptContent);
+        await monacoEditor.locator('textarea').fill(scriptContent);
     } else if (browserName === 'firefox') {
         // Firefox の場合の処理
         // Firefoxではfillが効かないことがあるため、キーボード入力をシミュレートする
