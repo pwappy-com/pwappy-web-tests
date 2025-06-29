@@ -225,7 +225,10 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await modal.getByRole('button', { name: 'キャンセル' }).click();
             await expect(modal).toBeHidden();
 
-            await page.waitForLoadState('domcontentloaded');
+            // WebKitではなぜかダイアログが消えないことがあるのでリロード
+            await page.reload({ waitUntil: 'domcontentloaded' });
+            // リロード後、メインコンテンツが表示されるのを待つ
+            await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
