@@ -80,8 +80,8 @@ jobs:
     strategy:
       # 1つのOSでテストが失敗しても、他のOSのテストは中断せずに続行する
       fail-fast: false
-      # 同時に実行するジョブの数を1に制限し、OS間で直列実行を実現する
-      max-parallel: 1
+      # # 同時に実行するジョブの数を1に制限し、OS間で直列実行を実現する
+      # max-parallel: 1
       # 'prepare-matrix' が出力したJSON文字列を解釈し、動的にマトリックスを構築する
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
@@ -148,7 +148,7 @@ jobs:
 
       - name: Run Playwright tests for ${{ matrix.browser }} on ${{ matrix.os }}
         # '--project' オプションで、実行するブラウザを明示的に指定する
-        run: npx playwright test ${{ env.TEST_PATH }} --project=${{ matrix.browser }}
+        run: npx playwright test ${{ env.TEST_PATH }} --project=${{ matrix.browser }} --workers=1
         # テストが失敗してもワークフローを中断せず、後続のステップ（アーティファクトのアップロードなど）を実行する
         continue-on-error: true
         env:
