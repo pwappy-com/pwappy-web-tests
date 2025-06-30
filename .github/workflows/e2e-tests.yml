@@ -102,8 +102,40 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Get daily cache key
+        id: get-date
+        # 1日ごとのキャッシュキーを生成するために現在の日付を取得
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Get Playwright cache directory
+        id: playwright-cache-dir
+        shell: bash
+        # OSごとに異なるPlaywrightのキャッシュディレクトリパスを取得
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            echo "dir=$HOME/.cache/ms-playwright" >> $GITHUB_OUTPUT
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            echo "dir=$HOME/AppData/Local/ms-playwright" >> $GITHUB_OUTPUT
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            echo "dir=$HOME/Library/Caches/ms-playwright" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Cache Playwright browsers
+        id: cache-playwright-browsers
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.playwright-cache-dir.outputs.dir }}
+          # キー: OS-ブラウザ-依存関係ハッシュ-日付
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
+          # 復元キー: まず同じ日のキャッシュを探し、なければ前日以前の最新版を探す
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-
+
       - name: Install Playwright Browsers
-        # このジョブで必要なブラウザのみをインストールして効率化する
+        # キャッシュが復元された場合は、このインストールステップをスキップする
+        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       # 実行するテストスイートのパスを決定する
@@ -195,9 +227,31 @@ jobs:
       - name: Install dependencies for cleanup
         run: npm install
 
-      - name: Install Playwright Browsers
+      - name: Get daily cache key
+        id: get-date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        shell: bash
 
-        # このジョブで必要なブラウザのみをインストールして効率化する
+      - name: Get Playwright cache directory for cleanup
+        id: playwright-cache-dir-cleanup
+        shell: bash
+        # cleanupジョブはubuntu-latest固定のためLinuxのパスを取得
+        run: echo "dir=$HOME/.cache/ms-playwright" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers for cleanup
+        id: cache-playwright-browsers-cleanup
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.playwright-cache-dir-cleanup.outputs.dir }}
+          # cleanupジョブはchromium固定
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}-
+            ${{ runner.os }}-playwright-chromium-
+
+      - name: Install Playwright Browsers
+        # キャッシュが復元された場合は、このインストールステップをスキップする
+        if: steps.cache-playwright-browsers-cleanup.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Run Cleanup Script
