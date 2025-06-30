@@ -10,6 +10,8 @@ import {
     expectVersionStatus,
 } from '../../tools/dashboard-helpers';
 
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
+
 /**
  * 公開管理機能に関するE2Eテストスイートです。
  * アプリケーションバージョンの公開状態遷移を主に検証します。
@@ -36,8 +38,10 @@ test.describe('公開管理 E2Eシナリオ', () => {
      * 正しく遷移することを一気通貫でテストします。
      */
     test('公開状態の遷移をテストする', async ({ page }) => {
-        const appName = `公開テスト-${Date.now()}`;
-        const appKey = `publish-test-${Date.now()}`;
+        const timestamp = Date.now().toString();
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appName = `公開テスト-${uniqueId}`;
+        const appKey = `publish-test-${uniqueId}`;
         const version = '1.0.0';
 
         await test.step('セットアップ: テスト用のアプリケーションを作成する', async () => {

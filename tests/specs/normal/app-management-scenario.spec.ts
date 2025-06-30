@@ -10,6 +10,7 @@ import {
     deleteApp,
     expectAppVisibility
 } from '../../tools/dashboard-helpers';
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
 test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
@@ -28,10 +29,11 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
     test('WB-APP-NEW: アプリケーションの新規作成とバリデーション', async ({ page }) => {
         const timestamp = Date.now().toString();
-        const appName = `新規作成テスト-${timestamp}`.slice(0, 30);
-        const appKey = `new-app-${timestamp}`.slice(0, 30);
-        const existingAppName = `既存アプリ-${timestamp}`.slice(0, 30);
-        const existingAppKey = `existing-key-${timestamp}`.slice(0, 30);
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appName = `新規作成テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `new-app-${uniqueId}`.slice(0, 30);
+        const existingAppName = `既存アプリ-${uniqueId}`.slice(0, 30);
+        const existingAppKey = `existing-key-${uniqueId}`.slice(0, 30);
 
         await test.step('セットアップ: 重複キーテスト用のアプリを作成', async () => {
             await createApp(page, existingAppName, existingAppKey);
@@ -83,8 +85,9 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
     test('WB-APP-EDIT & DEL: アプリケーションの編集と削除', async ({ page }) => {
         const timestamp = Date.now().toString();
-        const appName = `編集削除テスト-${timestamp}`.slice(0, 30);
-        const appKey = `edit-del-app-${timestamp}`.slice(0, 30);
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appName = `編集削除テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `edit-del-app-${uniqueId}`.slice(0, 30);
         const editedAppName = `${appName}-編集後`.slice(0, 30);
 
         await test.step('セットアップ: 編集・削除対象のアプリを作成', async () => {
@@ -188,8 +191,9 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
     test('WB-APP-EDIT (Abnormal): 編集時のバリデーションをテストする', async ({ page }) => {
         const timestamp = Date.now().toString();
-        const appName = `編集バリデーションテスト-${timestamp}`.slice(0, 30);
-        const appKey = `edit-validation-${timestamp}`.slice(0, 30);
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appName = `編集バリデーションテスト-${uniqueId}`.slice(0, 30);
+        const appKey = `edit-validation-${uniqueId}`.slice(0, 30);
 
         await test.step('セットアップ: テスト対象のアプリを作成', async () => {
             await createApp(page, appName, appKey);
@@ -285,10 +289,11 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
     test('WB-APP-EDIT-010: 編集時にキーが他のアプリと重複するとエラーになる', async ({ page }) => {
         const timestamp = Date.now().toString();
-        const appA_Name = `アプリA-${timestamp}`.slice(0, 30);
-        const appA_Key = `app-a-${timestamp}`.slice(0, 30);
-        const appB_Name = `アプリB-${timestamp}`.slice(0, 30);
-        const appB_Key = `app-b-${timestamp}`.slice(0, 30);
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appA_Name = `アプリA-${uniqueId}`.slice(0, 30);
+        const appA_Key = `app-a-${uniqueId}`.slice(0, 30);
+        const appB_Name = `アプリB-${uniqueId}`.slice(0, 30);
+        const appB_Key = `app-b-${uniqueId}`.slice(0, 30);
 
         await test.step('セットアップ: 2つのアプリを作成する', async () => {
             await createApp(page, appA_Name, appA_Key);
@@ -329,9 +334,10 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
     });
 
     test('WB-APP-DEL-004: アプリケーション削除をキャンセルする', async ({ page }) => {
-        const timestamp = Date.now().toString().slice(-10);
-        const appName = `削除キャンセルテスト-${timestamp}`;
-        const appKey = `del-cancel-test-${timestamp}`;
+        const timestamp = Date.now().toString();
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appName = `削除キャンセルテスト-${uniqueId}`.slice(0, 30);
+        const appKey = `del-cancel-test-${uniqueId}`.slice(0, 30);
 
         await test.step('セットアップ: テスト対象のアプリを作成', async () => {
             await createApp(page, appName, appKey);

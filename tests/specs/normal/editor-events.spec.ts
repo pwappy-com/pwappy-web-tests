@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper, verifyScriptInTestPage } from '../../tools/editor-helpers';
 
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
 /**
  * テストフィクスチャ
@@ -14,10 +15,14 @@ type EditorFixtures = {
 };
 const test = base.extend<EditorFixtures>({
     appName: async ({ }, use) => {
-        await use(`test-app-${Date.now()}`);
+        const timestamp = Date.now().toString();
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        await use(`test-app-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
-        const appKey = `test-key-${Date.now()}`;
+        const timestamp = Date.now().toString();
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appKey = `test-key-${uniqueId}`.slice(0, 30);
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);

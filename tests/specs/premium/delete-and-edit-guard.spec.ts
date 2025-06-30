@@ -9,6 +9,8 @@ import {
     unpublishVersion
 } from '../../tools/dashboard-helpers';
 
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
+
 /**
  * アプリケーションやバージョンが特定の公開状態にある場合に、
  * 編集や削除が適切に制限（ガード）されるかを検証するテストスイートです。
@@ -35,8 +37,10 @@ test.describe('削除・編集のガード条件テスト', () => {
      * アプリ本体とバージョンの編集・削除ボタンが期待通りに非活性化されることをテストします。
      */
     test('公開準備中および公開中のアプリ/バージョンは編集・削除できない', async ({ page }) => {
-        const appName = `ガード条件テスト-${Date.now()}`.slice(0, 30);
-        const appKey = `guard-test-${Date.now()}`.slice(0, 30);
+        const timestamp = Date.now().toString();
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appName = `ガード条件テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `guard-test-${uniqueId}`.slice(0, 30);
         const version = '1.0.0';
 
         await test.step('セットアップ: アプリを作成しバージョンを「公開準備中」にする', async () => {

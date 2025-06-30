@@ -11,6 +11,8 @@ import {
     expectVersionVisibility,
 } from '../../tools/dashboard-helpers';
 
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
+
 // --- テストシナリオ ---
 test.describe('バージョン管理 E2Eシナリオ', () => {
 
@@ -27,8 +29,10 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
     });
 
     test('バージョンのライフサイクル（自動作成確認、編集、複製、削除）', async ({ page }) => {
-        const appName = `バージョン管理テスト-${Date.now()}`;
-        const appKey = `ver-test-${Date.now()}`;
+        const timestamp = Date.now().toString();
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appName = `バージョン管理テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `ver-test-${uniqueId}`.slice(0, 30);
         const autoCreatedVersion = '1.0.0';
         const editedVersion = '1.0.1';
         const duplicatedVersion = '1.0.2';

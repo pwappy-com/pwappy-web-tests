@@ -11,6 +11,8 @@ import {
     expectAppVisibility
 } from '../../tools/dashboard-helpers';
 
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
+
 // --- テストシナリオ ---
 test.describe('公開管理 E2Eシナリオ', () => {
 
@@ -27,9 +29,10 @@ test.describe('公開管理 E2Eシナリオ', () => {
     });
 
     test('公開状態の遷移とダウンロード機能をテストする', async ({ page }) => {
-        const timestamp = Date.now().toString().slice(-10);
-        const appName = `公開機能テスト-${timestamp}`;
-        const appKey = `publish-test-${timestamp}`;
+        const timestamp = Date.now().toString();
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appName = `公開機能テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `publish-test-${uniqueId}`.slice(0, 30);
         const version = '1.0.0';
 
         await test.step('セットアップ: テスト用のアプリケーションを作成する', async () => {

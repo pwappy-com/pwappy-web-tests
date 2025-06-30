@@ -9,7 +9,10 @@ import {
     createApp,
     deleteApp,
     navigateToTab,
-    expectAppVisibility} from '../../tools/dashboard-helpers';
+    expectAppVisibility
+} from '../../tools/dashboard-helpers';
+
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
 test.describe('アーカイブ E2Eシナリオ', () => {
 
@@ -28,8 +31,9 @@ test.describe('アーカイブ E2Eシナリオ', () => {
 
     test('WB-APP-ARC & AR-APP-REST: アプリケーションのアーカイブと復元', async ({ page }) => {
         const timestamp = Date.now().toString();
-        const appName = `アーカイブテスト-${timestamp}`.slice(0, 30);
-        const appKey = `archive-app-${timestamp}`.slice(0, 30);
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appName = `アーカイブテスト-${uniqueId}`.slice(0, 30);
+        const appKey = `archive-app-${uniqueId}`.slice(0, 30);
 
         await test.step('セットアップ: アーカイブ対象のアプリを作成', async () => {
             await createApp(page, appName, appKey);

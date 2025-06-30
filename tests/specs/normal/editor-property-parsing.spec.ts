@@ -3,6 +3,8 @@ import 'dotenv/config';
 import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper, verifyScriptInTestPage } from '../../tools/editor-helpers';
 
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
+
 /**
  * テストフィクスチャを定義します。
  * 各テストの前に自動的にアプリケーションを作成し、エディタを開きます。
@@ -17,10 +19,14 @@ type EditorFixtures = {
 const test = base.extend<EditorFixtures>({
     appName: async ({ }, use) => {
         // 各テストでユニークなアプリケーション名とキーを生成
-        await use(`test-app-prop-parse-${Date.now()}`.slice(0, 30));
+        const timestamp = Date.now().toString();
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        await use(`test-app-prop-parse-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
-        const appKey = `test-key-prop-parse-${Date.now()}`.slice(0, 30);
+        const timestamp = Date.now().toString();
+        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const appKey = `test-key-prop-parse-${uniqueId}`.slice(0, 30);
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
 
