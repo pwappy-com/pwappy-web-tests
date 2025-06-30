@@ -27,7 +27,7 @@ const test = base.extend<EditorFixtures>({
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
         await editorPage.close();
-        await deleteApp(page, appName);
+        await deleteApp(page, appKey);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);

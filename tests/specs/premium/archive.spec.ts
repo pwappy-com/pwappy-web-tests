@@ -92,7 +92,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         await test.step('クリーンアップ: 復元後、ワークベンチで削除する', async () => {
             await navigateToTab(page, 'workbench');
             await expectAppVisibility(page, appName, true);
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
             await expectAppVisibility(page, appName, false);
         });
     });

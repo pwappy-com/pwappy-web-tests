@@ -60,7 +60,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
             await expectAppVisibility(page, appName, false); // 汎用ヘルパーで確認
         });
     });

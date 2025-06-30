@@ -78,7 +78,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
             await navigateToTab(page, 'workbench');
             await expect(page.locator('.app-list tbody tr', { hasText: appName })).toBeHidden();
         });

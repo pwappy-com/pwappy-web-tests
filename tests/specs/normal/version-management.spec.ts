@@ -86,7 +86,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
         });
     });
 
@@ -109,7 +109,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
         });
     });
 
@@ -142,7 +142,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
         });
     });
 
@@ -182,7 +182,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
         });
     });
 
@@ -209,7 +209,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
         });
     });
 });

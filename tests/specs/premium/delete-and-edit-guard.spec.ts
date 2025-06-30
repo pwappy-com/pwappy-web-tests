@@ -90,7 +90,7 @@ test.describe('削除・編集のガード条件テスト', () => {
             await navigateToTab(page, 'workbench');
             const appRowWorkbench = page.locator('.app-list tbody tr', { hasText: appName });
             await expect(appRowWorkbench.getByRole('button', { name: '削除' })).toBeEnabled();
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
 
             // 最終的にリストから消えたことを確認
             const appNameCell = page.locator('.app-list tbody tr td:first-child', { hasText: new RegExp(`^${appName}$`) });

@@ -40,13 +40,13 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
  * ダッシュボード画面で指定されたアプリケーションを正常に削除します。
  * 主にテストのクリーンアップで使用します。
  * @param page ダッシュボードのPageオブジェクト
- * @param appName 削除するアプリケーション名
+ * @param appKey 削除するアプリケーションキー
  */
-export async function deleteApp(page: Page, appName: string): Promise<void> {
+export async function deleteApp(page: Page, appKey: string): Promise<void> {
     await page.bringToFront();
     await navigateToTab(page, 'workbench');
 
-    const appRow = page.locator('.app-list tbody tr', { hasText: appName });
+    const appRow = page.locator('.app-list tbody tr', { hasText: appKey });
     if (await appRow.count() > 0) {
         await appRow.getByRole('button', { name: '削除' }).click();
         await page.getByText('処理中...').waitFor({ state: 'hidden' });
