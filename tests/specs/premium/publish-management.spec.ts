@@ -29,8 +29,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
     });
 
     test('公開状態の遷移とダウンロード機能をテストする', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
         const appName = `公開機能テスト-${uniqueId}`.slice(0, 30);
         const appKey = `publish-test-${uniqueId}`.slice(0, 30);
         const version = '1.0.0';

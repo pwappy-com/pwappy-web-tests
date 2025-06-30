@@ -29,8 +29,8 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
     });
 
     test('バージョンのライフサイクル（自動作成確認、編集、複製、削除）', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
         const appName = `バージョン管理テスト-${uniqueId}`.slice(0, 30);
         const appKey = `ver-test-${uniqueId}`.slice(0, 30);
         const autoCreatedVersion = '1.0.0';
@@ -91,9 +91,10 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
     });
 
     test('WB-VER-DUP-008: 複製時にバージョンが重複する場合、次の番号にインクリメントされる', async ({ page }) => {
-        const timestamp = Date.now().toString().slice(-10);
-        const appName = `複製インクリメントテスト-${timestamp}`;
-        const appKey = `inc-dup-ver-test-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `複製インクリメントテスト-${uniqueId}`.slice(0, 30);
+        const appKey = `inc-dup-ver-test-${uniqueId}`.slice(0, 30);
         const initialVersions = ['1.0.0', '1.0.1'];
         const expectedDuplicatedVersion = '1.0.2';
 
@@ -113,9 +114,10 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
     });
 
     test('WB-VER-EDIT-005: 編集時にバージョンが重複するとエラーになる', async ({ page }) => {
-        const timestamp = Date.now().toString().slice(-10);
-        const appName = `編集重複テスト-${timestamp}`;
-        const appKey = `edit-dup-ver-test-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `編集重複テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `edit-dup-ver-test-${uniqueId}`.slice(0, 30);
         const initialVersions = ['1.0.0', '1.1.0'];
 
         await test.step('セットアップ: 2つのバージョンを持つアプリを作成', async () => {
@@ -145,9 +147,10 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
     });
 
     test('WB-VER-EDIT (Abnormal): バージョン編集時のバリデーションをテストする', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const appName = `バージョン編集バリデーション-${timestamp}`.slice(0, 30);
-        const appKey = `ver-edit-validation-${timestamp}`.slice(0, 30);
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `バージョン編集バリデーション-${uniqueId}`.slice(0, 30);
+        const appKey = `ver-edit-validation-${uniqueId}`.slice(0, 30);
         const initialVersion = '1.0.0';
 
         await test.step('セットアップ: テスト対象のアプリとバージョンを作成', async () => {
@@ -184,9 +187,10 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
     });
 
     test('WB-VER-DUP-006: 複製後に文字数制限を超える場合はエラーになる', async ({ page }) => {
-        const timestamp = Date.now().toString().slice(-10);
-        const appName = `複製文字数テスト-${timestamp}`.slice(0, 30);
-        const appKey = `dup-len-test-${timestamp}`.slice(0, 30);
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `複製文字数テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `dup-len-test-${uniqueId}`.slice(0, 30);
         const tooLongVersion = 'a'.repeat(30);
 
         await test.step('セットアップ: 文字数制限いっぱいのバージョンを持つアプリを作成', async () => {

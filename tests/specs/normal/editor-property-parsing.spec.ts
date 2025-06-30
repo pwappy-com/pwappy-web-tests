@@ -24,8 +24,8 @@ const test = base.extend<EditorFixtures>({
         await use(`test-app-prop-parse-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
-        const timestamp = Date.now().toString();
-        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
         const appKey = `test-key-prop-parse-${uniqueId}`.slice(0, 30);
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);

@@ -30,8 +30,8 @@ test.describe('アーカイブ E2Eシナリオ', () => {
     });
 
     test('WB-APP-ARC & AR-APP-REST: アプリケーションのアーカイブと復元', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
         const appName = `アーカイブテスト-${uniqueId}`.slice(0, 30);
         const appKey = `archive-app-${uniqueId}`.slice(0, 30);
 

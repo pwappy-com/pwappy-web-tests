@@ -23,8 +23,8 @@ const test = base.extend<EditorFixtures>({
     },
     // アプリ作成からエディタを開くまでを自動化し、テスト終了後に自動でクリーンアップするフィクスチャ
     editorPage: async ({ page, context, appName }, use) => {
-        const timestamp = Date.now().toString();
-        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
         const appKey = `test-key-${uniqueId}`.slice(0, 30);
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);

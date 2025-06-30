@@ -38,8 +38,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
      * 正しく遷移することを一気通貫でテストします。
      */
     test('公開状態の遷移をテストする', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const uniqueId = `${testRunSuffix}-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
         const appName = `公開テスト-${uniqueId}`;
         const appKey = `publish-test-${uniqueId}`;
         const version = '1.0.0';
