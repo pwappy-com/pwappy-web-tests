@@ -1,21 +1,7 @@
 import { test as base, expect, Page, Locator } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
-import {
-    switchTabInContainer,
-    addComponent,
-    selectNodeInDomTree,
-    getPropertyContainer,
-    switchToRunModeAndVerify,
-    saveAndOpenTestPage,
-} from '../../tools/editor-helpers';
-import {
-    addNewScript,
-    editScript,
-    editScriptContent,
-    verifyAndCloseAlert,
-    verifyScriptInTestPage,
-} from '../../tools/script-helpers';
+import { EditorHelper, verifyScriptInTestPage } from '../../tools/editor-helpers';
 
 /**
  * テストフィクスチャを定義します。
@@ -25,6 +11,7 @@ import {
 type EditorFixtures = {
     editorPage: Page;
     appName: string;
+    editorHelper: EditorHelper;
 };
 
 const test = base.extend<EditorFixtures>({
@@ -44,15 +31,18 @@ const test = base.extend<EditorFixtures>({
         await editorPage.close();
         await deleteApp(page, appName);
     },
+    editorHelper: async ({ editorPage, isMobile }, use) => {
+        const helper = new EditorHelper(editorPage, isMobile);
+        await use(helper);
+    },
 });
 
 // --- テストスイート ---
 test.describe('JSDocからのプロパティ解析機能のテスト', () => {
-
     /**
      * 各テストの実行前に、認証とダッシュボードへのアクセスを行います。
      */
-    test.beforeEach(async ({ page, context }) => {
+    test.beforeEach(async ({ page, context, isMobile }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
         const domain = testUrl.hostname;
         await context.addCookies([
@@ -68,8 +58,8 @@ test.describe('JSDocからのプロパティ解析機能のテスト', () => {
      * Web ComponentのJSDocに定義された@propertyが、
      * プロパティパネルで正しいUIとしてレンダリングされるかを検証します。
      */
-    test('JSDocの@propertyがプロパティパネルに正しく反映される', async ({ editorPage }) => {
-        
+    test('JSDocの@propertyがプロパティパネルに正しく反映される', async ({ editorPage, editorHelper }) => {
+
         test.setTimeout(120000);
 
         const scriptName = 'MyTestComponent';
@@ -123,14 +113,15 @@ customElements.define('${tagName}', ${scriptName});
 
         await test.step('1. Web Componentのスクリプトを作成・編集する', async () => {
             // スクリプトタブに切り替える
+            editorHelper.openMoveingHandle('right');
             const scriptContainer = editorPage.locator('script-container');
-            await switchTabInContainer(scriptContainer, 'スクリプト');
+            await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
 
             // 新しいクラスタイプのスクリプトを追加
-            await addNewScript(editorPage, scriptName, 'class');
+            await editorHelper.addNewScript(scriptName, 'class');
 
             // 作成したスクリプトをWeb Componentのコードに書き換える
-            await editScriptContent(editorPage, scriptName, componentScript);
+            await editorHelper.editScriptContent(scriptName, componentScript);
         });
 
         await test.step('2. 作成したコンポーネントを配置し、プロパティパネルを検証する', async () => {
@@ -138,13 +129,14 @@ customElements.define('${tagName}', ${scriptName});
             const appNode = editorPage.locator('#dom-tree > div[data-node-type="app"]');
 
             // ツールボックスから作成したコンポーネントをappノードに追加
-            const componentNode = await addComponent(editorPage, tagName, appNode);
+            const componentNode = await editorHelper.addComponent(tagName, appNode);
 
             // 追加したコンポーネントを選択
-            await selectNodeInDomTree(componentNode);
+            await editorHelper.selectNodeInDomTree(componentNode);
 
             // プロパティコンテナを取得
-            const propertyContainer = getPropertyContainer(editorPage);
+            editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorHelper.getPropertyContainer();
             await expect(propertyContainer).toBeVisible();
 
             // 各プロパティに対応する入力UIが存在し、正しいタイプであることを検証
@@ -168,7 +160,7 @@ customElements.define('${tagName}', ${scriptName});
      * Web ComponentのJSDocに定義された@firesが、
      * イベントパネルにカスタムイベントとして正しく表示されるかを検証します。
      */
-    test('JSDocの@firesがイベントパネルに正しく反映される', async ({ editorPage }) => {
+    test('JSDocの@firesがイベントパネルに正しく反映される', async ({ editorPage, editorHelper }) => {
         test.setTimeout(120000);
 
         const scriptName = 'MyEventComponent';
@@ -219,28 +211,31 @@ customElements.define('${tagName}', ${scriptName});
 
         await test.step('1. @firesを持つWeb Componentのスクリプトを作成する', async () => {
             // スクリプトタブに切り替える
+            await editorHelper.openMoveingHandle('right');
             const scriptContainer = editorPage.locator('script-container');
-            await switchTabInContainer(scriptContainer, 'スクリプト');
+            await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
 
             // 新しいクラスタイプのスクリプトを追加
-            await addNewScript(editorPage, scriptName, 'class');
+            await editorHelper.addNewScript(scriptName, 'class');
 
             // 作成したスクリプトをWeb Componentのコードに書き換える
-            await editScriptContent(editorPage, scriptName, componentScript);
+            await editorHelper.editScriptContent(scriptName, componentScript);
         });
 
         await test.step('2. 作成したコンポーネントを配置し、イベントパネルを検証する', async () => {
+            await editorHelper.openMoveingHandle('left');
             const appNode = editorPage.locator('#dom-tree > div[data-node-type="app"]');
 
             // ツールボックスから作成したコンポーネントをappノードに追加
-            const componentNode = await addComponent(editorPage, tagName, appNode);
+            const componentNode = await editorHelper.addComponent(tagName, appNode);
 
             // 追加したコンポーネントを選択
-            await selectNodeInDomTree(componentNode);
+            await editorHelper.selectNodeInDomTree(componentNode);
 
             // イベントタブに切り替える
+            await editorHelper.openMoveingHandle('right');
             const scriptContainer = editorPage.locator('script-container');
-            await switchTabInContainer(scriptContainer, 'イベント');
+            await editorHelper.switchTabInContainer(scriptContainer, 'イベント');
 
             // イベントコンテナを取得
             const eventContainer = scriptContainer.locator('event-container');
@@ -268,10 +263,11 @@ customElements.define('${tagName}', ${scriptName});
             await expect(addMenu).toBeHidden();
 
             // 追加したスクリプトを編集
-            await editScript(editorPage, { eventName: eventName, scriptName: attachedScriptName, scriptContent: `function ${attachedScriptName}(event) {\nons.notification.alert('${alertText}');` });
+            await editorHelper.editScript({ eventName: eventName, scriptName: attachedScriptName, scriptContent: `function ${attachedScriptName}(event) {\nons.notification.alert('${alertText}');` });
 
             // 動作モードに切り替え
-            await switchToRunModeAndVerify(editorPage);
+            await editorHelper.closeMoveingHandle();
+            await editorHelper.switchToRunModeAndVerify();
 
             const previewFrame = editorPage.frameLocator('#renderzone');
 
@@ -279,11 +275,11 @@ customElements.define('${tagName}', ${scriptName});
             await previewFrame.locator(tagName).getByRole('button', { name: 'Fire Event' }).click();
 
             // 割り当てたスクリプトが実行され、アラートが表示されることを確認
-            await verifyAndCloseAlert(previewFrame, alertText);
+            await editorHelper.verifyAndCloseAlert(previewFrame, alertText);
         });
 
         await test.step('4. 動作検証(実機テストページ): ページ遷移と生成されたJSを確認', async () => {
-            const testPage = await saveAndOpenTestPage(editorPage);
+            const testPage = await editorHelper.saveAndOpenTestPage();
             await testPage.waitForLoadState('domcontentloaded');
 
             // --- イベントリスナーが正しく設定されているかを確認 ---
@@ -298,7 +294,7 @@ customElements.define('${tagName}', ${scriptName});
 
             // --- 実際の動作確認 ---
             await testPage.locator(tagName).getByRole('button', { name: 'Fire Event' }).click();
-            await verifyAndCloseAlert(testPage, alertText);
+            await editorHelper.verifyAndCloseAlert(testPage, alertText);
 
             await testPage.close();
         });

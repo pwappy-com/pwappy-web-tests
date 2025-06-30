@@ -2,22 +2,8 @@ import { test as base, expect, Page, BrowserContext, Locator } from '@playwright
 import 'dotenv/config';
 
 import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
-import {
-    addPage,
-    addComponent,
-    addComponentAsHtmlTag,
-    selectNodeInDomTree,
-    openAttributeEditor,
-    addAttributeDefinition,
-    deleteAttributeDefinition,
-    setupPageWithButton,
-    setupFlexContainerWithItem,
-    expectPageInTemplateList,
-    getPropertyInput,
-    expectPreviewElementCss,
-    expectPreviewElementAttribute,
-    getPropertyContainer,
-} from '../../tools/editor-helpers';
+import { EditorHelper } from '../../tools/editor-helpers';
+
 
 /**
  * テストフィクスチャを拡張し、各テストでエディタページを自動的にセットアップ・クリーンアップします。
@@ -25,6 +11,7 @@ import {
 type EditorFixtures = {
     editorPage: Page;
     appName: string;
+    editorHelper: EditorHelper;
 };
 const test = base.extend<EditorFixtures>({
     // 各テストでユニークなアプリケーション名を提供するフィクスチャ
@@ -44,15 +31,18 @@ const test = base.extend<EditorFixtures>({
         await editorPage.close();
         await deleteApp(page, appName);
     },
+    editorHelper: async ({ editorPage, isMobile }, use) => {
+        const helper = new EditorHelper(editorPage, isMobile);
+        await use(helper);
+    },
 });
 
 // --- テストスイート ---
 test.describe('エディタ内機能のテスト', () => {
-
     /**
      * 各テストの実行前に認証とダッシュボードへのアクセスを行います。
      */
-    test.beforeEach(async ({ page, context }) => {
+    test.beforeEach(async ({ page, context, isMobile }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
         const domain = testUrl.hostname;
         await context.addCookies([
@@ -64,37 +54,44 @@ test.describe('エディタ内機能のテスト', () => {
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
-    test('コンポーネントのプロパティを編集できる', async ({ editorPage }) => {
+    test('コンポーネントのプロパティを編集できる', async ({ editorPage, editorHelper }) => {
         let buttonNode: Locator;
         let pageNode: Locator;
         await test.step('セットアップ: ページとボタンをエディタに追加', async () => {
             // ヘルパー関数でセットアップを簡潔に
-            const setup = await setupPageWithButton(editorPage);
+            const setup = await editorHelper.setupPageWithButton();
             pageNode = setup.pageNode;
             buttonNode = setup.buttonNode;
         });
 
         await test.step('検証: DOMツリーのノード選択に応じてプロパティ表示が追従すること', async () => {
+            editorHelper.openMoveingHandle('left');
             const domTree = editorPage.locator('#dom-tree');
+            editorHelper.openMoveingHandle('right');
             const propertyContainer = editorPage.locator('property-container');
             const propertyIdInput = propertyContainer.locator('input[data-attribute-type="domId"]');
 
             // 「コンテンツ」ノードのテキスト部分をクリックし、対応するプロパティが表示されるか確認
+            editorHelper.openMoveingHandle('left');
             const contentNode = domTree.locator('div[data-node-explain="コンテンツ"]');
             await contentNode.getByText('コンテンツ', { exact: true }).click();
 
+            editorHelper.openMoveingHandle('right');
             await propertyContainer.getByText('属性', { exact: true }).click();
             await expect(propertyIdInput).toHaveValue('div2');
 
+            editorHelper.openMoveingHandle('left');
             // 次に「ボタン」ノードをクリックし、プロパティ表示が切り替わるか確認
             await domTree.locator('.node[data-node-type="ons-button"]').click();
             await expect(propertyIdInput).toHaveValue('ons-button1');
         });
 
         await test.step('検証: 属性(text)の変更がプレビューに反映されること', async () => {
+            editorHelper.closeMoveingHandle();
             const propertyTextInput = editorPage.locator('property-container input[data-attribute-type="text"]');
             const previewButton = editorPage.locator('#renderzone').contentFrame().locator('ons-button');
 
+            editorHelper.openMoveingHandle('right');
             await propertyTextInput.fill('Button2');
             await propertyTextInput.press('Enter');
 
@@ -150,18 +147,19 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
-    test('属性のinput[text]を「要素に」追加した場合のライフサイクル検証', async ({ editorPage }) => {
+    test('属性のinput[text]を「要素に」追加した場合のライフサイクル検証', async ({ editorPage, editorHelper }) => {
         const attrName = 'element-specific-attr';
         const attrValue = 'element-value';
         let buttonNode: Locator;
 
         await test.step('セットアップ: ページとボタンを追加', async () => {
-            const setup = await setupPageWithButton(editorPage);
+            const setup = await editorHelper.setupPageWithButton();
             buttonNode = setup.buttonNode;
-            await selectNodeInDomTree(buttonNode);
+            await editorHelper.selectNodeInDomTree(buttonNode);
         });
 
         await test.step('検証: 属性の追加、値の変更、空文字設定、クリアボタンの動作', async () => {
+            editorHelper.openMoveingHandle('right');
             const propertyContainer = editorPage.locator('property-container');
             const previewButton = editorPage.locator('#renderzone').contentFrame().locator('ons-button');
 
@@ -220,15 +218,15 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
-    test('属性のinput[text]を「タグに」追加した場合のライフサイクル検証', async ({ editorPage }) => {
+    test('属性のinput[text]を「タグに」追加した場合のライフサイクル検証', async ({ editorPage, editorHelper }) => {
         const attrName = 'tag-specific-attr';
         const attrValue = 'tag-value';
 
         await test.step('セットアップ: ページとボタンを追加し、属性をタグレベルで定義', async () => {
-            const { buttonNode } = await setupPageWithButton(editorPage);
-            await selectNodeInDomTree(buttonNode);
-            await openAttributeEditor(editorPage);
-            await addAttributeDefinition(editorPage, { name: attrName, template: 'input[text]', scope: 'tag' });
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openAttributeEditor();
+            await editorHelper.addAttributeDefinition({ name: attrName, template: 'input[text]', scope: 'tag' });
             //await editorPage.locator('property-container').getByTitle('属性を編集').click(); // モーダルを閉じる
         });
 
@@ -279,17 +277,18 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
-    test('属性の優先順位とUIハイライトの検証', async ({ editorPage }) => {
+    test('属性の優先順位とUIハイライトの検証', async ({ editorPage, editorHelper }) => {
         const attrName = 'priority-test-attr';
         let buttonNode: Locator;
 
         await test.step('セットアップ: ページとボタンを追加', async () => {
-            const setup = await setupPageWithButton(editorPage);
+            const setup = await editorHelper.setupPageWithButton();
             buttonNode = setup.buttonNode;
-            await selectNodeInDomTree(buttonNode);
+            await editorHelper.selectNodeInDomTree(buttonNode);
         });
 
         await test.step('検証: 「要素に」属性を追加するとUIがハイライトされる', async () => {
+            editorHelper.openMoveingHandle('right');
             const propertyContainer = editorPage.locator('property-container');
 
             await propertyContainer.getByTitle('属性を編集').click();
@@ -334,26 +333,26 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
-    test('エディタ内で新しいページを追加できる', async ({ editorPage }) => {
+    test('エディタ内で新しいページを追加できる', async ({ editorPage, editorHelper }) => {
         const newPageExplain = 'ページ';
-        await addPage(editorPage); // ヘルパー関数に置き換え
+        await editorHelper.addPage(); // ヘルパー関数に置き換え
         await expect(editorPage.locator('#dom-tree > .node[data-node-type="page"]')).toHaveCount(1);
-        await expectPageInTemplateList(editorPage, newPageExplain);
+        await editorHelper.expectPageInTemplateList(newPageExplain);
     });
 
-    test('ツールボックスからコンポーネントをD&Dできる', async ({ editorPage }) => {
-        const pageNode = await addPage(editorPage); // ヘルパー関数に置き換え
+    test('ツールボックスからコンポーネントをD&Dできる', async ({ editorPage, editorHelper }) => {
+        const pageNode = await editorHelper.addPage(); // ヘルパー関数に置き換え
         const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
-        await addComponent(editorPage, 'ons-button', contentAreaSelector);
+        await editorHelper.addComponent('ons-button', contentAreaSelector);
     });
 
-    test('属性(input[checkbox])を追加・編集・削除できる', async ({ editorPage }) => {
+    test('属性(input[checkbox])を追加・編集・削除できる', async ({ editorPage, editorHelper }) => {
         const attrName = 'sample-check-attr';
-        const { buttonNode } = await setupPageWithButton(editorPage);
-        await selectNodeInDomTree(buttonNode);
+        const { buttonNode } = await editorHelper.setupPageWithButton();
+        await editorHelper.selectNodeInDomTree(buttonNode);
 
-        await openAttributeEditor(editorPage);
-        await addAttributeDefinition(editorPage, { name: attrName, template: 'input[checkbox]', scope: 'tag' });
+        await editorHelper.openAttributeEditor();
+        await editorHelper.addAttributeDefinition({ name: attrName, template: 'input[checkbox]', scope: 'tag' });
 
         const previewButton = editorPage.locator('#renderzone').contentFrame().locator('ons-button');
         const targetInput = editorPage.locator(`input[data-attribute-type="${attrName}"]`);
@@ -363,89 +362,89 @@ test.describe('エディタ内機能のテスト', () => {
         await expect(previewButton).not.toHaveAttribute(attrName);
     });
 
-    test('属性(select[])を追加・編集・削除できる', async ({ editorPage }) => {
+    test('属性(select[])を追加・編集・削除できる', async ({ editorPage, editorHelper }) => {
         const attrName = 'sample-select-attr';
         const template = 'select[ selectA selectB selectC]';
         const previewSelector = 'ons-button';
 
         await test.step('セットアップ', async () => {
-            const { buttonNode } = await setupPageWithButton(editorPage);
-            await selectNodeInDomTree(buttonNode);
-            await openAttributeEditor(editorPage);
-            await addAttributeDefinition(editorPage, { name: attrName, template, scope: 'tag' });
-            await getPropertyContainer(editorPage).getByTitle('属性を編集').click(); // モーダルを閉じる
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openAttributeEditor();
+            await editorHelper.addAttributeDefinition({ name: attrName, template, scope: 'tag' });
+            await editorHelper.getPropertyContainer().getByTitle('属性を編集').click(); // モーダルを閉じる
         });
 
         await test.step('検証', async () => {
-            const targetInput = getPropertyInput(editorPage, attrName);
+            const targetInput = editorHelper.getPropertyInput(attrName);
             const selectList = targetInput.locator('.select');
 
             await selectList.click();
             await editorPage.getByText('selectA').click();
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: 'selectA' });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: 'selectA' });
 
             await selectList.click();
             await editorPage.getByText('selectB').click();
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: 'selectB' });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: 'selectB' });
 
             await selectList.click();
             await targetInput.locator('.select-popup > .select-option').first().click();
             await expect(targetInput).toBeEmpty();
             await expect(targetInput).toBeVisible();
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: null });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: null });
         });
 
         await test.step('削除', async () => {
-            const targetInput = getPropertyInput(editorPage, attrName);
+            const targetInput = editorHelper.getPropertyInput(attrName);
             await targetInput.locator('.select').click();
             await editorPage.getByText('selectC').click(); // 削除前に値がある状態にする
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: 'selectC' });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: 'selectC' });
 
-            await openAttributeEditor(editorPage);
-            await deleteAttributeDefinition(editorPage, attrName);
+            await editorHelper.openAttributeEditor();
+            await editorHelper.deleteAttributeDefinition(attrName);
 
             await expect(targetInput).toBeHidden();
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: null });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: null });
         });
     });
 
-    test('属性(multiselect[])を追加・編集・削除できる', async ({ editorPage }) => {
+    test('属性(multiselect[])を追加・編集・削除できる', async ({ editorPage, editorHelper }) => {
         const attrName = 'sample-mulselect-attr';
         const template = 'multiselect[selectA selectB selectC]';
         const previewSelector = 'ons-button';
 
         await test.step('セットアップ', async () => {
-            const { buttonNode } = await setupPageWithButton(editorPage);
-            await selectNodeInDomTree(buttonNode);
-            await openAttributeEditor(editorPage);
-            await addAttributeDefinition(editorPage, { name: attrName, template, scope: 'tag' });
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openAttributeEditor();
+            await editorHelper.addAttributeDefinition({ name: attrName, template, scope: 'tag' });
         });
 
         await test.step('検証', async () => {
-            const targetInput = getPropertyInput(editorPage, attrName);
+            const targetInput = editorHelper.getPropertyInput(attrName);
             const selectList = targetInput.locator('.select');
             const popup = targetInput.locator('.select-popup');
 
             await selectList.click();
             await popup.getByText('selectA').click();
             await selectList.click();
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: 'selectA' });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: 'selectA' });
 
             await selectList.click();
             await popup.getByText('selectB').click();
             await selectList.click();
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: 'selectA selectB' });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: 'selectA selectB' });
 
             await selectList.click();
             await popup.getByText('selectA').click();
             await popup.getByText('selectB').click();
             await selectList.click();
             await expect(targetInput).toBeEmpty();
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: null });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: null });
         });
 
         await test.step('削除', async () => {
-            const targetInput = getPropertyInput(editorPage, attrName);
+            const targetInput = editorHelper.getPropertyInput(attrName);
             const selectList = targetInput.locator('.select');
             const popup = targetInput.locator('.select-popup');
 
@@ -453,36 +452,36 @@ test.describe('エディタ内機能のテスト', () => {
             await popup.getByText('selectC').click(); // 削除前に値がある状態にする
             await selectList.click();
 
-            await openAttributeEditor(editorPage);
-            await deleteAttributeDefinition(editorPage, attrName);
+            await editorHelper.openAttributeEditor();
+            await editorHelper.deleteAttributeDefinition(attrName);
 
             await expect(targetInput).toBeHidden();
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: null });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: null });
         });
     });
 
-    test('属性(textarea)を追加・編集・削除できる', async ({ editorPage }) => {
+    test('属性(textarea)を追加・編集・削除できる', async ({ editorPage, editorHelper }) => {
         const attrName = 'sample-textarea-attr';
         const attrValue = 'textarea';
         const previewSelector = 'ons-button';
 
         await test.step('セットアップ', async () => {
-            const { buttonNode } = await setupPageWithButton(editorPage);
-            await selectNodeInDomTree(buttonNode);
-            await openAttributeEditor(editorPage);
-            await addAttributeDefinition(editorPage, { name: attrName, template: 'textarea', scope: 'tag' });
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openAttributeEditor();
+            await editorHelper.addAttributeDefinition({ name: attrName, template: 'textarea', scope: 'tag' });
         });
 
         await test.step('検証', async () => {
-            const targetInput = getPropertyInput(editorPage, attrName).locator('textarea');
+            const targetInput = editorHelper.getPropertyInput(attrName).locator('textarea');
 
             await targetInput.fill(attrValue);
             await targetInput.press('Tab');
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: attrValue });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: attrValue });
 
             await targetInput.fill('');
             await targetInput.press('Tab');
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: '' });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: '' });
 
             // 属性編集モーダルがもし表示されていたら、それが閉じるのを待つ
             await expect(editorPage.locator('#attributeList')).toBeHidden();
@@ -493,121 +492,124 @@ test.describe('エディタ内機能のテスト', () => {
             // クリックを実行
             await clearButton.click();
             await expect(targetInput).toBeVisible();
-            await expectPreviewElementAttribute(editorPage, { selector: previewSelector, attributeName: attrName, value: null });
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: null });
         });
 
         await test.step('削除', async () => {
-            await openAttributeEditor(editorPage);
+            await editorHelper.openAttributeEditor();
 
-            await deleteAttributeDefinition(editorPage, attrName);
-            await expect(getPropertyInput(editorPage, attrName)).toBeHidden();
+            await editorHelper.deleteAttributeDefinition(attrName);
+            await expect(editorHelper.getPropertyInput(attrName)).toBeHidden();
         });
     });
 
-    test('属性(style-flex)を追加・編集・削除できる', async ({ editorPage }) => {
+    test('属性(style-flex)を追加・編集・削除できる', async ({ editorPage, editorHelper }) => {
         const attrName = 'style-flex';
         const nodeType = 'sample-flex-tag';
 
         await test.step('セットアップ', async () => {
-            const pageNode = await addPage(editorPage);
+            const pageNode = await editorHelper.addPage();
             const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
-            const containerNode = await addComponentAsHtmlTag(editorPage, nodeType, contentAreaSelector);
-            await selectNodeInDomTree(containerNode);
-            await openAttributeEditor(editorPage);
-            await addAttributeDefinition(editorPage, { name: attrName, template: 'style-flex', scope: 'tag' });
+            const containerNode = await editorHelper.addComponentAsHtmlTag(nodeType, contentAreaSelector);
+            await editorHelper.selectNodeInDomTree(containerNode);
+            await editorHelper.openAttributeEditor();
+            await editorHelper.addAttributeDefinition({ name: attrName, template: 'style-flex', scope: 'tag' });
         });
 
         await test.step('検証', async () => {
-            const targetInput = getPropertyInput(editorPage, attrName);
+            const targetInput = editorHelper.getPropertyInput(attrName);
             const checkbox = targetInput.locator('input[type="checkbox"]');
 
             await checkbox.check();
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'display', value: 'flex' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'display', value: 'flex' });
 
             await targetInput.locator('select[name="flex-direction"]').selectOption('column');
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'flex-direction', value: 'column' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-direction', value: 'column' });
 
             await targetInput.locator('select[name="flex-wrap"]').selectOption('wrap');
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'flex-wrap', value: 'wrap' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-wrap', value: 'wrap' });
 
             await targetInput.locator('select[name="align-content"]').selectOption('Center');
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'align-content', value: 'center' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'align-content', value: 'center' });
 
             await targetInput.locator('select[name="justify-content"]').selectOption('Center');
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'justify-content', value: 'center' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'justify-content', value: 'center' });
 
             await targetInput.locator('select[name="align-items"]').selectOption('Baseline');
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'align-items', value: 'baseline' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'align-items', value: 'baseline' });
 
             await checkbox.uncheck();
-            await expectPreviewElementAttribute(editorPage, { selector: nodeType, attributeName: 'style', value: null });
+            await editorHelper.expectPreviewElementAttribute({ selector: nodeType, attributeName: 'style', value: null });
         });
 
         await test.step('削除', async () => {
-            await openAttributeEditor(editorPage);
-            await deleteAttributeDefinition(editorPage, attrName);
-            await expect(getPropertyInput(editorPage, attrName)).toBeHidden();
+            await editorHelper.openAttributeEditor();
+            await editorHelper.deleteAttributeDefinition(attrName);
+            await expect(editorHelper.getPropertyInput(attrName)).toBeHidden();
         });
     });
 
-    test('属性(style-flexitem)を追加・編集・削除できる', async ({ editorPage }) => {
+    test('属性(style-flexitem)を追加・編集・削除できる', async ({ editorPage, editorHelper }) => {
         const attrName = 'style-flexitem';
         const nodeType = 'flex-item';
         let itemNode: Locator;
 
         await test.step('セットアップ', async () => {
-            const setup = await setupFlexContainerWithItem(editorPage);
+            const setup = await editorHelper.setupFlexContainerWithItem();
             itemNode = setup.itemNode;
         });
 
         await test.step('検証', async () => {
-            await selectNodeInDomTree(itemNode);
+            await editorHelper.openMoveingHandle('left');
+            await editorHelper.selectNodeInDomTree(itemNode);
 
             // style-flex-item のプロパティパネル全体が表示されていることを確認
-            const targetInputPanel = getPropertyInput(editorPage, 'style-flex-item');
+            await editorHelper.openMoveingHandle('right');
+            const targetInputPanel = editorHelper.getPropertyInput('style-flex-item');
             await expect(targetInputPanel).toBeVisible();
 
             // --- 'flex-grow' の操作 ---
             const flexGrowInput = targetInputPanel.locator('input[id="flex-grow"]');
             await expect(flexGrowInput).toBeVisible();
             await flexGrowInput.fill('1');
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'flex-grow', value: '1' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-grow', value: '1' });
 
             // --- 'flex-shrink' の操作 ---
             const flexShrinkInput = targetInputPanel.locator('input[id="flex-shrink"]');
             await expect(flexShrinkInput).toBeVisible();
             await flexShrinkInput.fill('2');
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'flex-shrink', value: '2' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-shrink', value: '2' });
 
             // --- 'flex-basis' の操作 ---
             const flexBasisInput = targetInputPanel.locator('input[id="flex-basis"]');
             await expect(flexBasisInput).toBeVisible();
             await flexBasisInput.fill('100%');
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'flex-basis', value: '100%' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-basis', value: '100%' });
 
             // --- 'order' の操作 ---
             const orderInput = targetInputPanel.locator('input[id="order"]');
             await expect(orderInput).toBeVisible();
             await orderInput.fill('10');
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'order', value: '10' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'order', value: '10' });
 
             // --- 'align-self' の操作 ---
             const alignSelfSelect = targetInputPanel.locator('select[name="align-self"]');
             await expect(alignSelfSelect).toBeVisible();
 
             await alignSelfSelect.selectOption('Center');
-            await expectPreviewElementCss(editorPage, { selector: nodeType, property: 'align-self', value: 'center' });
+            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'align-self', value: 'center' });
         });
 
         await test.step('削除', async () => {
             // 削除前にも、対象ノードが選択されていることを保証する
-            await selectNodeInDomTree(itemNode);
+            await editorHelper.openMoveingHandle('left');
+            await editorHelper.selectNodeInDomTree(itemNode);
 
-            await openAttributeEditor(editorPage);
-            await deleteAttributeDefinition(editorPage, attrName);
-            await expect(getPropertyInput(editorPage, attrName)).toBeHidden();
+            await editorHelper.openAttributeEditor();
+            await editorHelper.deleteAttributeDefinition(attrName);
+            await expect(editorHelper.getPropertyInput(attrName)).toBeHidden();
 
-            await expectPreviewElementAttribute(editorPage, { selector: nodeType, attributeName: 'style', value: null });
+            await editorHelper.expectPreviewElementAttribute({ selector: nodeType, attributeName: 'style', value: null });
         });
     });
 });

@@ -82,7 +82,9 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     ]);
 
     await editorPage.waitForLoadState('domcontentloaded');
-    await expect(editorPage.locator('template-container')).toBeVisible();
+    await expect(editorPage.locator('ios-component')).toBeVisible();
+
+    await page.getByText('処理中...').waitFor({ state: 'hidden' });
     return editorPage;
 };
 
