@@ -11,6 +11,8 @@ import {
     expectVersionVisibility,
 } from '../../tools/dashboard-helpers';
 
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
+
 // --- テストシナリオ ---
 test.describe('バージョン管理 E2Eシナリオ', () => {
 
@@ -27,8 +29,10 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
     });
 
     test('バージョンのライフサイクル（自動作成確認、編集、複製、削除）', async ({ page }) => {
-        const appName = `バージョン管理テスト-${Date.now()}`;
-        const appKey = `ver-test-${Date.now()}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `バージョン管理テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `ver-test-${uniqueId}`.slice(0, 30);
         const autoCreatedVersion = '1.0.0';
         const editedVersion = '1.0.1';
         const duplicatedVersion = '1.0.2';
@@ -36,6 +40,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         await test.step('セットアップ: アプリを作成し、バージョン管理画面を開く', async () => {
             await createApp(page, appName, appKey);
             const appRow = page.locator('.app-list tbody tr', { hasText: appName });
+            await expect(appRow).toBeVisible();
             await appRow.getByRole('button', { name: '選択' }).click();
             await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
             await expectVersionVisibility(page, autoCreatedVersion, true);
@@ -81,14 +86,15 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
         });
     });
 
     test('WB-VER-DUP-008: 複製時にバージョンが重複する場合、次の番号にインクリメントされる', async ({ page }) => {
-        const timestamp = Date.now().toString().slice(-10);
-        const appName = `複製インクリメントテスト-${timestamp}`;
-        const appKey = `inc-dup-ver-test-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `複製インクリメントテスト-${uniqueId}`.slice(0, 30);
+        const appKey = `inc-dup-ver-test-${uniqueId}`.slice(0, 30);
         const initialVersions = ['1.0.0', '1.0.1'];
         const expectedDuplicatedVersion = '1.0.2';
 
@@ -103,14 +109,15 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
         });
     });
 
     test('WB-VER-EDIT-005: 編集時にバージョンが重複するとエラーになる', async ({ page }) => {
-        const timestamp = Date.now().toString().slice(-10);
-        const appName = `編集重複テスト-${timestamp}`;
-        const appKey = `edit-dup-ver-test-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `編集重複テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `edit-dup-ver-test-${uniqueId}`.slice(0, 30);
         const initialVersions = ['1.0.0', '1.1.0'];
 
         await test.step('セットアップ: 2つのバージョンを持つアプリを作成', async () => {
@@ -135,14 +142,15 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
         });
     });
 
     test('WB-VER-EDIT (Abnormal): バージョン編集時のバリデーションをテストする', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const appName = `バージョン編集バリデーション-${timestamp}`.slice(0, 30);
-        const appKey = `ver-edit-validation-${timestamp}`.slice(0, 30);
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `バージョン編集バリデーション-${uniqueId}`.slice(0, 30);
+        const appKey = `ver-edit-validation-${uniqueId}`.slice(0, 30);
         const initialVersion = '1.0.0';
 
         await test.step('セットアップ: テスト対象のアプリとバージョンを作成', async () => {
@@ -174,14 +182,15 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
         });
     });
 
     test('WB-VER-DUP-006: 複製後に文字数制限を超える場合はエラーになる', async ({ page }) => {
-        const timestamp = Date.now().toString().slice(-10);
-        const appName = `複製文字数テスト-${timestamp}`.slice(0, 30);
-        const appKey = `dup-len-test-${timestamp}`.slice(0, 30);
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `複製文字数テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `dup-len-test-${uniqueId}`.slice(0, 30);
         const tooLongVersion = 'a'.repeat(30);
 
         await test.step('セットアップ: 文字数制限いっぱいのバージョンを持つアプリを作成', async () => {
@@ -200,7 +209,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
         });
     });
 });

@@ -11,6 +11,8 @@ import {
     expectAppVisibility
 } from '../../tools/dashboard-helpers';
 
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
+
 // --- テストシナリオ ---
 test.describe('公開管理 E2Eシナリオ', () => {
 
@@ -27,9 +29,10 @@ test.describe('公開管理 E2Eシナリオ', () => {
     });
 
     test('公開状態の遷移とダウンロード機能をテストする', async ({ page }) => {
-        const timestamp = Date.now().toString().slice(-10);
-        const appName = `公開機能テスト-${timestamp}`;
-        const appKey = `publish-test-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `公開機能テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `publish-test-${uniqueId}`.slice(0, 30);
         const version = '1.0.0';
 
         await test.step('セットアップ: テスト用のアプリケーションを作成する', async () => {
@@ -37,7 +40,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('テスト: 公開状態の遷移（非公開 -> 準備中 -> 準備完了 -> 公開 -> 非公開）', async () => {
-            test.setTimeout(180000);
+            test.setTimeout(120000);
 
             // 公開準備を開始
             await startPublishPreparation(page, appName, version);
@@ -57,7 +60,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
             await expectAppVisibility(page, appName, false); // 汎用ヘルパーで確認
         });
     });

@@ -1,15 +1,18 @@
-name: Scheduled E2E Tests
+# ワークフローの名称
+name: Multi-OS E2E Tests
 
+# ワークフローが実行されるトリガーを定義
 on:
+  # 定期実行 (schedule)
   schedule:
-    # 毎時0分に実行 (Normalテスト用)
-    # UTCの17, 18, 19時 (JSTの2, 3, 4時台) を除外
-    - cron: '0 0-16,20-23 * * *'
-    # 毎日 UTCの0時0分 (日本時間の午前9時) に実行 (Premiumテスト用)
+    # UTCの毎時0分に実行。ただし、UTC 16-19時 (JST 1-4時台) は除外 (Normalテスト用)
+    - cron: '0 0-15,20-23 * * *'
+    # UTCの毎日0時0分 (JST 9時) に実行 (Premiumテスト用)
     - cron: '0 0 * * *'
-  # 手動実行も可能にする
+  # 手動実行 (workflow_dispatch)
   workflow_dispatch:
     inputs:
+      # 手動実行時に実行するテストスイートを選択するドロップダウン
       test_suite:
         description: '実行するテストスイートを選択'
         required: true
@@ -19,163 +22,251 @@ on:
           - normal
           - premium
           - all
+      # 手動実行時に実行するOSを選択するドロップダウン
+      os:
+        description: '実行するOSを選択'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
 
+# ワークフローを構成するジョブを定義
 jobs:
-  # --- Normalプランのテスト (1時間に1回) ---
-  normal-test:
-    # ワークフローが `schedule` でトリガーされ、かつ現在の時（hour）が0でない場合に実行
-    # `github.event.schedule` は cron の文字列
-    if: github.event_name == 'schedule' && github.event.schedule != '0 0 * * *'
+  # ===================================================================
+  # ジョブ 1: 実行するテストのマトリックスを動的に準備する
+  # ===================================================================
+  # ワークフローのトリガー条件に応じて、実行すべきOSとブラウザの組み合わせを決定し、
+  # 後続のテストジョブに引き渡します。
+  prepare-matrix:
     runs-on: ubuntu-latest
+    # このジョブの出力を定義。後続のジョブが 'needs.prepare-matrix.outputs.matrix' で参照可能になる。
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout tests repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-
-      - name: Run Normal tests
-        run: npx playwright test tests/specs/normal
-        # `continue-on-error: true` でテストが失敗しても後続のクリーンアップは実行
-        continue-on-error: true 
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-
-      - name: Run Cleanup Script (after Normal)
-        # `if: always()` で、先行ステップが失敗しても必ず実行
-        if: always()
-        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-      
-      # テスト結果（動画、スクリーンショット等）をアップロード
-      - name: Upload Test Results (Normal)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-normal-${{ github.run_id }}
-          path: test-results/
-          retention-days: 7
-          if-no-files-found: ignore
-
-  # --- Premiumプランのテスト (1日に1回) ---
-  premium-test:
-    # ワークフローが `schedule` でトリガーされ、かつcronが毎日実行のものである場合に実行
-    if: github.event_name == 'schedule' && github.event.schedule == '0 0 * * *'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout tests repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-
-      - name: Run Premium tests
-        run: npx playwright test tests/specs/premium
-        continue-on-error: true
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-
-      - name: Run Cleanup Script (after Premium)
-        if: always()
-        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-      
-      # テスト結果（動画、スクリーンショット等）をアップロード
-      - name: Upload Test Results (Premium)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report-premium-${{ github.run_id }}
-          path: test-results/
-          retention-days: 7
-          if-no-files-found: ignore
-
-
-  # --- 手動実行用のジョブ ---
-  manual-test:
-    # ワークフローが `workflow_dispatch` でトリガーされた場合のみ実行
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout tests repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps
-
-      - name: Run selected test suite
-        # 手動実行時に選択されたスイートに応じてテストパスを決定
+      - name: Determine test matrix
+        id: set-matrix
         run: |
-          if [ "${{ github.event.inputs.test_suite }}" = "normal" ]; then
-            npx playwright test tests/specs/normal
-          elif [ "${{ github.event.inputs.test_suite }}" = "premium" ]; then
-            npx playwright test tests/specs/premium
+          # スケジュール実行か、手動実行で 'all' が選択された場合は、すべてのOSでテストする
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event.inputs.os }}" == "all" ]]; then
+            echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium"}, {"os": "windows-latest", "browser": "chromium"}, {"os": "macos-latest", "browser": "webkit"}]' >> $GITHUB_OUTPUT
           else
-            npx playwright test
+            # 手動実行で特定のOSが選択された場合は、そのOSに対応する組み合わせのみを生成する
+            case "${{ github.event.inputs.os }}" in
+              "ubuntu-latest")
+                echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium"}]' >> $GITHUB_OUTPUT
+                ;;
+              "windows-latest")
+                echo 'matrix=[{"os": "windows-latest", "browser": "chromium"}]' >> $GITHUB_OUTPUT
+                ;;
+              "macos-latest")
+                echo 'matrix=[{"os": "macos-latest", "browser": "webkit"}]' >> $GITHUB_OUTPUT
+                ;;
+            esac
           fi
+
+  # ===================================================================
+  # ジョブ 2: E2Eテストの実行
+  # ===================================================================
+  # 'prepare-matrix' ジョブの結果に基づき、指定されたOSとブラウザの組み合わせでテストを実行します。
+  e2e-test:
+    # 'prepare-matrix' ジョブが完了してからこのジョブを開始する
+    needs: prepare-matrix
+    # 'prepare-matrix' がマトリックスを生成した場合のみジョブを実行する (エラー防止)
+    if: ${{ needs.prepare-matrix.outputs.matrix != '' }}
+    strategy:
+      # 1つのOSでテストが失敗しても、他のOSのテストは中断せずに続行する
+      fail-fast: false
+      # 同時に実行するジョブの数を1に制限し、OS間で直列実行を実現する
+      max-parallel: 1
+      # 'prepare-matrix' が出力したJSON文字列を解釈し、動的にマトリックスを構築する
+      matrix:
+        include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
+    
+    # マトリックスで指定されたOSのランナーでジョブを実行する
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Get daily cache key
+        id: get-date
+        # 1日ごとのキャッシュキーを生成するために現在の日付を取得
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Get Playwright cache directory
+        id: playwright-cache-dir
+        shell: bash
+        # OSごとに異なるPlaywrightのキャッシュディレクトリパスを取得
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            echo "dir=$HOME/.cache/ms-playwright" >> $GITHUB_OUTPUT
+          elif [ "$RUNNER_OS" == "Windows" ]; then
+            echo "dir=$HOME/AppData/Local/ms-playwright" >> $GITHUB_OUTPUT
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            echo "dir=$HOME/Library/Caches/ms-playwright" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Cache Playwright browsers
+        id: cache-playwright-browsers
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.playwright-cache-dir.outputs.dir }}
+          # キー: OS-ブラウザ-依存関係ハッシュ-日付
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
+          # 復元キー: まず同じ日のキャッシュを探し、なければ前日以前の最新版を探す
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-
+
+      - name: Install Playwright Browsers
+        # キャッシュが復元された場合は、このインストールステップをスキップする
+        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      # 実行するテストスイートのパスを決定する
+      - name: Determine Test Suite
+        id: get_suite
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            if [ "${{ github.event.schedule }}" == "0 0 * * *" ]; then
+              echo "SUITE_NAME=premium" >> $GITHUB_ENV
+              echo "TEST_PATH=tests/specs/premium" >> $GITHUB_ENV
+            else
+              echo "SUITE_NAME=normal" >> $GITHUB_ENV
+              echo "TEST_PATH=tests/specs/normal" >> $GITHUB_ENV
+            fi
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            SUITE="${{ github.event.inputs.test_suite }}"
+            echo "SUITE_NAME=$SUITE" >> $GITHUB_ENV
+            if [ "$SUITE" == "normal" ]; then
+              echo "TEST_PATH=tests/specs/normal" >> $GITHUB_ENV
+            elif [ "$SUITE" == "premium" ]; then
+              echo "TEST_PATH=tests/specs/premium" >> $GITHUB_ENV
+            else
+              echo "TEST_PATH=" >> $GITHUB_ENV
+            fi
+          fi
+      
+      # OSごとのユニークな接尾辞を環境変数に設定
+      - name: Set short OS name
+        shell: bash
+        run: |
+          OS_NAME="${{ matrix.os }}"
+          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
+            echo "OS_SHORT_NAME=ubuntu" >> $GITHUB_ENV
+          elif [[ "$OS_NAME" == "windows-latest" ]]; then
+            echo "OS_SHORT_NAME=win" >> $GITHUB_ENV
+          elif [[ "$OS_NAME" == "macos-latest" ]]; then
+            echo "OS_SHORT_NAME=macos" >> $GITHUB_ENV
+          else
+            echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV
+          fi
+
+      - name: Run Playwright tests for ${{ matrix.browser }} on ${{ matrix.os }}
+        id: run_playwright_tests
+        # '--project' オプションで、実行するブラウザを明示的に指定する
+        run: |
+          npx playwright test ${{ env.TEST_PATH }} --project=${{ matrix.browser }} --workers=1
+          echo "PLAYWRIGHT_EXIT_CODE=$?" >> $GITHUB_ENV
+        # テストが失敗してもワークフローを中断せず、後続のステップ（アーティファクトのアップロードなど）を実行する
         continue-on-error: true
         env:
+          # DEBUG: pw:api
+          TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }} 
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
           PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
 
-      - name: Run Cleanup Script (after Manual)
-        if: always()
-        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
-
-      # テスト結果（動画、スクリーンショット等）をアップロード
-      - name: Upload Test Results (Manual)
+      - name: Upload Test Results
+        # 先行ステップの成否にかかわらず、常に実行する
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-manual-${{ github.run_id }}
+          # アーティファクト名を一意にして、どのテスト結果か分かりやすくする
+          name: playwright-report-${{ matrix.os }}-${{ matrix.browser }}-${{ env.SUITE_NAME }}-${{ github.run_id }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
+      
+      - name: Mark Job as Failed if Playwright Tests Failed
+        # Playwright_EXIT_CODEが0でなければ（つまり、テストが失敗していたら）このステップを実行
+        if: ${{ env.PLAYWRIGHT_EXIT_CODE != '0' }}
+        run: |
+          echo "Playwright tests reported failures. Marking this job instance as failed."
+          exit 1
+  # ===================================================================
+  # ジョブ 3: クリーンアップ
+  # ===================================================================
+  # すべてのテストジョブが完了した後に、1回だけ実行される後片付け用のジョブです。
+  cleanup:
+    # 'e2e-test' のすべてのマトリックスジョブが完了するのを待つ
+    needs: e2e-test
+    # 'e2e-test' が失敗した場合でも、このクリーンアップジョブは必ず実行する
+    if: always()
+    # クリーンアップは特定の環境で一度だけ実行すればよいため、ubuntu-latestに固定
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository for cleanup
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js for cleanup
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies for cleanup
+        run: npm install
+
+      - name: Get daily cache key
+        id: get-date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Get Playwright cache directory for cleanup
+        id: playwright-cache-dir-cleanup
+        shell: bash
+        # cleanupジョブはubuntu-latest固定のためLinuxのパスを取得
+        run: echo "dir=$HOME/.cache/ms-playwright" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers for cleanup
+        id: cache-playwright-browsers-cleanup
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.playwright-cache-dir-cleanup.outputs.dir }}
+          # cleanupジョブはchromium固定
+          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}-
+            ${{ runner.os }}-playwright-chromium-
+
+      - name: Install Playwright Browsers
+        # キャッシュが復元された場合は、このインストールステップをスキップする
+        if: steps.cache-playwright-browsers-cleanup.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Cleanup Script
+        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=chromium
+        env:
+          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
+          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
+          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
+          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}

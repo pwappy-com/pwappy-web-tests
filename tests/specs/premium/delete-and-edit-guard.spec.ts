@@ -9,6 +9,8 @@ import {
     unpublishVersion
 } from '../../tools/dashboard-helpers';
 
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
+
 /**
  * アプリケーションやバージョンが特定の公開状態にある場合に、
  * 編集や削除が適切に制限（ガード）されるかを検証するテストスイートです。
@@ -35,8 +37,10 @@ test.describe('削除・編集のガード条件テスト', () => {
      * アプリ本体とバージョンの編集・削除ボタンが期待通りに非活性化されることをテストします。
      */
     test('公開準備中および公開中のアプリ/バージョンは編集・削除できない', async ({ page }) => {
-        const appName = `ガード条件テスト-${Date.now()}`.slice(0, 30);
-        const appKey = `guard-test-${Date.now()}`.slice(0, 30);
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `ガード条件テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `guard-test-${uniqueId}`.slice(0, 30);
         const version = '1.0.0';
 
         await test.step('セットアップ: アプリを作成しバージョンを「公開準備中」にする', async () => {
@@ -60,7 +64,7 @@ test.describe('削除・編集のガード条件テスト', () => {
         });
 
         await test.step('状態遷移: バージョンを「公開中」にする', async () => {
-            test.setTimeout(180000); // 審査待ちが発生するためタイムアウトを延長
+            test.setTimeout(120000); // 審査待ちが発生するためタイムアウトを延長
             await completePublication(page, appName, version);
         });
 
@@ -86,7 +90,7 @@ test.describe('削除・編集のガード条件テスト', () => {
             await navigateToTab(page, 'workbench');
             const appRowWorkbench = page.locator('.app-list tbody tr', { hasText: appName });
             await expect(appRowWorkbench.getByRole('button', { name: '削除' })).toBeEnabled();
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
 
             // 最終的にリストから消えたことを確認
             const appNameCell = page.locator('.app-list tbody tr td:first-child', { hasText: new RegExp(`^${appName}$`) });

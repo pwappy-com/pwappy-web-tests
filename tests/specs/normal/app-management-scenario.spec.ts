@@ -8,7 +8,9 @@ import 'dotenv/config';
 import {
     createApp,
     deleteApp,
-    expectAppVisibility} from '../../tools/dashboard-helpers';
+    expectAppVisibility
+} from '../../tools/dashboard-helpers';
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
 test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
@@ -26,11 +28,12 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
     });
 
     test('WB-APP-NEW: アプリケーションの新規作成とバリデーション', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const appName = `新規作成テスト-${timestamp}`.slice(0, 30);
-        const appKey = `new-app-${timestamp}`.slice(0, 30);
-        const existingAppName = `既存アプリ-${timestamp}`.slice(0, 30);
-        const existingAppKey = `existing-key-${timestamp}`.slice(0, 30);
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `新規作成テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `new-app-${uniqueId}`.slice(0, 30);
+        const existingAppName = `既存アプリ-${uniqueId}`.slice(0, 30);
+        const existingAppKey = `existing-key-${uniqueId}`.slice(0, 30);
 
         await test.step('セットアップ: 重複キーテスト用のアプリを作成', async () => {
             await createApp(page, existingAppName, existingAppKey);
@@ -50,11 +53,14 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
             // アプリケーションキーに不正な文字を入力した場合にエラーが表示されることを検証します。
             const appNameInput = modal.getByLabel('アプリケーション名');
-            const appKeyInput = modal.getByLabel('アプリケーションキー');
+            //const appKeyInput = modal.getByLabel('アプリケーションキー');
+            const appKeyInput = modal.locator('#input-app-key');
             await appNameInput.fill('不正キーテスト');
             await appKeyInput.fill('Invalid-KEY!');
             await modal.getByRole('button', { name: '保存' }).click();
-            await expect(modal.locator('#error-app-key')).toContainText('英小文字、数字、ハイフン、アンダーバーのみ入力可能です');
+            const errorAppKey = modal.locator('#error-app-key');
+            await expect(errorAppKey).toBeVisible();
+            await expect(errorAppKey).toContainText('英小文字、数字、ハイフン、アンダーバーのみ入力可能です');
 
             // 既存のアプリケーションキーと重複した場合にエラーが表示されることを検証します。
             await appKeyInput.fill(existingAppKey);
@@ -73,17 +79,18 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
-            await deleteApp(page, existingAppName);
+            await deleteApp(page, appKey);
+            await deleteApp(page, existingAppKey);
             await expectAppVisibility(page, appName, false);
             await expectAppVisibility(page, existingAppName, false);
         });
     });
 
     test('WB-APP-EDIT & DEL: アプリケーションの編集と削除', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const appName = `編集削除テスト-${timestamp}`.slice(0, 30);
-        const appKey = `edit-del-app-${timestamp}`.slice(0, 30);
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `編集削除テスト-${uniqueId}`.slice(0, 30);
+        const appKey = `edit-del-app-${uniqueId}`.slice(0, 30);
         const editedAppName = `${appName}-編集後`.slice(0, 30);
 
         await test.step('セットアップ: 編集・削除対象のアプリを作成', async () => {
@@ -110,7 +117,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: アプリケーションを削除する', async () => {
-            await deleteApp(page, editedAppName);
+            await deleteApp(page, appKey);
             await expectAppVisibility(page, editedAppName, false);
         });
     });
@@ -186,9 +193,10 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
     // });
 
     test('WB-APP-EDIT (Abnormal): 編集時のバリデーションをテストする', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const appName = `編集バリデーションテスト-${timestamp}`.slice(0, 30);
-        const appKey = `edit-validation-${timestamp}`.slice(0, 30);
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `編集バリデーションテスト-${uniqueId}`.slice(0, 30);
+        const appKey = `edit-validation-${uniqueId}`.slice(0, 30);
 
         await test.step('セットアップ: テスト対象のアプリを作成', async () => {
             await createApp(page, appName, appKey);
@@ -203,17 +211,23 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             // モーダルダイアログが完全に表示されるのを待機します。
             await expect(modal.getByRole('heading', { name: 'アプリケーションの編集' })).toBeVisible();
 
-            const appNameInput = modal.getByLabel('アプリケーション名');
-            const appKeyInput = modal.getByLabel('アプリケーションキー');
+            const appNameInput = page.locator('#input-app-name');
+            await expect(appNameInput).toBeEditable({ timeout: 10000 });
+
+            const appKeyInput = page.locator('#input-app-key');
+            await expect(appKeyInput).toBeEditable({ timeout: 10000 });
 
             // アプリケーション名を空にして保存し、エラーが表示されることを確認します。
             await appNameInput.fill('');
+            await expect(appNameInput).toHaveValue('');
             await modal.getByRole('button', { name: '保存' }).click();
             await expect(modal.locator('#error-app-name')).toContainText('必須項目です');
 
             // アプリケーションキーを空にして保存し、エラーが表示されることを確認します。
             await appNameInput.fill(appName);
             await appKeyInput.fill('');
+            await expect(appNameInput).toHaveValue(appName);
+            await expect(appKeyInput).toHaveValue('');
             await modal.getByRole('button', { name: '保存' }).click();
             await expect(modal.locator('#error-app-key')).toContainText('必須項目です');
 
@@ -224,10 +238,15 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
             await modal.getByRole('button', { name: 'キャンセル' }).click();
             await expect(modal).toBeHidden();
+
+            // WebKitではなぜかダイアログが消えないことがあるのでリロード
+            await page.reload({ waitUntil: 'domcontentloaded' });
+            // リロード後、メインコンテンツが表示されるのを待つ
+            await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
             await expectAppVisibility(page, appName, false);
         });
     });
@@ -272,11 +291,12 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
     // });
 
     test('WB-APP-EDIT-010: 編集時にキーが他のアプリと重複するとエラーになる', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const appA_Name = `アプリA-${timestamp}`.slice(0, 30);
-        const appA_Key = `app-a-${timestamp}`.slice(0, 30);
-        const appB_Name = `アプリB-${timestamp}`.slice(0, 30);
-        const appB_Key = `app-b-${timestamp}`.slice(0, 30);
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appA_Name = `アプリA-${uniqueId}`.slice(0, 30);
+        const appA_Key = `app-a-${uniqueId}`.slice(0, 30);
+        const appB_Name = `アプリB-${uniqueId}`.slice(0, 30);
+        const appB_Key = `app-b-${uniqueId}`.slice(0, 30);
 
         await test.step('セットアップ: 2つのアプリを作成する', async () => {
             await createApp(page, appA_Name, appA_Key);
@@ -309,17 +329,18 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成した2つのアプリを削除', async () => {
-            await deleteApp(page, appA_Name);
-            await deleteApp(page, appB_Name);
+            await deleteApp(page, appA_Key);
+            await deleteApp(page, appB_Key);
             await expectAppVisibility(page, appA_Name, false);
             await expectAppVisibility(page, appB_Name, false);
         });
     });
 
     test('WB-APP-DEL-004: アプリケーション削除をキャンセルする', async ({ page }) => {
-        const timestamp = Date.now().toString().slice(-10);
-        const appName = `削除キャンセルテスト-${timestamp}`;
-        const appKey = `del-cancel-test-${timestamp}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `削除キャンセルテスト-${uniqueId}`.slice(0, 30);
+        const appKey = `del-cancel-test-${uniqueId}`.slice(0, 30);
 
         await test.step('セットアップ: テスト対象のアプリを作成', async () => {
             await createApp(page, appName, appKey);
@@ -341,7 +362,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
             await expectAppVisibility(page, appName, false);
         });
     });

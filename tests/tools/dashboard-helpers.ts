@@ -1,75 +1,3 @@
-// import { expect, type Page, type BrowserContext } from '@playwright/test';
-
-// /**
-//  * ダッシュボード画面で新しいアプリケーションを作成します。
-//  * @param page ダッシュボードのPageオブジェクト
-//  * @param appName 作成するアプリケーション名
-//  * @param appKey 作成するアプリケーションキー
-//  */
-// export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
-//     await page.getByTitle('アプリケーションの追加').click();
-//     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//     const appModal = page.locator('dashboard-modal-window#appModal');
-//     const appNameInput = appModal.getByLabel('アプリケーション名');
-//     await appNameInput.click(); 
-//     await appNameInput.fill(appName);
-//     const appKeyInput = appModal.getByLabel('アプリケーションキー');
-//     await appKeyInput.click(); 
-//     await appKeyInput.fill(appKey);
-//     await appModal.getByRole('button', { name: '保存' }).click();
-//     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//     await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
-// };
-
-// /**
-//  * ダッシュボード画面で指定されたアプリケーションを削除します。
-//  * 主にテストのクリーンアップ処理で使用されます。
-//  * @param page ダッシュボードのPageオブジェクト
-//  * @param appName 削除するアプリケーション名
-//  */
-// export async function deleteApp(page: Page, appName: string): Promise<void> {
-//     await page.bringToFront();
-//     await page.reload({ waitUntil: 'domcontentloaded' });
-//     await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
-
-//     const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-//     if (await appRow.count() > 0) {
-//         await appRow.getByRole('button', { name: '削除' }).click();
-//         await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//         const confirmDialog = page.locator('message-box#delete-confirm');
-//         await expect(confirmDialog).toBeVisible();
-//         await confirmDialog.getByRole('button', { name: '削除する' }).click();
-//         await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//         await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
-//     }
-// };
-
-// /**
-//  * ダッシュボードから指定したアプリケーションのエディタを新しいタブで開きます。
-//  * @param page ダッシュボードのPageオブジェクト
-//  * @param context BrowserContextオブジェクト
-//  * @param appName エディタを開く対象のアプリケーション名
-//  * @param version バージョン番号 (デフォルト: '1.0.0')
-//  * @returns 開かれたエディタのPageオブジェクト
-//  */
-// export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
-//     const appList = page.locator('.app-list tbody tr', { hasText: appName });
-//     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//     await appList.getByRole('button', { name: '選択' }).click();
-//     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-//     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
-
-//     const [editorPage] = await Promise.all([
-//         context.waitForEvent('page'),
-//         page.locator('.version-list tbody tr', { hasText: version }).getByRole('button', { name: 'エディタ' }).click(),
-//     ]);
-
-//     await editorPage.waitForLoadState('domcontentloaded');
-//     await expect(editorPage.locator('template-container')).toBeVisible();
-//     return editorPage;
-// };
-
-
 import { expect, type Page, type BrowserContext } from '@playwright/test';
 
 /**
@@ -81,20 +9,26 @@ import { expect, type Page, type BrowserContext } from '@playwright/test';
  */
 export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
     await page.getByTitle('アプリケーションの追加').click();
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
 
+    // モーダルウィンドウ自体を取得
     const appModal = page.locator('dashboard-modal-window#appModal');
-    
-    // モーダルが表示され、ヘッダーが見えるまで待つ
-    await expect(appModal.getByRole('heading', { name: 'アプリケーションの追加' })).toBeVisible();
 
-    const appNameInput = appModal.getByLabel('アプリケーション名');
-    await appNameInput.click();
+    // モーダルの「コンテナ」ではなく、モーダルの「中身」が表示されるのを待つ。
+    // この場合、ヘッダータイトルが最も確実。
+    // これにより、コンテナのサイズが0x0である問題やShadow DOMの問題を回避できる。
+    await expect(appModal.locator('span[slot="header-title"]')).toBeVisible();
+
+    const appNameInput = page.locator('#input-app-name');
+    await expect(appNameInput).toBeFocused();
+    await expect(appNameInput).toBeEditable({ timeout: 10000 });
     await appNameInput.fill(appName);
 
-    const appKeyInput = appModal.getByLabel('アプリケーションキー');
-    await appKeyInput.click();
-    await appKeyInput.fill(appKey);
+    const appKeyInput = page.locator('#input-app-key');
+    await expect(appKeyInput).toBeEditable({ timeout: 10000 });
+    await appKeyInput.pressSequentially(appKey);
+
+    await expect(appNameInput).toHaveValue(appName);
+    await expect(appKeyInput).toHaveValue(appKey);
 
     await appModal.getByRole('button', { name: '保存' }).click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
@@ -106,13 +40,13 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
  * ダッシュボード画面で指定されたアプリケーションを正常に削除します。
  * 主にテストのクリーンアップで使用します。
  * @param page ダッシュボードのPageオブジェクト
- * @param appName 削除するアプリケーション名
+ * @param appKey 削除するアプリケーションキー
  */
-export async function deleteApp(page: Page, appName: string): Promise<void> {
+export async function deleteApp(page: Page, appKey: string): Promise<void> {
     await page.bringToFront();
     await navigateToTab(page, 'workbench');
 
-    const appRow = page.locator('.app-list tbody tr', { hasText: appName });
+    const appRow = page.locator('.app-list tbody tr', { hasText: appKey });
     if (await appRow.count() > 0) {
         await appRow.getByRole('button', { name: '削除' }).click();
         await page.getByText('処理中...').waitFor({ state: 'hidden' });
@@ -148,7 +82,9 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     ]);
 
     await editorPage.waitForLoadState('domcontentloaded');
-    await expect(editorPage.locator('template-container')).toBeVisible();
+    await expect(editorPage.locator('ios-component')).toBeVisible();
+
+    await page.getByText('処理中...').waitFor({ state: 'hidden' });
     return editorPage;
 };
 
@@ -165,7 +101,7 @@ export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish'
 }
 
 /**
- * 【修正】アプリケーションがリストに表示されているか/いないかを確認します。
+ * アプリケーションがリストに表示されているか/いないかを確認します。
  * @param page ダッシュボードのPageオブジェクト
  * @param appName 確認するアプリケーション名
  * @param isVisible trueなら表示されていること、falseなら非表示であることを期待
@@ -216,7 +152,7 @@ export async function publishVersion(page: Page, appName: string, version: strin
         await page.reload({ waitUntil: 'networkidle' });
         await navigateToTab(page, 'publish');
         await selectAppInPublishTab(page, appName);
-        await expect(page.locator('.publish-list tbody tr', { hasText: version })).toContainText('公開準備完了', {timeout: 1000});
+        await expect(page.locator('.publish-list tbody tr', { hasText: version })).toContainText('公開準備完了', { timeout: 1000 });
     }).toPass({ timeout: 150000, intervals: [10000, 20000, 30000] });
 
     // 公開
@@ -284,7 +220,7 @@ export async function completePublication(page: Page, appName: string, version: 
         await page.reload({ waitUntil: 'networkidle' });
         await navigateToTab(page, 'publish');
         await selectAppInPublishTab(page, appName);
-        await expect(page.locator('.publish-list tbody tr', { hasText: version })).toContainText('公開準備完了', {timeout: 1000});
+        await expect(page.locator('.publish-list tbody tr', { hasText: version })).toContainText('公開準備完了', { timeout: 1000 });
     }).toPass({ timeout: 150000, intervals: [10000, 20000, 30000] });
 
     // 公開中にする
@@ -319,7 +255,7 @@ export async function expectVersionStatus(page: Page, version: string, statusTex
  */
 export async function downloadVersion(page: Page, { appName, appKey, version }: { appName: string, appKey: string, version: string }): Promise<void> {
     await navigateToTab(page, 'publish');
-    
+
     const appRow = page.locator('.app-list tbody tr', { hasText: appName });
     await appRow.getByRole('button', { name: '選択' }).click();
     await expect(page.getByRole('heading', { name: `公開設定: ${appName}` })).toBeVisible();
@@ -335,7 +271,7 @@ export async function downloadVersion(page: Page, { appName, appKey, version }: 
         page.waitForEvent('download'),
         confirmDialog.getByRole('button', { name: 'ダウンロード' }).click(),
     ]);
-    
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
 
     // ダウンロードされたファイル名を検証
@@ -371,10 +307,10 @@ export async function addVersion(page: Page, versionName: string): Promise<void>
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     const modal = page.locator('dashboard-modal-window#versionModal');
     await expect(modal.getByRole('heading', { name: 'バージョンの追加' })).toBeVisible();
-    
+
     await modal.getByLabel('バージョン').fill(versionName);
     await modal.getByRole('button', { name: '保存' }).click();
-    
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
     await expect(modal).toBeHidden();
@@ -391,9 +327,10 @@ export async function setupAppWithVersions(page: Page, { appName, appKey, versio
     await createApp(page, appName, appKey);
 
     const appRow = page.locator('.app-list tbody tr', { hasText: appName });
+    await expect(appRow).toBeVisible();
     await appRow.getByRole('button', { name: '選択' }).click();
     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
-    
+
     const additionalVersions = versions.filter(v => v !== '1.0.0');
     for (const version of additionalVersions) {
         await addVersion(page, version);
@@ -414,10 +351,10 @@ export async function editVersion(page: Page, oldVersion: string, newVersion: st
     const versionRow = page.locator('.version-list tbody tr', { hasText: oldVersion });
     await versionRow.getByRole('button', { name: '編集' }).click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-    
+
     const modal = page.locator('dashboard-modal-window#versionModal');
     await expect(modal.getByRole('heading', { name: 'バージョンの編集' })).toBeVisible();
-    
+
     await modal.getByLabel('バージョン').fill(newVersion);
     await modal.getByRole('button', { name: '保存' }).click();
 
@@ -446,7 +383,7 @@ export async function deleteVersion(page: Page, versionToDelete: string): Promis
     const versionRow = page.locator('.version-list tbody tr', { hasText: versionToDelete });
     await versionRow.getByRole('button', { name: '削除' }).click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-    
+
     const confirmDialog = page.locator('message-box#delete-confirm');
     await expect(confirmDialog).toBeVisible();
     await confirmDialog.getByRole('button', { name: '削除する' }).click();

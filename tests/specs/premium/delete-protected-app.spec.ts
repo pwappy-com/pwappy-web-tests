@@ -10,6 +10,8 @@ import {
     expectVersionStatus,
 } from '../../tools/dashboard-helpers';
 
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
+
 /**
  * 公開管理機能に関するE2Eテストスイートです。
  * アプリケーションバージョンの公開状態遷移を主に検証します。
@@ -36,8 +38,10 @@ test.describe('公開管理 E2Eシナリオ', () => {
      * 正しく遷移することを一気通貫でテストします。
      */
     test('公開状態の遷移をテストする', async ({ page }) => {
-        const appName = `公開テスト-${Date.now()}`;
-        const appKey = `publish-test-${Date.now()}`;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `公開テスト-${uniqueId}`;
+        const appKey = `publish-test-${uniqueId}`;
         const version = '1.0.0';
 
         await test.step('セットアップ: テスト用のアプリケーションを作成する', async () => {
@@ -62,7 +66,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('状態遷移(2): 「公開準備完了」を経て「公開中」にし、その後「非公開」に戻す', async () => {
-            test.setTimeout(180000); // 審査待ちが発生するためタイムアウトを延長
+            test.setTimeout(120000); // 審査待ちが発生するためタイムアウトを延長
 
             // 「公開準備完了」を経て「公開中」への遷移
             await completePublication(page, appName, version);
@@ -74,7 +78,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
             await navigateToTab(page, 'workbench');
             await expect(page.locator('.app-list tbody tr', { hasText: appName })).toBeHidden();
         });

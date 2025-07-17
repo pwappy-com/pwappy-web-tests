@@ -9,7 +9,10 @@ import {
     createApp,
     deleteApp,
     navigateToTab,
-    expectAppVisibility} from '../../tools/dashboard-helpers';
+    expectAppVisibility
+} from '../../tools/dashboard-helpers';
+
+const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
 test.describe('アーカイブ E2Eシナリオ', () => {
 
@@ -27,9 +30,10 @@ test.describe('アーカイブ E2Eシナリオ', () => {
     });
 
     test('WB-APP-ARC & AR-APP-REST: アプリケーションのアーカイブと復元', async ({ page }) => {
-        const timestamp = Date.now().toString();
-        const appName = `アーカイブテスト-${timestamp}`.slice(0, 30);
-        const appKey = `archive-app-${timestamp}`.slice(0, 30);
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const appName = `アーカイブテスト-${uniqueId}`.slice(0, 30);
+        const appKey = `archive-app-${uniqueId}`.slice(0, 30);
 
         await test.step('セットアップ: アーカイブ対象のアプリを作成', async () => {
             await createApp(page, appName, appKey);
@@ -88,7 +92,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         await test.step('クリーンアップ: 復元後、ワークベンチで削除する', async () => {
             await navigateToTab(page, 'workbench');
             await expectAppVisibility(page, appName, true);
-            await deleteApp(page, appName);
+            await deleteApp(page, appKey);
             await expectAppVisibility(page, appName, false);
         });
     });

@@ -17,13 +17,16 @@ export default defineConfig({
   /* Run tests in files in parallel */
   fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
+  
+  // !!!!!! DEBUG中だけコメントアウトする !!!!!!
   forbidOnly: !!process.env.CI,
+
   /* Retry on CI only */
   retries: process.env.CI ? 2 : 0,
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* タイムアウトのデフォルト(30秒) */
-  timeout: 300 * 1000,
+  timeout: 60 * 1000,
   expect: {
     /**
      * expect(locator).toBeVisible() のようなアサーションの最大時間。
@@ -38,7 +41,8 @@ export default defineConfig({
     // baseURL: 'http://localhost:3000',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
+    //trace: 'on',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
@@ -50,17 +54,17 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
 
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
 
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
 
-    /* Test against mobile viewports. */
+    // /* Test against mobile viewports. */
     // {
     //   name: 'Mobile Chrome',
     //   use: { ...devices['Pixel 5'] },
