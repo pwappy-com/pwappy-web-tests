@@ -53,7 +53,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
             // アプリケーションキーに不正な文字を入力した場合にエラーが表示されることを検証します。
             const appNameInput = modal.getByLabel('アプリケーション名');
-            const appKeyInput = modal.getByLabel('アプリケーションキー');
+            //const appKeyInput = modal.getByLabel('アプリケーションキー');
+            const appKeyInput = modal.locator('#input-app-key');
             await appNameInput.fill('不正キーテスト');
             await appKeyInput.fill('Invalid-KEY!');
             await modal.getByRole('button', { name: '保存' }).click();
