@@ -57,7 +57,9 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await appNameInput.fill('不正キーテスト');
             await appKeyInput.fill('Invalid-KEY!');
             await modal.getByRole('button', { name: '保存' }).click();
-            await expect(modal.locator('#error-app-key')).toContainText('英小文字、数字、ハイフン、アンダーバーのみ入力可能です');
+            const errorAppKey = modal.locator('#error-app-key');
+            await expect(errorAppKey).toBeVisible();
+            await expect(errorAppKey).toContainText('英小文字、数字、ハイフン、アンダーバーのみ入力可能です');
 
             // 既存のアプリケーションキーと重複した場合にエラーが表示されることを検証します。
             await appKeyInput.fill(existingAppKey);
