@@ -187,7 +187,7 @@ jobs:
           npx playwright test ${{ env.TEST_PATH }} --project=${{ matrix.browser }} --workers=1
           echo "PLAYWRIGHT_EXIT_CODE=$?" >> $GITHUB_OUTPUT
         # テストが失敗してもワークフローを中断せず、後続のステップ（アーティファクトのアップロードなど）を実行する
-        continue-on-error: true
+        # continue-on-error: true
         env:
           # DEBUG: pw:api
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }} 
