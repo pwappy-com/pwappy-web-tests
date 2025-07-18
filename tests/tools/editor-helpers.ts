@@ -635,6 +635,41 @@ export class EditorHelper {
 
         await scriptContainer.locator('#fab-save').click();
     }
+
+    /**
+     * 既存のスクリプトの内容を書き換えますが、保存はしません。
+     * Monaco Editorにフォーカスがある状態になります。
+     * @param scriptName - 編集するスクリプトの名前
+     * @param scriptContent - 新しいスクリプトのコード内容
+     */
+    async fillScriptContent(scriptName: string, scriptContent: string): Promise<void> {
+        const scriptContainer = this.page.locator('script-container');
+        const scriptRow = scriptContainer.locator('.editor-row', { hasText: scriptName });
+        await scriptRow.getByTitle('スクリプトの編集').click();
+
+        const editorContainer = scriptContainer.locator('#script-container');
+        await expect(editorContainer).toBeVisible();
+        const monacoEditor = editorContainer.locator('.monaco-editor[role="code"]');
+        await expect(monacoEditor).toBeVisible();
+
+        await monacoEditor.locator('.view-lines').click();
+        await this.page.keyboard.press('ControlOrMeta+A');
+        await this.page.keyboard.press('Delete');
+
+        const browserName = this.page.context().browser()?.browserType().name();
+        if (browserName === 'chromium' || browserName === 'webkit') {
+            await monacoEditor.locator('textarea').fill(scriptContent);
+        } else if (browserName === 'firefox') {
+            const viewLine = monacoEditor.locator('.view-line').first();
+            await expect(viewLine).toBeVisible();
+            await viewLine.pressSequentially(scriptContent);
+        } else {
+            console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
+            const viewLine = monacoEditor.locator('.view-line').first();
+            await expect(viewLine).toBeVisible();
+            await viewLine.pressSequentially(scriptContent);
+        }
+    }
 }
 
 /**

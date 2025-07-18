@@ -328,4 +328,67 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             await testPage.close();
         });
     });
+
+    test('スクリプトエラーがある場合、タブ移動と保存がブロックされる', async ({ editorPage, editorHelper }) => {
+        const scriptName = 'errorScript';
+        const invalidScript = 'const 0a = 1;'; // 不正な変数名
+        const expectedDialogMessage = 'スクリプトのエラーを修正してください';
+
+        await test.step('セットアップ: エラーのあるスクリプトを入力する', async () => {
+            await editorHelper.openMoveingHandle('right');
+            const scriptContainer = editorPage.locator('script-container');
+            await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
+            await editorHelper.addNewScript(scriptName, 'function');
+            // ヘルパーメソッドを使って、保存せずに不正なスクリプトを入力
+            await editorHelper.fillScriptContent(scriptName, invalidScript);
+        });
+
+        await test.step('検証: 他のタブに移動しようとするとダイアログが表示されブロックされる', async () => {
+            const scriptContainer = editorPage.locator('script-container');
+            const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
+            const alertDialog = editorPage.locator('alert-component');
+
+            // テスト対象のタブ（イベント、サービスワーカー）
+            const tabsToTest = ['イベント', 'サービスワーカー'];
+
+            for (const tabName of tabsToTest) {
+                // タブをクリック
+                await scriptContainer.locator('.tab', { hasText: tabName }).click();
+
+                // ダイアログを検証
+                await expect(alertDialog).toBeVisible();
+                await expect(alertDialog).toContainText(expectedDialogMessage);
+                await alertDialog.getByRole('button', { name: '閉じる' }).click();
+                await expect(alertDialog).toBeHidden();
+
+                // エディタ（Monaco）が表示されたままであることを確認
+                await expect(monacoEditor).toBeVisible();
+                // 対応するタブのコンテナが表示されていないことを確認
+                if (tabName === 'イベント') {
+                    await expect(scriptContainer.locator('event-container')).toBeHidden();
+                } else if (tabName === 'サービスワーカー') {
+                    await expect(scriptContainer.locator('service-worker-container')).toBeHidden();
+                }
+            }
+        });
+
+        await test.step('検証: 保存しようとするとダイアログが表示されブロックされる', async () => {
+            const scriptContainer = editorPage.locator('script-container');
+            const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
+            const saveButton = scriptContainer.locator('#fab-save');
+            const alertDialog = editorPage.locator('alert-component');
+
+            // 保存ボタンをクリック
+            await saveButton.click();
+
+            // ダイアログを検証
+            await expect(alertDialog).toBeVisible();
+            await expect(alertDialog).toContainText(expectedDialogMessage);
+            await alertDialog.getByRole('button', { name: '閉じる' }).click();
+            await expect(alertDialog).toBeHidden();
+
+            // エディタ（Monaco）が表示されたままであることを確認
+            await expect(monacoEditor).toBeVisible();
+        });
+    });
 });
