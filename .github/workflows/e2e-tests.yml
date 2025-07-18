@@ -185,7 +185,7 @@ jobs:
         # '--project' オプションで、実行するブラウザを明示的に指定する
         run: |
           npx playwright test ${{ env.TEST_PATH }} --project=${{ matrix.browser }} --workers=1
-          echo "PLAYWRIGHT_EXIT_CODE=$?" >> $GITHUB_ENV
+          echo "PLAYWRIGHT_EXIT_CODE=$?" >> $GITHUB_OUTPUT
         # テストが失敗してもワークフローを中断せず、後続のステップ（アーティファクトのアップロードなど）を実行する
         continue-on-error: true
         env:
@@ -209,7 +209,7 @@ jobs:
       
       - name: Mark Job as Failed if Playwright Tests Failed
         # Playwright_EXIT_CODEが0でなければ（つまり、テストが失敗していたら）このステップを実行
-        if: ${{ env.PLAYWRIGHT_EXIT_CODE != '0' }}
+        if: ${{ steps.run_playwright_tests.outputs.PLAYWRIGHT_EXIT_CODE != '0' }}
         run: |
           echo "Playwright tests reported failures. Marking this job instance as failed."
           exit 1
