@@ -329,6 +329,32 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
         });
     });
 
+    test('カスタムイベントを定義できる', async ({ editorPage, editorHelper }) => {
+        const listenerTarget = 'element';
+        const eventName = 'test-event';
+        const comment = 'テストコメント';
+
+        await test.step('1. 新しいイベント定義を追加する', async () => {
+            await editorHelper.addCustomEventDefinition({
+                listenerTarget,
+                eventName,
+                comment,
+            });
+        });
+    });
+
+    test('サービスワーカータブでカスタムイベントを定義できる', async ({ editorPage, editorHelper }) => {
+        const eventName = 'new-serviceworker-event';
+        const comment = '新しいサービスワーカーイベント';
+
+        await test.step('1. 新しいサービスワーカーイベント定義を追加する', async () => {
+            await editorHelper.addCustomServiceWorkerEventDefinition({
+                eventName,
+                comment,
+            });
+        });
+    });
+    
     test('スクリプトエラーがある場合、タブ移動と保存がブロックされる', async ({ editorPage, editorHelper }) => {
         const scriptName = 'errorScript';
         const invalidScript = 'const 0a = 1;'; // 不正な変数名

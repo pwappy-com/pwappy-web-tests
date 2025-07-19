@@ -637,6 +637,102 @@ export class EditorHelper {
     }
 
     /**
+     * イベントパネルで新しいカスタムイベント定義を追加します。
+     * @param listenerTarget イベント登録先 (例: 'element', 'document')
+     * @param eventName イベント名 (例: 'test-event')
+     * @param comment イベントのコメント
+     */
+    async addCustomEventDefinition(
+        { listenerTarget, eventName, comment }: { listenerTarget: string, eventName: string, comment: string }
+    ): Promise<void> {
+        // 右側のサブウィンドウを表示し、イベントタブに切り替える
+        await this.openMoveingHandle('right');
+        const scriptContainer = this.page.locator('script-container');
+        await expect(scriptContainer).toBeVisible();
+        await this.switchTabInContainer(scriptContainer, 'イベント');
+        const eventContainer = scriptContainer.locator('event-container');
+        await expect(eventContainer).toBeVisible();
+
+        // 「イベントを編集」ボタンをクリック
+        await eventContainer.locator('button#fab-edit[title="イベントを編集"]').click();
+
+        // イベントリストポップアップが表示されるのを待つ
+        const eventListPopup = eventContainer.locator('#eventList');
+        await expect(eventListPopup).toBeVisible();
+
+        // 「追加」ボタンをクリック
+        await eventListPopup.getByRole('button', { name: '追加' }).click();
+
+        // イベント追加ポップアップが表示されるのを待つ
+        const eventAddPopup = eventContainer.locator('#eventEditMenu');
+        await expect(eventAddPopup).toBeVisible();
+
+        // 各項目を入力
+        await eventAddPopup.locator('input#event-target').fill(listenerTarget);
+        await eventAddPopup.locator('input#event-name').fill(eventName);
+        await eventAddPopup.locator('input#comment-value').fill(comment);
+
+        // 「追加」ボタンをクリックしてイベントを登録
+        await eventAddPopup.getByRole('button', { name: '追加' }).click();
+
+        // ポップアップが閉じるのを待つ
+        await expect(eventAddPopup).toBeHidden();
+        await expect(eventListPopup).toBeHidden();
+
+        // イベントがリストに追加されたことを確認
+        const newEventRow = eventContainer.locator(`.editor-row:has-text("${eventName}")`);
+        await expect(newEventRow).toBeVisible();
+        await expect(newEventRow.locator('.comment')).toHaveText(comment);
+    }
+
+    /**
+     * サービスワーカーパネルで新しいカスタムイベント定義を追加します。
+     * @param eventName イベント名 (例: 'new-sw-event')
+     * @param comment イベントのコメント
+     */
+    async addCustomServiceWorkerEventDefinition(
+        { eventName, comment }: { eventName: string; comment: string }
+    ): Promise<void> {
+        // 右側のサブウィンドウを表示し、サービスワーカータブに切り替える
+        await this.openMoveingHandle('right');
+        const scriptContainer = this.page.locator('script-container');
+        await expect(scriptContainer).toBeVisible();
+        await this.switchTabInContainer(scriptContainer, 'サービスワーカー');
+        const serviceWorkerContainer = scriptContainer.locator('serviceworker-container');
+        await expect(serviceWorkerContainer).toBeVisible();
+
+        // 「イベントを編集」ボタンをクリック
+        await serviceWorkerContainer.locator('button#fab-edit[title="イベントを編集"]').click();
+
+        // イベントリストポップアップが表示されるのを待つ
+        const eventListPopup = serviceWorkerContainer.locator('#eventList');
+        await expect(eventListPopup).toBeVisible();
+
+        // 「追加」ボタンをクリック
+        await eventListPopup.getByRole('button', { name: '追加' }).click();
+
+        // イベント追加ポップアップが表示されるのを待つ
+        const eventAddPopup = serviceWorkerContainer.locator('#eventEditMenu');
+        await expect(eventAddPopup).toBeVisible();
+
+        // 各項目を入力 (イベント登録先はサービスワーカータブにはない)
+        await eventAddPopup.locator('input#event-name').fill(eventName);
+        await eventAddPopup.locator('input#comment-value').fill(comment);
+
+        // 「追加」ボタンをクリックしてイベントを登録
+        await eventAddPopup.getByRole('button', { name: '追加' }).click();
+
+        // ポップアップが閉じるのを待つ
+        await expect(eventAddPopup).toBeHidden();
+        await expect(eventListPopup).toBeHidden();
+
+        // イベントがリストに追加されたことを確認
+        const newEventRow = serviceWorkerContainer.locator(`.editor-row:has-text("${eventName}")`);
+        await expect(newEventRow).toBeVisible();
+        await expect(newEventRow.locator('.comment')).toHaveText(comment);
+    }
+
+    /**
      * 既存のスクリプトの内容を書き換えますが、保存はしません。
      * Monaco Editorにフォーカスがある状態になります。
      * @param scriptName - 編集するスクリプトの名前
