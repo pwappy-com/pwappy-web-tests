@@ -40,8 +40,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
     test('公開状態の遷移をテストする', async ({ page }) => {
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
-        const appName = `公開テスト-${uniqueId}`;
-        const appKey = `publish-test-${uniqueId}`;
+        const appName = (`公開テスト-${uniqueId}`).slice(0, 30);
+        const appKey = (`publish-test-${uniqueId}`).slice(0, 30);
         const version = '1.0.0';
 
         await test.step('セットアップ: テスト用のアプリケーションを作成する', async () => {
