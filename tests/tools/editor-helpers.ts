@@ -766,6 +766,102 @@ export class EditorHelper {
             await viewLine.pressSequentially(scriptContent);
         }
     }
+
+    /**
+     * Monaco Editorの現在のテキストコンテンツを取得します。
+     * @returns エディタの現在のテキスト
+     */
+    async getMonacoEditorContent(): Promise<string> {
+        // スクリプトコンテナ内のエディタに絞り込む
+        const scriptContainer = this.page.locator('script-container');
+        const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
+
+        // Monaco Editor の内部にある入力用のtextareaは常に存在し、
+        // ユーザーには見えないが値は持っている。これを直接ターゲットにする。
+        // これにより、エディタ全体の表示状態に依存せず値を取得できる。
+        const textArea = monacoEditor.locator('textarea.inputarea');
+
+        // textAreaがDOMに存在することを確認する
+        await expect(textArea).toBeAttached();
+
+        // 隠されたtextareaから直接値を取得する
+        return await textArea.inputValue();
+    }
+
+    /**
+     * スクリプト一覧から指定された名前のスクリプトを探し、編集画面を開きます。
+     * @param scriptName 編集したいスクリプトの名前
+     */
+    async openScriptForEditing(scriptName: string): Promise<void> {
+        const scriptContainer = this.page.locator('script-container');
+        // 指定された名前を持つスクリプトの行を探す
+        const scriptRow = scriptContainer.locator('.editor-row', { hasText: scriptName });
+        await expect(scriptRow).toBeVisible();
+
+        // その行にある「編集」ボタンをクリックする
+        await scriptRow.getByTitle('スクリプトの編集').click();
+
+        // 編集画面（Monaco Editor）が表示されたことを確認する
+        await expect(scriptContainer.locator('.monaco-editor[role="code"]')).toBeVisible();
+    }
+
+    /**
+     * スクリプト編集画面でAIコーディングウィンドウを開きます。
+     * このメソッドはスクリプト編集画面が開かれていることを前提とします。
+     */
+    async openAiCodingWindow(): Promise<void> {
+        // 1. Shadow DOMのホスト要素である <script-container> をまず特定する
+        const scriptContainer = this.page.locator('script-container');
+
+        // 2. ホスト要素からチェインして、そのShadow DOM内部のボタンを探す
+        const aiButton = scriptContainer.locator('button#aiButton');
+
+        await expect(aiButton).toBeVisible();
+        await aiButton.click();
+
+        const aiWindow = this.page.locator('ai-coder-window');
+        await expect(aiWindow).toBeVisible();
+    }
+
+    /**
+     * AIコーディング機能を使ってコードを生成し、エディタの内容を置き換えます。
+     * @param prompt AIに送信するプロンプト文字列
+     * @param options AIモデルなどのオプション
+     */
+    async generateCodeWithAi(prompt: string, options: { model?: string } = {}): Promise<void> {
+        // 1. AIコーディングウィンドウを開く
+        await this.openAiCodingWindow();
+        const aiWindow = this.page.locator('ai-coder-window');
+
+        // 2. (オプション) 設定でモデルを変更する
+        if (options.model) {
+            await aiWindow.locator('button#setting-btn').click();
+            const settingsWindow = aiWindow.locator('div#setting-window');
+            await expect(settingsWindow).toBeVisible();
+            await settingsWindow.locator('select').selectOption({ value: options.model });
+            await settingsWindow.locator('button#close-btn').click();
+            await expect(settingsWindow).toBeHidden();
+        }
+
+        // 3. プロンプトを入力して送信し、応答を待つ
+        await aiWindow.locator('textarea#user-input').fill(prompt);
+        await aiWindow.locator('button#send-btn').click();
+
+        // 「生成中」の表示を待つ
+        const pendingMessage = aiWindow.locator('.message-content.pending');
+        await expect(pendingMessage).toBeVisible({ timeout: 5000 });
+
+        // 応答が完了するのを待つ (AIの応答は時間がかかるためタイムアウトを長く設定)
+        await expect(pendingMessage).toBeHidden({ timeout: 120000 });
+
+        // 4. 最新の応答メッセージを取得し、「置き換え」ボタンをクリック
+        const lastBotMessage = aiWindow.locator('.message.bot').last();
+        await expect(lastBotMessage).toBeVisible();
+        await lastBotMessage.getByRole('button', { name: '置き換え' }).click();
+
+        // 5. AIコーディングウィンドウが閉じるのを待つ
+        await expect(aiWindow).toBeHidden();
+    }
 }
 
 /**
