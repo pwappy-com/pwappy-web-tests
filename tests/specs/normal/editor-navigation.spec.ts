@@ -94,7 +94,7 @@ test.describe('エディタ内機能のテスト', () => {
         await test.step('検証: 属性(text)の変更がプレビューに反映されること', async () => {
             editorHelper.closeMoveingHandle();
             const propertyTextInput = editorPage.locator('property-container input[data-attribute-type="text"]');
-            const previewButton = editorPage.locator('#renderzone').contentFrame().locator('ons-button');
+            const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
 
             editorHelper.openMoveingHandle('right');
             await propertyTextInput.fill('Button2');
@@ -147,7 +147,7 @@ test.describe('エディタ内機能のテスト', () => {
 
 
             // プレビューのボタンにスタイルが適用されていることを最終確認
-            const previewButton = editorPage.locator('#renderzone').contentFrame().locator('ons-button');
+            const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
             await expect(previewButton).toHaveCSS('background-color', 'rgb(255, 0, 0)');
         });
     });
@@ -166,7 +166,7 @@ test.describe('エディタ内機能のテスト', () => {
         await test.step('検証: 属性の追加、値の変更、空文字設定、クリアボタンの動作', async () => {
             editorHelper.openMoveingHandle('right');
             const propertyContainer = editorPage.locator('property-container');
-            const previewButton = editorPage.locator('#renderzone').contentFrame().locator('ons-button');
+            const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
 
             await propertyContainer.getByTitle('属性を編集').click();
             await propertyContainer.getByRole('button', { name: '要素に追加' }).click();
@@ -237,7 +237,7 @@ test.describe('エディタ内機能のテスト', () => {
 
         await test.step('検証: 属性の値の変更、空文字設定、クリアができること', async () => {
             const propertyContainer = editorPage.locator('property-container');
-            const previewButton = editorPage.locator('#renderzone').contentFrame().locator('ons-button');
+            const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
             const targetInput = propertyContainer.locator(`input[data-attribute-type="${attrName}"]`);
             await expect(targetInput).toBeVisible();
 
@@ -359,7 +359,7 @@ test.describe('エディタ内機能のテスト', () => {
         await editorHelper.openAttributeEditor();
         await editorHelper.addAttributeDefinition({ name: attrName, template: 'input[checkbox]', scope: 'tag' });
 
-        const previewButton = editorPage.locator('#renderzone').contentFrame().locator('ons-button');
+        const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
         const targetInput = editorPage.locator(`input[data-attribute-type="${attrName}"]`);
         await targetInput.check();
         await expect(previewButton).toHaveAttribute(attrName, '');

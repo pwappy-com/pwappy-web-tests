@@ -256,9 +256,9 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             await platformSwitcher.locator('#platformEditMenu').getByText('動作').click();
             await platformSwitcher.locator('.screen-rotete-container').click();
 
-            const previewFrame = editorPage.frameLocator('#renderzone');
+            const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
             // 1. ページ1の初期表示でアラートが出ないことを確認
-            await expect(editorPage.frameLocator('#renderzone').locator('ons-alert-dialog')).toBeHidden();
+            await expect(editorPage.frameLocator('#ios-container #renderzone').locator('ons-alert-dialog')).toBeHidden();
 
             // ボタンをクリックしてページ遷移を開始
             await previewFrame.locator('ons-button').click();

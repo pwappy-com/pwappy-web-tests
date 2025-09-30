@@ -205,7 +205,7 @@ export class EditorHelper {
      * @returns プレビューエリアのFrameLocator
      */
     getPreviewFrame(): FrameLocator {
-        return this.page.locator('#renderzone').contentFrame();
+        return this.page.locator('#ios-container #renderzone').contentFrame();
     }
 
     /**

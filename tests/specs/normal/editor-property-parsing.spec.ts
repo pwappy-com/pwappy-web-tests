@@ -275,7 +275,7 @@ customElements.define('${tagName}', ${scriptName});
             await editorHelper.closeMoveingHandle();
             await editorHelper.switchToRunModeAndVerify();
 
-            const previewFrame = editorPage.frameLocator('#renderzone');
+            const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
 
             // Web Component内のボタンをクリックしてイベントを発火させる
             await previewFrame.locator(tagName).getByRole('button', { name: 'Fire Event' }).click();
