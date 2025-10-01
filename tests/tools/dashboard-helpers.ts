@@ -1,4 +1,5 @@
 import { expect, type Page, type BrowserContext } from '@playwright/test';
+import { EditorHelper } from './editor-helpers';
 
 /**
  * ダッシュボード画面で新しいアプリケーションを正常に作成します。
@@ -58,14 +59,6 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     }
 };
 
-/**
- * ダッシュボードから指定したアプリケーションのエディタを新しいタブで開きます。
- * @param page ダッシュボードのPageオブジェクト
- * @param context BrowserContextオブジェクト
- * @param appName エディタを開く対象のアプリケーション名
- * @param version バージョン番号 (デフォルト: '1.0.0')
- * @returns 開かれたエディタのPageオブジェクト
- */
 export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
     const appRow = page.locator('.app-list tbody tr', { hasText: appName });
     await expect(appRow).toBeVisible();
@@ -76,14 +69,17 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
 
-    const [editorPage] = await Promise.all([
-        context.waitForEvent('page'),
-        page.locator('.version-list tbody tr', { hasText: version }).getByRole('button', { name: 'エディタ' }).click(),
-    ]);
+    const editorPagePromise = context.waitForEvent('page');
+    await page.locator('.version-list tbody tr', { hasText: version }).getByRole('button', { name: 'エディタ' }).click();
+    const editorPage = await editorPagePromise;
 
     await editorPage.waitForLoadState('domcontentloaded');
-    await expect(editorPage.locator('ios-component')).toBeVisible();
 
+    // EditorHelperをインスタンス化して、ダイアログ処理を呼び出す
+    const tempHelper = new EditorHelper(editorPage, false);
+    await tempHelper.handleSnapshotRestoreDialog();
+
+    await expect(editorPage.locator('ios-component')).toBeVisible();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     return editorPage;
 };

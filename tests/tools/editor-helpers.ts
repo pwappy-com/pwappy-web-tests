@@ -32,6 +32,41 @@ export class EditorHelper {
     // =================================================================
 
     /**
+     * エディタを開いた際に表示される可能性のあるスナップショット復元ダイアログを処理します。
+     * 表示された場合は「破棄」を選択して、クリーンな状態でテストを開始できるようにします。
+     */
+    async handleSnapshotRestoreDialog(): Promise<void> {
+        // スナップショット復元ダイアログ（message-box）を特定
+        const snapshotConfirmDialog = this.page.locator('message-box', { hasText: '前回正常に終了されなかった可能性' });
+
+        try {
+            // ダイアログが短時間で表示されるかチェック（タイムアウトを短く設定）
+            await expect(snapshotConfirmDialog).toBeVisible({ timeout: 5000 });
+            console.log('スナップショット復元ダイアログを検出しました。');
+
+            // 「破棄する」ボタンをクリック
+            await snapshotConfirmDialog.getByRole('button', { name: '破棄する' }).click();
+
+            // 破棄の再確認ダイアログが表示されるのを待つ
+            const discardConfirmDialog = this.page.locator('message-box', { hasText: 'すべてのスナップショットを破棄しますか？' });
+            await expect(discardConfirmDialog).toBeVisible();
+
+            // 「はい、破棄します」ボタンをクリック
+            await discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' }).click();
+
+            // 破棄完了のアラートが表示されるのを待ち、閉じる
+            const alert = this.page.locator('alert-component');
+            await expect(alert).toContainText('不要なスナップショットを破棄しました。');
+            await alert.getByRole('button', { name: '閉じる' }).click();
+
+            console.log('スナップショットを破棄しました。');
+        } catch (e) {
+            // タイムアウトした場合（ダイアログが表示されなかった場合）は、正常なフローとして処理を続ける
+            console.log('スナップショット復元ダイアログは表示されませんでした。');
+        }
+    }
+
+    /**
      * エディタ内で新しいページを追加します。
      * @returns 追加された新しいページノードのLocator
      */
