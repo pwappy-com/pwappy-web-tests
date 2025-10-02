@@ -432,11 +432,11 @@ export async function navigateToSettings(page: Page): Promise<void> {
     // 設定コンテンツが表示されるのを待つ
     const settingsContent = page.locator('.setting-content');
     await expect(settingsContent).toBeVisible();
-    await expect(settingsContent.getByText('AIコーディングを有効にする')).toBeVisible();
+    await expect(settingsContent.getByText('AI機能を有効にする')).toBeVisible();
 }
 
 /**
- * AIコーディングの有効/無効を設定します。
+ * AI機能の有効/無効を設定します。
  * この関数は自動で設定画面に遷移し、現在の状態を確認してから必要な操作のみ実行します。
  * @param page ダッシュボードのPageオブジェクト
  * @param enable trueで有効化、falseで無効化
@@ -445,13 +445,13 @@ export async function setAiCoding(page: Page, enable: boolean): Promise<void> {
     // 1. 設定画面へ移動
     await navigateToSettings(page);
 
-    // 2. AIコーディングのチェックボックスと現在の状態を取得
+    // 2. AI機能のチェックボックスと現在の状態を取得
     const checkbox = page.locator('#aiCodingCheckbox');
     const isCurrentlyEnabled = await checkbox.isChecked();
 
     // 3. 目標の状態と現在の状態が同じであれば、何もしないで終了
     if (isCurrentlyEnabled === enable) {
-        console.log(`AIコーディングは既に ${enable ? '有効' : '無効'} です。`);
+        console.log(`AI機能は既に ${enable ? '有効' : '無効'} です。`);
         await closeSettings(page); // 設定画面を閉じて終了
         return;
     }

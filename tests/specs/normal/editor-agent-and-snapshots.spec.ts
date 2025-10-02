@@ -1,6 +1,6 @@
 import { test as base, expect, Page, Locator } from '@playwright/test';
 import 'dotenv/config';
-import { createApp, deleteApp, openEditor, setGeminiApiKey, deleteGeminiApiKey } from '../../tools/dashboard-helpers';
+import { createApp, deleteApp, openEditor, setGeminiApiKey, deleteGeminiApiKey, setAiCoding } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
 // テスト実行ごとにユニークな接尾辞を生成するための環境変数
@@ -66,18 +66,18 @@ test.describe.serial('AIエージェントとスナップショット機能の�
 
     /**
      * AIエージェント機能のUI表示と、モデル設定のデフォルト値が正しいかを検証します。
-     * このテストはGemini APIキーが登録されていることを前提とします。
+     * このテストはAI機能が有効かつGemini APIキーが登録されていることを前提とします。
      */
     test('AIエージェント機能のUIとデフォルト設定を検証する', async ({ page, context, isMobile, appName }) => {
         const apiKey = process.env.TEST_GEMINI_API_KEY;
-        // 修正箇所: test.skip の使い方を修正
         test.skip(!apiKey, 'TEST_GEMINI_API_KEY is not set. Skipping AI Agent test.');
 
-        let editorPage: Page | null = null; // editorPageをnull許容で初期化
+        let editorPage: Page | null = null;
 
         try {
-            await test.step('セットアップ: Gemini APIキーを登録し、アプリを作成してエディタを開く', async () => {
-                await setGeminiApiKey(page, apiKey!); // apiKeyが存在することはskipで保証されている
+            await test.step('セットアップ: AI機能を有効化し、Gemini APIキーを登録し、アプリを作成してエディタを開く', async () => {
+                await setAiCoding(page, true);
+                await setGeminiApiKey(page, apiKey!);
                 await createApp(page, appName, appKey);
                 editorPage = await openEditor(page, context, appName);
             });
@@ -121,28 +121,27 @@ test.describe.serial('AIエージェントとスナップショット機能の�
             });
 
         } finally {
-            // finallyブロックでクリーンアップ処理を確実に行う
-            await test.step('クリーンアップ: Gemini APIキーを削除し、エディタを閉じる', async () => {
-                // editorPageが開かれている場合のみ閉じる
+            await test.step('クリーンアップ: Gemini APIキーを削除し、AI機能を無効化し、エディタを閉じる', async () => {
                 if (editorPage && !editorPage.isClosed()) {
                     await editorPage.close();
                 }
-                // ダッシュボードページに戻ってAPIキーを削除
                 await page.bringToFront();
                 await deleteGeminiApiKey(page);
+                await setAiCoding(page, false);
             });
         }
     });
 
     /**
      * Gemini APIキーが登録されていない場合に、AIエージェントのメニュー項目が
-     * 表示されないことを検証します。
+     * 表示されないことを検証します。AI機能は有効な状態とします。
      */
     test('Gemini APIキーが未登録の場合、AIエージェントボタンが表示されないことを確認する', async ({ page, context, isMobile, appName }) => {
-        let editorPage: Page | null = null; // editorPageをnull許容で初期化
+        let editorPage: Page | null = null;
 
         try {
-            await test.step('セットアップ: APIキーを削除し、アプリを作成してエディタを開く', async () => {
+            await test.step('セットアップ: AI機能を有効化し、APIキーを削除し、アプリを作成してエディタを開く', async () => {
+                await setAiCoding(page, true);
                 await deleteGeminiApiKey(page);
                 await createApp(page, appName, appKey);
                 editorPage = await openEditor(page, context, appName);
@@ -159,13 +158,55 @@ test.describe.serial('AIエージェントとスナップショット機能の�
                 await expect(agentButton).toBeHidden();
             });
         } finally {
-            await test.step('クリーンアップ: エディタを閉じる', async () => {
+            await test.step('クリーンアップ: エディタを閉じ、AI機能を無効化する', async () => {
                 if (editorPage && !editorPage.isClosed()) {
                     await editorPage.close();
                 }
+                await page.bringToFront();
+                await setAiCoding(page, false);
             });
         }
     });
+
+    /**
+     * AIコーディング機能が無効の場合に、AIエージェントのメニュー項目が
+     * 表示されないことを検証します。APIキーは登録済みの状態とします。
+     */
+    test('AIコーディング機能が無効の場合、AIエージェントボタンが表示されないことを確認する', async ({ page, context, isMobile, appName }) => {
+        const apiKey = process.env.TEST_GEMINI_API_KEY;
+        test.skip(!apiKey, 'TEST_GEMINI_API_KEY is not set. Skipping this test.');
+
+        let editorPage: Page | null = null;
+
+        try {
+            await test.step('セットアップ: AI機能を無効化し、APIキーを登録し、アプリを作成してエディタを開く', async () => {
+                await setAiCoding(page, false);
+                await setGeminiApiKey(page, apiKey!);
+                await createApp(page, appName, appKey);
+                editorPage = await openEditor(page, context, appName);
+            });
+
+            await test.step('1. メニューを開き、AIエージェントボタンが表示されないことを確認', async () => {
+                const menuButton = editorPage!.locator('#fab-bottom-menu-box');
+                await menuButton.click();
+
+                const platformBottomMenu = editorPage!.locator('#platformBottomMenu');
+                await expect(platformBottomMenu).toBeVisible();
+
+                const agentButton = platformBottomMenu.getByText('AIエージェント');
+                await expect(agentButton).toBeHidden();
+            });
+        } finally {
+            await test.step('クリーンアップ: エディタを閉じ、APIキーを削除する', async () => {
+                if (editorPage && !editorPage.isClosed()) {
+                    await editorPage.close();
+                }
+                await page.bringToFront();
+                await deleteGeminiApiKey(page);
+            });
+        }
+    });
+
 
     /**
      * スナップショットの作成、アプリケーションの変更、そしてスナップショットからの
