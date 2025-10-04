@@ -5,8 +5,8 @@ name: Multi-OS E2E Tests
 on:
   # 定期実行 (schedule)
   schedule:
-    # UTCの毎時0分に実行。ただし、UTC 16-19時 (JST 1-4時台) は除外 (Normalテスト用)
-    - cron: '0 0-15,20-23 * * *'
+    # UTCの毎時0分に実行。ただし、UTC 0時 (JST 9時) および UTC 16-19時 (JST 1-4時台) は除外 (Normalテスト用)
+    - cron: '0 1-15,20-23 * * *'
     # UTCの毎日0時0分 (JST 9時) に実行 (Premiumテスト用)
     - cron: '0 0 * * *'
   # 手動実行 (workflow_dispatch)
