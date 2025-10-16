@@ -50,11 +50,18 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     const appRow = page.locator('.app-list tbody tr', { hasText: appKey });
     if (await appRow.count() > 0) {
         await appRow.getByRole('button', { name: '削除' }).click();
+
+        // 1回目の「処理中...」待機（ここは短くても良い場合が多い）
         await page.getByText('処理中...').waitFor({ state: 'hidden', timeout: 30000 });
+
         const confirmDialog = page.locator('message-box#delete-confirm');
         await expect(confirmDialog).toBeVisible();
         await confirmDialog.getByRole('button', { name: '削除する' }).click();
+
+        // 2回目の「処理中...」待機（サーバー処理）のタイムアウトを延長
+        // サーバー側の削除処理は時間がかかる可能性があるため、90秒など十分に長く待つ
         await page.getByText('処理中...').waitFor({ state: 'hidden', timeout: 90000 });
+
         await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
     }
 };
@@ -599,7 +606,7 @@ export async function waitForVersionStatus(
 
     await expect(async () => {
         // 1. ページの再読み込みで最新の状態を取得
-        await page.reload({ waitUntil: 'networkidle' });
+        await page.reload({ waitUntil: 'domcontentloaded' });
 
         // 2. 公開タブに移動
         await navigateToTab(page, 'publish');
