@@ -64,11 +64,8 @@ async function testAiCodingPpConsumption(
     await editorPage.close();
 
     // 6. ダッシュボードに戻り、PPの消費を確認
-    await page.reload({ waitUntil: 'domcontentloaded' });
-
-    // リロード後にダッシュボードの主要な要素が表示されるのを待つことで、安定性を高める
+    await page.reload({ waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible({ timeout: 15000 });
-
     const finalPoints = await getCurrentPoints(page);
     console.log(`[${options.model}] 最終PP: ${finalPoints}`);
     const consumedPoints = initialPoints - finalPoints;
