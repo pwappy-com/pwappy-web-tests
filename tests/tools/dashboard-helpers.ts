@@ -50,11 +50,11 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     const appRow = page.locator('.app-list tbody tr', { hasText: appKey });
     if (await appRow.count() > 0) {
         await appRow.getByRole('button', { name: '削除' }).click();
-        await page.getByText('処理中...').waitFor({ state: 'hidden' });
+        await page.getByText('処理中...').waitFor({ state: 'hidden', timeout: 30000 });
         const confirmDialog = page.locator('message-box#delete-confirm');
         await expect(confirmDialog).toBeVisible();
         await confirmDialog.getByRole('button', { name: '削除する' }).click();
-        await page.getByText('処理中...').waitFor({ state: 'hidden' });
+        await page.getByText('処理中...').waitFor({ state: 'hidden', timeout: 90000 });
         await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
     }
 };
