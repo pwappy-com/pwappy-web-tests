@@ -1,12 +1,4 @@
-/**
- * @file 公開管理機能、およびAIコーディング機能に関するE2Eテストシナリオです。
- * - アプリケーションバージョンの公開ライフサイクル（公開準備、公開、非公開）のテスト
- * - 公開審査におけるPP（ポイント）消費のテスト
- * - AIコーディング機能利用時のPP消費のテスト
- * などを検証します。
- */
-
-import { test, expect, Page, BrowserContext } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import 'dotenv/config';
 import {
     createApp,
@@ -26,13 +18,10 @@ import {
 } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
-// CI/CD環境で実行される際に、どの環境からのテスト実行かを識別するための接尾辞
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
 /**
- * AIコーディングを実行し、指定されたPPが消費されることを検証するヘルパー関数です。
- * この関数は、テストの安定性を高めるために、ページ間のコンテキスト切り替えを慎重に扱います。
- * 
+ * AIコーディングを実行し、指定されたPPが消費されることを検証するヘルパー関数
  * @param page - ダッシュボードのPageオブジェクト
  * @param context - BrowserContextオブジェクト
  * @param isMobile - モバイルフラグ
@@ -41,11 +30,11 @@ const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
  * @param options - テストオプション
  * @param options.prompt - AIに送るプロンプト
  * @param options.model - 使用するAIモデル
- * @param options.expectedPpConsumption - 期待するPP消費量
- * @param options.assertionType - 'exact' (完全一致) または 'greaterThan' (より大きい) の検証方法
+ * @param options.expectedPpConsumption - 期待するPP消費量（数値、または比較関数）
+ * @param options.assertionType - 'exact' (完全一致) または 'greaterThan' (より大きい)
  */
 async function testAiCodingPpConsumption(
-    { page, context, isMobile, appName, version }: { page: Page, context: BrowserContext, isMobile: boolean, appName: string, version: string },
+    { page, context, isMobile, appName, version }: { page: any, context: any, isMobile: boolean, appName: string, version: string },
     options: {
         prompt: string;
         model: string;
@@ -57,32 +46,27 @@ async function testAiCodingPpConsumption(
     const initialPoints = await getCurrentPoints(page);
     console.log(`[${options.model}] 初期PP: ${initialPoints}`);
 
-    // 2. エディタを新しいページ（タブ）として開き、ヘルパーを準備
+    // 2. エディタを開いてヘルパーを準備
     const editorPage = await openEditor(page, context, appName, version);
     const editorHelper = new EditorHelper(editorPage, isMobile);
 
-    // 3. スクリプトタブに移動し、テスト用のスクリプトを作成して編集画面を開く
+    // 3. スクリプトタブに移動し、スクリプトを作成して編集画面を開く
     await editorHelper.openMoveingHandle("right");
     const scriptContainer = editorPage.locator('script-container');
     await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
     await editorHelper.addNewScript('aiTestScript');
     await editorHelper.openScriptForEditing('aiTestScript');
 
-    // 4. AI機能を利用してコードを生成・置換する
+    // 4. AIでコードを生成・置換
     await editorHelper.generateCodeWithAi(options.prompt, { model: options.model });
 
-    // 5. エディタページを閉じる
+    // 5. エディタを閉じる
     await editorPage.close();
 
-    // 6. メインのダッシュボードページに操作フォーカスを戻す
-    // 新しいページを開閉した後は、後続の操作が不安定になるのを防ぐため、
-    // 操作対象のページを明示的にアクティブ化します。
     await page.bringToFront();
 
-    // 7. ダッシュボードをリロードし、PPの消費を確認
-    // CI環境での安定性を考慮し、'networkidle'ではなくデフォルトの'load'イベントを待ちます。
-    await page.reload();
-    // リロード後、ページの主要な要素が表示されるのを待つことで、ページの読み込み完了を確実にします。
+    // 6. ダッシュボードに戻り、PPの消費を確認
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible({ timeout: 15000 });
 
     const finalPoints = await getCurrentPoints(page);
@@ -90,7 +74,7 @@ async function testAiCodingPpConsumption(
     const consumedPoints = initialPoints - finalPoints;
     console.log(`[${options.model}] 消費PP: ${consumedPoints}`);
 
-    // 8. アサーションのタイプに応じてPP消費量を検証
+    // 7. アサーションのタイプに応じてPP消費量を検証
     if (options.assertionType === 'exact') {
         expect(consumedPoints).toBe(options.expectedPpConsumption);
     } else if (options.assertionType === 'greaterThan') {
@@ -101,10 +85,6 @@ async function testAiCodingPpConsumption(
 // --- テストシナリオ ---
 test.describe('公開管理 E2Eシナリオ', () => {
 
-    /**
-     * 各テストの実行前に、Cookieを使用してログイン状態を再現し、
-     * ダッシュボードの初期ページにアクセスします。
-     */
     test.beforeEach(async ({ page, context }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
         const domain = testUrl.hostname;
@@ -117,10 +97,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
-    /**
-     * アプリケーションバージョンの公開状態が一連の流れ（非公開 -> 公開準備中 -> ... -> 非公開）
-     * で正しく遷移すること、およびダウンロード機能が正常に動作することを検証します。
-     */
     test('公開状態の遷移とダウンロード機能をテストする', async ({ page }) => {
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
@@ -132,12 +108,12 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await createApp(page, appName, appKey);
         });
 
-        await test.step('テスト: Gemini APIキーを削除する（テスト環境の初期化）', async () => {
+        // APIキーを削除するテスト
+        await test.step('テスト: Gemini APIキーを削除する', async () => {
             await deleteGeminiApiKey(page);
         });
 
-        await test.step('テスト: 公開状態の遷移とPP消費を確認する', async () => {
-            // 公開審査には時間がかかる可能性があるため、このステップのタイムアウトを延長
+        await test.step('テスト: 公開状態の遷移（非公開 -> 準備中 -> 準備完了 -> 公開 -> 非公開）', async () => {
             test.setTimeout(120000);
 
             // ダッシュボードから現在のPPを取得
@@ -149,18 +125,15 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await startPublishPreparation(page, appName, version);
             await expectVersionStatus(page, version, '公開準備中');
 
-            // ポイントが消費されるのを待つ。固定時間待機(waitForTimeout)は不安定なため、
-            // 状態が変化する（PPが減る）までポーリングする方式に変更。
-            await expect(async () => {
-                await page.reload();
-                const currentPointsAfterRequest = await getCurrentPoints(page);
-                expect(currentPointsAfterRequest).toBeLessThan(initialPoints);
-            }).toPass({ timeout: 15000 }); // 15秒以内にPPが減ることを期待
+            // アニメーションが終わるまで固定で3秒停止
+            await page.waitForTimeout(3000);
 
-            // PPの差分を計算し、期待値（50）であることを確認
             const currentPoints = await getCurrentPoints(page);
             console.log(`公開審査を開始したあとに取得したポイント: ${currentPoints}`);
+            // PPの差分を計算
             const pointsDiff = initialPoints - currentPoints;
+
+            // 差分は50であることを確認
             expect(pointsDiff).toBe(50);
 
             // 公開準備完了を経て公開中にする
@@ -178,14 +151,10 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, appName, false);
+            await expectAppVisibility(page, appName, false); // 汎用ヘルパーで確認
         });
     });
 
-    /**
-     * ユーザーが自身のGemini APIキーを登録した場合、公開審査で消費されるPPが
-     * 少なくなることを検証します。
-     */
     test('GeminiAPIキーを登録した際の公開審査で使うPPをテストする', async ({ page }) => {
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
@@ -198,41 +167,47 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await createApp(page, appName, appKey);
         });
 
+        // APIキーを登録するテスト
         await test.step('テスト: Gemini APIキーを登録する', async () => {
+            // 環境変数からAPIキーを取得する
             await setGeminiApiKey(page, apiKey);
         });
 
-        await test.step('テスト: 公開状態の遷移とPP消費を確認する', async () => {
+        await test.step('テスト: 公開状態の遷移（非公開 -> 準備中 -> 準備完了 -> 公開 -> 非公開）', async () => {
             test.setTimeout(120000);
 
+            // ダッシュボードから現在のPPを取得
             const initialPoints = await getCurrentPoints(page);
             console.log(`取得した初期ポイント: ${initialPoints}`);
             expect(initialPoints).toBeGreaterThanOrEqual(0);
 
+            // 公開準備を開始
             await startPublishPreparation(page, appName, version);
             await expectVersionStatus(page, version, '公開準備中');
 
-            // ポイントが消費されるのをポーリングして待つ
-            await expect(async () => {
-                await page.reload();
-                const currentPointsAfterRequest = await getCurrentPoints(page);
-                expect(currentPointsAfterRequest).toBeLessThan(initialPoints);
-            }).toPass({ timeout: 15000 });
+            // アニメーションが終わるまで固定で3秒停止
+            await page.waitForTimeout(3000);
 
-            // PPの差分を計算し、期待値（10）であることを確認
             const currentPoints = await getCurrentPoints(page);
             console.log(`公開審査を開始したあとに取得したポイント: ${currentPoints}`);
+            // PPの差分を計算
             const pointsDiff = initialPoints - currentPoints;
+
+            // 差分は10であることを確認
             expect(pointsDiff).toBe(10);
 
+            // 公開準備完了を経て公開中にする
             await completePublication(page, appName, version);
             await expectVersionStatus(page, version, '公開中');
 
+            // 非公開に戻す
             await unpublishVersion(page, appName, version);
             await expectVersionStatus(page, version, '非公開');
         });
 
-        await test.step('クリーンアップ: Gemini APIキーを削除する', async () => {
+
+        // APIキーを削除するテスト
+        await test.step('テスト: Gemini APIキーを削除する', async () => {
             await deleteGeminiApiKey(page);
         });
 
@@ -242,10 +217,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
     });
 
-    /**
-     * 無効なGemini APIキーを登録して公開準備を開始した場合、
-     * 公開審査が却下されることを検証します。
-     */
     test('無効なGeminiAPIキーを登録した際のテストする', async ({ page }) => {
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
@@ -254,7 +225,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         const version = '1.0.0';
         let apiKey = process.env.TEST_GEMINI_API_KEY || '';
 
-        // APIキーが存在する場合、意図的に無効なキーに加工する
+        //apiKeyが空でなければ、最後の10文字を別の文字に変える
         if (apiKey !== '') {
             apiKey = apiKey.slice(0, -10) + 'xxxxxxxxxx';
         }
@@ -263,38 +234,44 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await createApp(page, appName, appKey);
         });
 
-        await test.step('テスト: 無効なGemini APIキーを登録する', async () => {
+        // APIキーを登録するテスト
+        await test.step('テスト: Gemini APIキーを登録する', async () => {
+            // 環境変数からAPIキーを取得する
             await setGeminiApiKey(page, apiKey);
         });
 
-        await test.step('テスト: 公開審査が却下されることを確認する', async () => {
+        await test.step('テスト: 公開状態の遷移（非公開 -> 準備中 -> 準備完了 -> 公開 -> 非公開）', async () => {
             test.setTimeout(120000);
 
+            // ダッシュボードから現在のPPを取得
             const initialPoints = await getCurrentPoints(page);
             console.log(`取得した初期ポイント: ${initialPoints}`);
             expect(initialPoints).toBeGreaterThanOrEqual(0);
 
+            // 公開準備を開始
             await startPublishPreparation(page, appName, version);
             await expectVersionStatus(page, version, '公開準備中');
 
-            // ポイントが消費されるのをポーリングして待つ
-            await expect(async () => {
-                await page.reload();
-                const currentPointsAfterRequest = await getCurrentPoints(page);
-                expect(currentPointsAfterRequest).toBeLessThan(initialPoints);
-            }).toPass({ timeout: 15000 });
+            // アニメーションが終わるまで固定で3秒停止
+            await page.waitForTimeout(3000);
 
             const currentPoints = await getCurrentPoints(page);
             console.log(`公開審査を開始したあとに取得したポイント: ${currentPoints}`);
+            // PPの差分を計算
             const pointsDiff = initialPoints - currentPoints;
+
+            // 差分は10であることを確認
             expect(pointsDiff).toBe(10);
 
-            // サーバー側の審査処理が完了し、「公開審査却下」になるまで待機
+            // 公開準備完了まで待機
             await waitForVersionStatus(page, appName, version, '公開審査却下');
+
+            // 公開審査却下になっていることを確認
             await expectVersionStatus(page, version, '公開審査却下');
         });
 
-        await test.step('クリーンアップ: Gemini APIキーを削除する', async () => {
+        // APIキーを削除するテスト
+        await test.step('テスト: Gemini APIキーを削除する', async () => {
             await deleteGeminiApiKey(page);
         });
 
@@ -304,9 +281,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
     });
 
-    /**
-     * AIコーディング機能を使用した際のPP消費量を、APIキーの有無のシナリオで検証します。
-     */
     test('AIコーディングの使用ポイントをテストする', async ({ page, context, isMobile }) => {
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
@@ -318,30 +292,31 @@ test.describe('公開管理 E2Eシナリオ', () => {
             throw new Error('環境変数 TEST_GEMINI_API_KEY が設定されていません。');
         }
 
-        await test.step('セットアップ: アプリ作成とAIコーディングの有効化', async () => {
+        await test.step('セットアップ: テスト用のアプリケーションを作成し、AIコーディングを有効化', async () => {
             await createApp(page, appName, appKey);
             await setAiCoding(page, true);
         });
 
-        // テスト関数に渡すコンテキスト情報をまとめる
         const testContext = { page, context, isMobile, appName, version };
 
-        await test.step('シナリオ1: APIキーなしでProモデルを使用し、PPが多く消費される', async () => {
+        // --- シナリオ1: APIキーなし + Proモデル ---
+        await test.step('テスト: APIキーなしでProモデルを使用し、PPが多く消費されることを確認', async () => {
             await deleteGeminiApiKey(page);
             await testAiCodingPpConsumption(testContext, {
                 prompt: '// この関数内に、Hello Worldとアラート表示するコードを実装',
                 model: 'gemini-2.5-pro',
-                expectedPpConsumption: 1, // 期待値は1より大きいこと
+                expectedPpConsumption: 1, // 1より大きいことを確認
                 assertionType: 'greaterThan'
             });
         });
 
-        await test.step('シナリオ2: APIキーありでProモデルを使用し、PPが1消費される', async () => {
+        // --- シナリオ2: APIキーあり + Proモデル ---
+        await test.step('テスト: APIキーありでProモデルを使用し、PPが1消費されることを確認', async () => {
             await setGeminiApiKey(page, apiKey);
             await testAiCodingPpConsumption(testContext, {
                 prompt: '// この関数の中身を、現在時刻をコンソールに出力するコードに書き換えて',
                 model: 'gemini-2.5-pro',
-                expectedPpConsumption: 1, // 期待値は1と完全一致すること
+                expectedPpConsumption: 1, // 1と完全一致することを確認
                 assertionType: 'exact'
             });
         });
