@@ -18,6 +18,8 @@ import {
 } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
+test.describe.configure({ mode: 'serial' });
+
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
 /**
