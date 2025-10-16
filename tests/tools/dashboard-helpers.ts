@@ -45,6 +45,7 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
  */
 export async function deleteApp(page: Page, appKey: string): Promise<void> {
     await page.bringToFront();
+
     await navigateToTab(page, 'workbench');
 
     const appRow = page.locator('.app-list tbody tr', { hasText: appKey });
