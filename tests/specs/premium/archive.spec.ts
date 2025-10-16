@@ -12,8 +12,6 @@ import {
     expectAppVisibility
 } from '../../tools/dashboard-helpers';
 
-test.describe.configure({ mode: 'serial' });
-
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
 test.describe('アーカイブ E2Eシナリオ', () => {

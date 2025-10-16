@@ -26,8 +26,6 @@ import {
 } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
-test.describe.configure({ mode: 'serial' });
-
 // CI/CD環境で実行される際に、どの環境からのテスト実行かを識別するための接尾辞
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
