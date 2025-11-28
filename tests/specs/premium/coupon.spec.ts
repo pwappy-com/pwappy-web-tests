@@ -98,18 +98,22 @@ test.describe('クーポン機能 E2Eシナリオ', () => {
 
         for (let i = 1; i <= maxAttempts; i++) {
             await test.step(`${i}回目の無効なコード入力`, async () => {
-                // 前のループでアラートを閉じた後、入力ダイアログが閉じている可能性があるため、
-                // inputが見えていないか、あるいはクーポンボタンが見えている場合はクリックする。
-                // isVisible()は非同期で今の状態を取得するだけなので、待機を含まない。
-                // 安全のため「inputが見えていなければ」開くロジックにするが、
-                // アニメーション中の中途半端な状態を回避するため、まず短い待機を入れるか、
-                // あるいは「couponButtonが見えるなら押す」という判定を追加する。
-
-                // ここでは「inputが表示されていない」または「couponButtonが表示されている（ダイアログが閉じている）」場合にクリックする
-                if (await couponButton.isVisible() || !await input.isVisible()) {
+                // ダイアログが開いていない（入力欄が見えない）場合のみボタンを押す
+                if (!await input.isVisible()) {
+                    // ボタンが押せる状態になるまで待つ
                     await expect(couponButton).toBeVisible();
                     await expect(couponButton).toBeEnabled();
+
+                    // クリックして、少し待ってから入力欄が出るか確認
                     await couponButton.click();
+
+                    try {
+                        await expect(input).toBeVisible({ timeout: 3000 });
+                    } catch (e) {
+                        // 失敗した場合、クリックが空振りした可能性があるのでもう一度だけ試行（リトライロジック）
+                        console.log('Retry clicking coupon button...');
+                        await couponButton.click({ force: true });
+                    }
                 }
 
                 // 入力欄と適用ボタンが確実に操作可能になるまで待つ
