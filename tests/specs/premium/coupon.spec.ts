@@ -3,6 +3,14 @@ import 'dotenv/config';
 
 test.describe('クーポン機能 E2Eシナリオ', () => {
 
+    // 1. OSがLinuxでない場合はスキップ (process.platform を使用)
+    //    'linux', 'darwin' (Mac), 'win32' (Windows) などが返ります
+    test.skip(process.platform !== 'linux', 'クーポンロック回避のため、Linux環境以外ではスキップします');
+
+    // 2. ブラウザがChromiumでない場合はスキップ (フィクスチャを使用)
+    //    Playwrightの設定によりますが、通常Chromeでのテストは browserName: 'chromium' です
+    test.skip(({ browserName }) => browserName !== 'chromium', 'クーポンロック回避のため、Chrome(Chromium)以外ではスキップします');
+
     // 各テストの実行前に認証とダッシュボードへのアクセスを行います。
     test.beforeEach(async ({ page, context }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
