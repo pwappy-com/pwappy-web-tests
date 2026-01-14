@@ -19,12 +19,12 @@ const test = base.extend<EditorFixtures>({
     appName: async ({ }, use) => {
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
-        await use(`struct-test-app-${uniqueId}`.slice(0, 30));
+        await use(`test-app-struct-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
-        const appKey = `struct-key-${uniqueId}`.slice(0, 30);
+        const appKey = `key-struct-${uniqueId}`.slice(0, 30);
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
@@ -173,6 +173,8 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
     });
 
     test('ドラッグ＆ドロップ：座標操作による要素の順序入れ替え', async ({ editorPage, editorHelper }) => {
+        await editorHelper.handleSnapshotRestoreDialog();
+
         await test.step('1. ページと2つのボタンを配置', async () => {
             await editorHelper.addPage();
             const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
@@ -204,7 +206,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 await editorPage.mouse.down();
                 await editorPage.waitForTimeout(600);
 
-
+                // スクロール等で位置が変わる可能性があるため、ターゲットの座標を再取得
                 const boxBottomUpdated = await btnBottom.boundingBox();
 
                 if (boxBottomUpdated) {
