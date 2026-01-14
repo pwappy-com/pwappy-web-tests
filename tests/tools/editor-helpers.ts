@@ -84,14 +84,14 @@ export class EditorHelper {
     }
 
     /**
-     * ツールボックスからコンポーненトをDOMツリーの指定場所にドラッグ＆ドロップします。
+     * ツールボックスからコンポーネントをDOMツリーの指定場所にドラッグ＆ドロップします。
      * (オーバーロード)
      * @param componentName Toolboxに表示されているコンポーネント名
      * @param targetSelector D&Dのドロップ先となる要素の「セレクタ文字列」
      */
     async addComponent(componentName: string, targetSelector: string): Promise<Locator>;
     /**
-     * ツールボックスからコンポーненトをDOMツリーの指定場所にドラッグ＆ドロップします。
+     * ツールボックスからコンポーネントをDOMツリーの指定場所にドラッグ＆ドロップします。
      * (オーバーロード)
      * @param componentName Toolboxに表示されているコンポーネント名
      * @param targetLocator D&Dのドロップ先となる要素の「Locatorオブジェクト」
@@ -139,6 +139,39 @@ export class EditorHelper {
     async selectNodeInDomTree(nodeLocator: Locator): Promise<void> {
         await nodeLocator.click({ position: { x: 0, y: 10 } });
         await expect(nodeLocator).toHaveClass(/node-select/);
+    }
+
+    /**
+     * 高精度なドラッグ＆ドロップを行います。
+     * 標準のdragToでは速度が速すぎてアプリ側の並び替えイベントが発火しない場合に有効です。
+     * マウスの動きをステップ分けしてシミュレートします。
+     * 
+     * @param sourceLocator ドラッグ開始要素
+     * @param targetLocator ドロップ対象要素
+     * @param steps 移動にかけるステップ数（多いほどゆっくり移動し、イベントが発火しやすくなる）
+     */
+    async dragAndDropManually(sourceLocator: Locator, targetLocator: Locator, steps: number = 20): Promise<void> {
+        const sourceBox = await sourceLocator.boundingBox();
+        const targetBox = await targetLocator.boundingBox();
+        if (!sourceBox || !targetBox) {
+            throw new Error('dragAndDropManually: 要素のBoundingBoxが取得できませんでした');
+        }
+
+        // 要素の中心座標を計算
+        const srcX = sourceBox.x + sourceBox.width / 2;
+        const srcY = sourceBox.y + sourceBox.height / 2;
+        const dstX = targetBox.x + targetBox.width / 2;
+        const dstY = targetBox.y + targetBox.height / 2;
+
+        // マウス操作のシミュレーション
+        await this.page.mouse.move(srcX, srcY);
+        await this.page.mouse.down();
+        // stepsを指定することで、時間をかけて移動させ dragover を確実に発火させる
+        await this.page.mouse.move(dstX, dstY, { steps: steps });
+        await this.page.mouse.up();
+
+        // DOMの更新を少し待つ
+        await this.page.waitForTimeout(500);
     }
 
     /**

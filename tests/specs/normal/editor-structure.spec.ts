@@ -173,12 +173,17 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
     });
 
     test('ドラッグ＆ドロップ：座標操作による要素の順序入れ替え', async ({ editorPage, editorHelper }) => {
-        await test.step('1. 2つのボタンを配置', async () => {
-            const { pageNode } = await editorHelper.setupPageWithButton();
-            const contentArea = pageNode.locator('div[data-node-explain="コンテンツ"]');
+        await test.step('1. ページと2つのボタンを配置', async () => {
+            await editorHelper.addPage();
+            const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
 
-            await editorHelper.addComponent('ons-button', contentArea);
-            const buttons = contentArea.locator('> .node');
+            // ボタンを2回追加
+            await editorHelper.addComponent('ons-button', contentAreaSelector);
+            await editorHelper.addComponent('ons-button', contentAreaSelector);
+
+            // ボタンのIDを確認（初期状態）
+            // アプリ仕様：新しい要素が上(index 0)に追加されるため、nth(0)がons-button2となる
+            const buttons = editorPage.locator('.node[data-node-type="ons-button"]');
             await expect(buttons).toHaveCount(2);
             await expect(buttons.nth(0)).toHaveAttribute('data-node-dom-id', 'ons-button2');
             await expect(buttons.nth(1)).toHaveAttribute('data-node-dom-id', 'ons-button1');
@@ -188,7 +193,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             const btnTop = editorPage.locator('.node[data-node-dom-id="ons-button2"]');
             const btnBottom = editorPage.locator('.node[data-node-dom-id="ons-button1"]');
 
-            // 下のボタンを確実に表示させて座標を取得
+            // 下のボタンを確実に表示させて座標を取得（先にスクロールをしないと座標がずれるので必ず必要な処理、省略してはいけない
             await btnBottom.scrollIntoViewIfNeeded();
 
             const boxTop = await btnTop.boundingBox();
@@ -197,7 +202,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 // 上のボタンの中心付近を掴む
                 await editorPage.mouse.move(boxTop.x + boxTop.width / 2, boxTop.y + boxTop.height / 2);
                 await editorPage.mouse.down();
-                await editorPage.waitForTimeout(600); // 長押し(300ms)より長く待機
+                await editorPage.waitForTimeout(600);
 
 
                 const boxBottomUpdated = await btnBottom.boundingBox();
