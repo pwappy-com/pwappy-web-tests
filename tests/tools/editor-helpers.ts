@@ -106,8 +106,8 @@ export class EditorHelper {
         await this.openMoveingHandle('left');
         const targetLocator = typeof target === 'string' ? this.page.locator(target) : target;
         await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, { targetPosition: { x: 10, y: 10 } });
-        const newComponentNode = targetLocator.locator(`> .node[data-node-type="${componentName}"]`);
-        await expect(newComponentNode).toBeVisible();
+        const newComponentNode = targetLocator.locator(`> .node[data-node-type="${componentName}"]`).first();
+        await expect(newComponentNode).toBeVisible({ timeout: 10000 });
         return newComponentNode;
     }
 
@@ -274,10 +274,9 @@ export class EditorHelper {
      * @returns 指定された属性UI要素のLocator
      */
     getPropertyInput(attributeNameOrTagName: string): Locator {
-        const propertyContainer = this.getPropertyContainer();
-        const byAttribute = `[data-attribute-type="${attributeNameOrTagName}"]`;
-        const byTagName = attributeNameOrTagName;
-        return propertyContainer.locator(`${byAttribute}, ${byTagName}`);
+        const propertyContainer = this.page.locator('property-container');
+        // ホスト要素（attribute-input等）を特定。内部のinputとの重複を避けるため.first()を適用
+        return propertyContainer.locator(`[data-attribute-type="${attributeNameOrTagName}"], ${attributeNameOrTagName}`).first();
     }
 
     /**

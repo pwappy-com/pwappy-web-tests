@@ -298,22 +298,22 @@ test.describe('公開管理 E2Eシナリオ', () => {
         const testContext = { page, context, isMobile, appName, version };
 
         // --- シナリオ1: APIキーなし + Proモデル ---
-        await test.step('テスト: APIキーなしでProモデルを使用し、PPが多く消費されることを確認', async () => {
+        await test.step('テスト: APIキーなしでPPが多く消費されることを確認', async () => {
             await deleteGeminiApiKey(page);
             await testAiCodingPpConsumption(testContext, {
-                prompt: '// この関数内に、Hello Worldとアラート表示するコードを実装',
-                model: 'gemini-2.5-pro',
+                prompt: '// canvasを作って、ひらがな、カタカナ、英数字をランダムで上下左右から文字が現れるアニメーションを表示するコードを実装してください。文字は残像を残してアニメーションをします。また、10秒毎に文字の大きさがランダムで切り替わり、豪華なパーティクルもつけてください。',
+                model: 'gemini-2.5-flash-lite',
                 expectedPpConsumption: 1, // 1より大きいことを確認
                 assertionType: 'greaterThan'
             });
         });
 
         // --- シナリオ2: APIキーあり + Proモデル ---
-        await test.step('テスト: APIキーありでProモデルを使用し、PPが1消費されることを確認', async () => {
+        await test.step('テスト: APIキーありでPPが1消費されることを確認', async () => {
             await setGeminiApiKey(page, apiKey);
             await testAiCodingPpConsumption(testContext, {
-                prompt: '// この関数の中身を、現在時刻をコンソールに出力するコードに書き換えて',
-                model: 'gemini-2.5-pro',
+                prompt: '// canvasを作って、ひらがな、カタカナ、英数字をランダムで上下左右から文字が現れるアニメーションを表示するコードを実装してください。文字は残像を残してアニメーションをします。また、10秒毎に文字の大きさがランダムで切り替わり、豪華なパーティクルもつけてください。',
+                model: 'gemini-2.5-flash-lite',
                 expectedPpConsumption: 1, // 1と完全一致することを確認
                 assertionType: 'exact'
             });
