@@ -145,9 +145,9 @@ jobs:
       - name: Run Normal E2E Tests
         id: run_tests
         shell: bash
-        # OS並列で実行。ワーカー数はリソース競合を防ぐため1に設定。
+        # OS並列で実行。ワーカー数はリソース競合を防ぐため2に設定。
         run: |
-          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --workers=1
+          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --workers=2
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }} 
