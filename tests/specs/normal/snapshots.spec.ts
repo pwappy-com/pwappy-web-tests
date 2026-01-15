@@ -1,10 +1,18 @@
 import { test as base, expect, Page, Locator } from '@playwright/test';
 import 'dotenv/config';
-import { createApp, deleteApp, openEditor, setAiCoding } from '../../tools/dashboard-helpers';
+import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
+/**
+ * テスト実行ごとに一意の識別子を生成するための定数。
+ * ローカル実行時やCI環境でのリソース競合を避けるために使用します。
+ */
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
+/**
+ * Playwrightのテストフィクスチャを拡張し、各テストで独立したアプリケーション名と
+ * エディタ操作ヘルパーを提供します。
+ */
 type EditorFixtures = {
     editorPage: Page;
     appName: string;
@@ -13,6 +21,7 @@ type EditorFixtures = {
 
 const test = base.extend<EditorFixtures>({
     appName: async ({ }, use) => {
+        // 時刻を逆順にした文字列とサフィックスを組み合わせ、重複しにくいアプリ名を作成
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
         await use(`snap-test-app-${uniqueId}`.slice(0, 30));
@@ -21,9 +30,12 @@ const test = base.extend<EditorFixtures>({
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
         const appKey = `snap-key-${uniqueId}`.slice(0, 30);
+
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
+
         await use(editorPage);
+
         await editorPage.close();
         await deleteApp(page, appKey);
     },
@@ -33,44 +45,131 @@ const test = base.extend<EditorFixtures>({
     },
 });
 
-test.describe('エディタ内：スナップショットと自動復旧機能のテスト', () => {
+/**
+ * スナップショット管理および自動復旧機能のテストスイート。
+ */
+test.describe('スナップショットと自動復旧機能の統合テスト', () => {
 
+    /**
+     * 各テスト実行前の共通セットアップ処理。
+     */
     test.beforeEach(async ({ page, context }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
         const domain = testUrl.hostname;
+
+        // 環境変数から認証情報を取得してCookieを設定
         await context.addCookies([
             { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
             { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
             { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
         ]);
+
+        // ダッシュボードページへ移動
         await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
 
-        await setAiCoding(page, true);
+        // ログイン成功を確認
+        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
 
         // 初期ローディング完了を待つ
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
     });
 
+    /**
+     * 各テスト実行後の共通処理。
+     */
     test.afterEach(async ({ page }) => {
-        await setAiCoding(page, false);
+
     });
 
+    /**
+     * 手動でのスナップショット作成、変更、および復元フローを検証します。
+     * （旧 snapshots.spec.ts より）
+     */
+    test('スナップショットの作成と復元ができる', async ({ editorPage, isMobile, appName, editorHelper }) => {
+        const uniqueSnapshotName = `test-snapshot-${Date.now()}`;
+
+        // 手動保存・復元のフロー
+        try {
+            await test.step('1. 新しいスナップショットを保存', async () => {
+                const menuButton = editorPage.locator('#fab-bottom-menu-box');
+                await menuButton.click();
+
+                const platformBottomMenu = editorPage.locator('#platformBottomMenu');
+                await platformBottomMenu.getByText('スナップショット管理').click();
+
+                const snapshotManager = editorPage.locator('snapshot-manager');
+                await expect(snapshotManager.locator('.container')).toBeVisible();
+
+                await snapshotManager.getByRole('button', { name: '新規スナップショット' }).click();
+
+                const saveDialog = editorPage.locator('snapshot-save-dialog');
+                await saveDialog.locator('#snapshot-name').fill(uniqueSnapshotName);
+                await saveDialog.locator('#snapshot-description').fill('E2E Test Snapshot');
+                await saveDialog.getByRole('button', { name: '保存' }).click();
+
+                await expect(saveDialog).toBeHidden();
+                await expect(snapshotManager.locator('.snapshot-item', { hasText: uniqueSnapshotName })).toBeVisible();
+
+                // 管理画面を一度閉じる
+                await snapshotManager.locator('.close-btn').click();
+            });
+
+            await test.step('2. アプリケーションを編集（ボタンを追加）', async () => {
+                await editorHelper.addPage();
+                const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
+                await editorHelper.addComponent('ons-button', contentAreaSelector);
+
+                // プレビュー上にボタンが存在することを確認
+                const previewButton = editorHelper.getPreviewElement('ons-button');
+                await expect(previewButton).toBeVisible();
+            });
+
+            await test.step('3. スナップショットから復元を実行', async () => {
+                const menuButton = editorPage.locator('#fab-bottom-menu-box');
+                await menuButton.click();
+                await editorPage.locator('#platformBottomMenu').getByText('スナップショット管理').click();
+
+                const snapshotManager = editorPage.locator('snapshot-manager');
+                const snapshotItem = snapshotManager.locator('.snapshot-item', { hasText: uniqueSnapshotName });
+                const restoreButton = snapshotItem.getByRole('button', { name: '復元' });
+
+                // ダイアログハンドリングの準備（確認ダイアログと完了アラート）
+                editorPage.once('dialog', async confirmDialog => {
+                    expect(confirmDialog.message()).toContain('現在の編集内容は破棄され');
+                    editorPage.once('dialog', async alertDialog => {
+                        expect(alertDialog.message()).toBe('スナップショットを復元しました。');
+                        await alertDialog.dismiss();
+                    });
+                    await confirmDialog.accept();
+                });
+
+                await restoreButton.click({ noWaitAfter: true });
+                await expect(snapshotManager).toBeHidden();
+            });
+
+            await test.step('4. 復元後の状態確認（追加したボタンが消えていること）', async () => {
+                const previewButton = editorHelper.getPreviewElement('ons-button');
+                await expect(previewButton).toBeHidden();
+            });
+        } finally {
+            // フィクスチャで閉じるため、ここでの明示的な close は省略可能だが、元の構造を維持
+        }
+    });
+
+    /**
+     * 未保存の状態でのリロードによる自動復旧を検証します。
+     */
     test('自動復旧フロー：未保存でのリロード後に「スナップショットから復元」ができるか', async ({ editorPage, editorHelper }) => {
         test.setTimeout(120000);
 
         const testButtonText = 'RECOVERY_TEST_BUTTON';
-        let pageNode: Locator;
-        let buttonNode: Locator;
         let pageNodeId: string;
 
         await test.step('1. データを変更し、保存せずにページを離脱する', async () => {
-            //const { pageNode, buttonNode } = await editorHelper.setupPageWithButton();
             const setup = await editorHelper.setupPageWithButton();
-            pageNode = setup.pageNode;
-            pageNodeId = await pageNode.getAttribute('data-node-id') as string;
-            buttonNode = setup.buttonNode;
+            pageNodeId = await setup.pageNode.getAttribute('data-node-id') as string;
 
-            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.selectNodeInDomTree(setup.buttonNode);
             await editorHelper.openMoveingHandle('right');
 
             // プロパティ変更
@@ -110,76 +209,9 @@ test.describe('エディタ内：スナップショットと自動復旧機能�
         });
     });
 
-    test('手動スナップショット：破壊的な変更をスナップショットで元に戻す', async ({ page, editorPage, editorHelper, appName }) => {
-        // AIエージェントの起動を伴うためタイムアウトを延長
-        test.setTimeout(150000);
-
-        const snapshotName = '破壊的前のスナップショット';
-        let pageId: string;
-
-        await test.step('1. 正常な状態で手動スナップショットを作成', async () => {
-            const setUp = await editorHelper.setupPageWithButton();
-            pageId = await setUp.pageNode.getAttribute('data-node-id') as string;
-
-            // AIエージェント画面を開く
-            await editorPage.locator('#fab-bottom-menu-box').click();
-            await editorPage.locator('#platformBottomMenu').getByText('AIエージェント').click();
-            const agentWindow = editorPage.locator('agent-chat-window');
-            await expect(agentWindow).toBeVisible();
-
-            // 添付メニュー -> スナップショット保存
-            await agentWindow.locator('button[title="添付"]').click();
-            await agentWindow.locator('.attachment-menu button', { hasText: 'スナップショット保存' }).click();
-
-            // 名前を入力して作成
-            const modal = agentWindow.locator('.modal-dialog');
-            await expect(modal).toBeVisible();
-            await modal.locator('#snapshot-name').fill(snapshotName);
-            await modal.getByRole('button', { name: '作成' }).click();
-
-            // 履歴にスナップショットが表示されるのを待つ
-            const snapshotItem = agentWindow.locator(`.snapshot-body:has-text("${snapshotName}")`);
-            await expect(snapshotItem).toBeVisible({ timeout: 30000 });
-
-            // エージェント画面を閉じる
-            await agentWindow.locator('.close-btn').click();
-        });
-
-        await test.step('2. 破壊的な変更を加える（要素の削除）', async () => {
-            const domTree = editorHelper.getDomTree();
-            const buttonNode = domTree.locator('.node[data-node-type="ons-button"]').first();
-
-            // 2回クリックで確実に削除
-            await buttonNode.locator('.clear-icon').click();
-            await buttonNode.locator('.clear-icon').click();
-
-            await expect(buttonNode).toBeHidden();
-        });
-
-        await test.step('3. スナップショット管理画面から復元を実行', async () => {
-            await editorPage.locator('#fab-bottom-menu-box').click();
-            await editorPage.locator('#platformBottomMenu').getByText('スナップショット管理').click();
-
-            const manager = editorPage.locator('snapshot-manager');
-            await expect(manager.locator('h3', { hasText: 'スナップショット管理' })).toBeVisible();
-
-            const item = manager.locator('.snapshot-item', { hasText: snapshotName });
-            await expect(item).toBeVisible();
-
-            // 復元実行
-            editorPage.once('dialog', dialog => dialog.accept());
-            await item.getByRole('button', { name: '復元' }).click();
-
-        });
-
-        await test.step('4. 削除した要素が復活していることを確認', async () => {
-            // 復元対象のページに切り替え
-            await editorHelper.switchTopLevelTemplate(pageId);
-            const domTree = editorHelper.getDomTree();
-            await expect(domTree.locator('.node[data-node-type="ons-button"]')).toBeVisible();
-        });
-    });
-
+    /**
+     * スナップショットの破棄フローを検証します。
+     */
     test('スナップショットの削除と「破棄」フローの検証', async ({ editorPage, editorHelper }) => {
         // --- 事前クリーンアップ（既存データの破棄） ---
         await test.step('0. 事前クリーンアップ', async () => {
@@ -223,19 +255,12 @@ test.describe('エディタ内：スナップショットと自動復旧機能�
             const managerTitle = editorPage.locator('h3', { hasText: 'スナップショット管理' });
             await expect(managerTitle).toBeVisible();
 
+            const listItems = manager.locator('.snapshot-item');
+
             // 検証:
             // 1. リロード前に作成されたはずの「自動保存 - 未保存」などの古いスナップショットは消えていること
             // 2. 仕様により「自動保存 - エディタ読み込み完了」は1つ残っていること
-            // したがって、「保存されているスナップショットはありません」は表示されず、リストが表示される
-
-            const listItems = manager.locator('.snapshot-item');
-
-            // アイテム数が1つだけであることを確認（読み込み完了時の自動保存のみ）
-            // ※環境によっては複数残る可能性もゼロではないため、少なくとも「未保存」系が消えていることを確認する方針でも良いが、
-            //   ここでは「破棄」直後なので1件（初期化時作成）のみと想定する。
             await expect(listItems).toHaveCount(1);
-
-            // 残っている1件が「エディタ読み込み完了」であることを確認
             await expect(listItems.first()).toContainText('自動保存 - エディタ読み込み完了');
         });
     });
