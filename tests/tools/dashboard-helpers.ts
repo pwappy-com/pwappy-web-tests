@@ -47,6 +47,13 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     await page.bringToFront();
     await navigateToTab(page, 'workbench');
 
+    // 念のため残っているアラートを消してから開始 ---
+    const alert = page.locator('alert-component');
+    if (await alert.isVisible()) {
+        await alert.getByRole('button', { name: '閉じる' }).click();
+        await expect(alert).toBeHidden();
+    }
+
     const appRow = page.locator('.app-list tbody tr', { hasText: appKey });
     if (await appRow.count() > 0) {
         await appRow.getByRole('button', { name: '削除' }).click();
@@ -54,8 +61,15 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
         const confirmDialog = page.locator('message-box#delete-confirm');
         await expect(confirmDialog).toBeVisible();
         await confirmDialog.getByRole('button', { name: '削除する' }).click();
+        // --- 処理中が消えるのを待つ ---
         await page.getByText('処理中...').waitFor({ state: 'hidden' });
         await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
+
+        // --- 削除成功後の「削除しました」アラートを閉じる ---
+        if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
+            await alert.getByRole('button', { name: '閉じる' }).click();
+            await expect(alert).toBeHidden();
+        }
     }
 };
 

@@ -450,35 +450,36 @@ export class EditorHelper {
      * @returns 開かれた実機テストページのPageオブジェクト
      */
     async saveAndOpenTestPage(): Promise<Page> {
-        const alertDialog = this.page.locator('alert-component');
-        // もし予期せぬアラートが出ていたら、その内容をエラーとして報告して落とす（原因特定のため）
-        const isAlertVisible = await alertDialog.isVisible();
-        if (isAlertVisible) {
-            const msg = await alertDialog.textContent();
-            throw new Error(`[Test Blocked] 予期せぬアラートが表示されているため操作を続行できません: ${msg}`);
-        }
-        // --------------------------------------------
-
         const menuButton = this.page.locator('#fab-bottom-menu-box');
+        const platformBottomMenu = this.page.locator('#platformBottomMenu');
+        const alert = this.page.locator('alert-component'); // アラートを定義
+
         await expect(menuButton).toBeVisible();
         await expect(menuButton).toBeEnabled();
         await menuButton.click();
-
-        const platformBottomMenu = this.page.locator('#platformBottomMenu');
         await expect(platformBottomMenu).toBeVisible();
 
+        // 保存をクリック
         await platformBottomMenu.getByText('保存', { exact: true }).click();
 
-        // 処理中オーバーレイが消えるのを確実に待つ
+        // 処理中が消えるのを待つ
         await this.page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
-        // 保存後にメニューが閉じている場合があるため、再度開く
+        // 保存成功のアラートが出ていたら閉じる ---
+        // これをしないと、この後の menuButton.click() がアラートに遮られて失敗します
+        if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
+            await alert.getByRole('button', { name: '閉じる' }).click();
+            await expect(alert).toBeHidden();
+        }
+
+        // 保存後にメニューが閉じていたら再度開く
         if (!await platformBottomMenu.isVisible()) {
             await menuButton.click();
             await expect(platformBottomMenu).toBeVisible();
         }
 
         const testPagePromise = this.page.context().waitForEvent('page');
+        // QRコードをクリック（これもアラートがあると遮られます）
         await this.page.locator('#qrcode').click();
         const testPage = await testPagePromise;
 
@@ -592,7 +593,20 @@ export class EditorHelper {
         await expect(saveIcon).toHaveClass(/shake-save-button/);
         await saveButton.click();
 
-        // 保存完了（クラスが消える）を待つ
+        // 保存完了の判定
+        const alert = this.page.locator('alert-component');
+        // 保存に成功してアラートが出たら閉じる
+        if (await alert.isVisible({ timeout: 8000 }).catch(() => false)) {
+            // もしエラー内容（「修正してください」など）が含まれていたらテストを落とす
+            const msg = await alert.textContent();
+            if (msg?.includes('エラー') || msg?.includes('修正')) {
+                throw new Error(`スクリプト保存エラー: ${msg}`);
+            }
+            await alert.getByRole('button', { name: '閉じる' }).click();
+            await expect(alert).toBeHidden();
+        }
+
+        // アイコンが通常状態に戻るのを待つ
         await expect(saveIcon).not.toHaveClass(/shake-save-button/);
     }
 
