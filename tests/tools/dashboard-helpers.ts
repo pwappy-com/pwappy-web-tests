@@ -9,6 +9,13 @@ import { EditorHelper } from './editor-helpers';
  * @param appKey 作成するアプリケーションキー
  */
 export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
+    const alert = page.locator('alert-component');
+    if (await alert.isVisible().catch(() => false)) {
+        console.log('createApp開始前にアラートを検出しました。閉じます。');
+        await alert.getByRole('button', { name: '閉じる' }).click();
+        await expect(alert).toBeHidden();
+    }
+
     await page.getByTitle('アプリケーションの追加').click();
 
     // モーダルウィンドウ自体を取得
