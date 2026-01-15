@@ -17,14 +17,16 @@ type EditorFixtures = {
 const test = base.extend<EditorFixtures>({
     // 各テストでユニークなアプリケーション名を提供するフィクスチャ
     appName: async ({ }, use) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         await use(`test-app-${uniqueId}`.slice(0, 30));
     },
     // アプリ作成からエディタを開くまでを自動化し、テスト終了後に自動でクリーンアップするフィクスチャ
     editorPage: async ({ page, context, appName }, use) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appKey = `test-key-${uniqueId}`.slice(0, 30);
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);

@@ -39,8 +39,9 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
     });
 
     test('WB-APP-NEW: アプリケーションの新規作成とバリデーション', async ({ page }) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appName = `新規作成テスト-${uniqueId}`.slice(0, 30);
         const appKey = `new-app-${uniqueId}`.slice(0, 30);
         const existingAppName = `既存アプリ-${uniqueId}`.slice(0, 30);
@@ -98,8 +99,9 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
     });
 
     test('WB-APP-EDIT & DEL: アプリケーションの編集と削除', async ({ page }) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appName = `編集削除テスト-${uniqueId}`.slice(0, 30);
         const appKey = `edit-del-app-${uniqueId}`.slice(0, 30);
         const editedAppName = `${appName}-編集後`.slice(0, 30);
@@ -204,8 +206,9 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
     // });
 
     test('WB-APP-EDIT (Abnormal): 編集時のバリデーションをテストする', async ({ page }) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appName = `編集バリデーションテスト-${uniqueId}`.slice(0, 30);
         const appKey = `edit-validation-${uniqueId}`.slice(0, 30);
 
@@ -302,8 +305,9 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
     // });
 
     test('WB-APP-EDIT-010: 編集時にキーが他のアプリと重複するとエラーになる', async ({ page }) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appA_Name = `アプリA-${uniqueId}`.slice(0, 30);
         const appA_Key = `app-a-${uniqueId}`.slice(0, 30);
         const appB_Name = `アプリB-${uniqueId}`.slice(0, 30);
@@ -348,8 +352,9 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
     });
 
     test('WB-APP-DEL-004: アプリケーション削除をキャンセルする', async ({ page }) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appName = `削除キャンセルテスト-${uniqueId}`.slice(0, 30);
         const appKey = `del-cancel-test-${uniqueId}`.slice(0, 30);
 

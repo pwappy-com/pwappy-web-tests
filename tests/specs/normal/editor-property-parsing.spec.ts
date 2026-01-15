@@ -19,13 +19,15 @@ type EditorFixtures = {
 const test = base.extend<EditorFixtures>({
     appName: async ({ }, use) => {
         // 各テストでユニークなアプリケーション名とキーを生成
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         await use(`test-app-prop-parse-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appKey = `test-key-prop-parse-${uniqueId}`.slice(0, 30);
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);

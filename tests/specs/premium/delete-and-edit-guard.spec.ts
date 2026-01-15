@@ -39,8 +39,9 @@ test.describe('削除・編集のガード条件テスト', () => {
      * アプリ本体とバージョンの編集・削除ボタンが期待通りに非活性化されることをテストします。
      */
     test('公開準備中および公開中のアプリ/バージョンは編集・削除できない', async ({ page }) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appName = `ガード条件テスト-${uniqueId}`.slice(0, 30);
         const appKey = `guard-test-${uniqueId}`.slice(0, 30);
         const version = '1.0.0';

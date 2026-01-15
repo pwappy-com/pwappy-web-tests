@@ -22,8 +22,9 @@ const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
  */
 const test = base.extend<{ appName: string }>({
     appName: async ({ }, use) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         await use(`ai-snap-test-app-${uniqueId}`.slice(0, 30));
     },
 });
@@ -61,8 +62,9 @@ test.describe('AIエージェントとスナップショット機能の統合テ
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
 
         // 実行ごとにユニークなappKeyを生成
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         appKey = `ai-snap-key-${uniqueId}`.slice(0, 30);
     });
 

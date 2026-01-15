@@ -96,8 +96,9 @@ test.describe('公開管理 E2Eシナリオ', () => {
     });
 
     test('公開状態の遷移とダウンロード機能をテストする', async ({ page }) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appName = (`公開機能テスト-${uniqueId}`).slice(0, 30);
         const appKey = (`publish-test-${uniqueId}`).slice(0, 30);
         const version = '1.0.0';
@@ -154,8 +155,9 @@ test.describe('公開管理 E2Eシナリオ', () => {
     });
 
     test('GeminiAPIキーを登録した際の公開審査で使うPPをテストする', async ({ page }) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appName = (`審査PPテスト-${uniqueId}`).slice(0, 30);
         const appKey = (`mod-test-${uniqueId}`).slice(0, 30);
         const version = '1.0.0';
@@ -216,8 +218,9 @@ test.describe('公開管理 E2Eシナリオ', () => {
     });
 
     test('無効なGeminiAPIキーを登録した際のテストする', async ({ page }) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appName = (`審査GemNGテスト-${uniqueId}`).slice(0, 30);
         const appKey = (`mod-gem-ng-test-${uniqueId}`).slice(0, 30);
         const version = '1.0.0';
@@ -280,8 +283,9 @@ test.describe('公開管理 E2Eシナリオ', () => {
     });
 
     test('AIコーディングの使用ポイントをテストする', async ({ page, context, isMobile }) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appName = (`AIコードテスト-${uniqueId}`).slice(0, 30);
         const appKey = (`ai-code-test-${uniqueId}`).slice(0, 30);
         const version = '1.0.0';

@@ -22,13 +22,15 @@ type EditorFixtures = {
 const test = base.extend<EditorFixtures>({
     appName: async ({ }, use) => {
         // 時刻を逆順にした文字列とサフィックスを組み合わせ、重複しにくいアプリ名を作成
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         await use(`snap-test-app-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
+        const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appKey = `snap-key-${uniqueId}`.slice(0, 30);
 
         await createApp(page, appName, appKey);
