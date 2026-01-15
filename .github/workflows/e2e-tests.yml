@@ -147,20 +147,25 @@ jobs:
             if [ "${{ github.event.schedule }}" == "0 0 * * *" ]; then
               echo "SUITE_NAME=premium" >> $GITHUB_ENV
               echo "TEST_PATH=tests/specs/premium" >> $GITHUB_ENV
+              echo "WORKERS=1" >> $GITHUB_ENV  # プレミアムは直列
             else
               # 3時間ごとのスケジュール (0 1,4,7,10,13,20,23 * * *)
               echo "SUITE_NAME=normal" >> $GITHUB_ENV
               echo "TEST_PATH=tests/specs/normal" >> $GITHUB_ENV
+              echo "WORKERS=4" >> $GITHUB_ENV  # ノーマルは並列
             fi
           elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             SUITE="${{ github.event.inputs.test_suite }}"
             echo "SUITE_NAME=$SUITE" >> $GITHUB_ENV
             if [ "$SUITE" == "normal" ]; then
               echo "TEST_PATH=tests/specs/normal" >> $GITHUB_ENV
+              echo "WORKERS=4" >> $GITHUB_ENV
             elif [ "$SUITE" == "premium" ]; then
               echo "TEST_PATH=tests/specs/premium" >> $GITHUB_ENV
+              echo "WORKERS=1" >> $GITHUB_ENV
             else
               echo "TEST_PATH=" >> $GITHUB_ENV
+              echo "WORKERS=1" >> $GITHUB_ENV
             fi
           fi
       
@@ -185,7 +190,7 @@ jobs:
         shell: bash
         # '--project' オプションで、実行するブラウザを明示的に指定する
         run: |
-          npx playwright test ${{ env.TEST_PATH }} --project=${{ matrix.browser }} --workers=1
+          npx playwright test ${{ env.TEST_PATH }} --project=${{ matrix.browser }} --workers=${{ env.WORKERS }}
           echo "PLAYWRIGHT_EXIT_CODE=$?" >> $GITHUB_OUTPUT
         # テストが失敗してもワークフローを中断せず、後続のステップ（アーティファクトのアップロードなど）を実行する
         # continue-on-error: true
