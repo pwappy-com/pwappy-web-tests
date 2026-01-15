@@ -89,6 +89,10 @@ jobs:
     # マトリックスで指定されたOSのランナーでジョブを実行する
     runs-on: ${{ matrix.os }}
     
+    # Playwrightのブラウザインストール先を固定し、OS間のパス不整合を解消
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -108,24 +112,12 @@ jobs:
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Get Playwright cache directory
-        id: playwright-cache-dir
-        shell: bash
-        # OSごとに異なるPlaywrightのキャッシュディレクトリパスを取得
-        run: |
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            echo "dir=$HOME/.cache/ms-playwright" >> $GITHUB_OUTPUT
-          elif [ "$RUNNER_OS" == "Windows" ]; then
-            echo "dir=$HOME/AppData/Local/ms-playwright" >> $GITHUB_OUTPUT
-          elif [ "$RUNNER_OS" == "macOS" ]; then
-            echo "dir=$HOME/Library/Caches/ms-playwright" >> $GITHUB_OUTPUT
-          fi
 
       - name: Cache Playwright browsers
         id: cache-playwright-browsers
         uses: actions/cache@v4
         with:
-          path: ${{ steps.playwright-cache-dir.outputs.dir }}
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           # キー: OS-ブラウザ-依存関係ハッシュ-日付
           key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
           # 復元キー: まず同じ日のキャッシュを探し、なければ前日以前の最新版を探す
@@ -232,6 +224,9 @@ jobs:
     # クリーンアップは特定の環境で一度だけ実行すればよいため、ubuntu-latestに固定
     runs-on: ubuntu-latest
 
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
+
     steps:
       - name: Checkout repository for cleanup
         uses: actions/checkout@v4
@@ -250,17 +245,12 @@ jobs:
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         shell: bash
 
-      - name: Get Playwright cache directory for cleanup
-        id: playwright-cache-dir-cleanup
-        shell: bash
-        # cleanupジョブはubuntu-latest固定のためLinuxのパスを取得
-        run: echo "dir=$HOME/.cache/ms-playwright" >> $GITHUB_OUTPUT
 
       - name: Cache Playwright browsers for cleanup
         id: cache-playwright-browsers-cleanup
         uses: actions/cache@v4
         with:
-          path: ${{ steps.playwright-cache-dir-cleanup.outputs.dir }}
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           # cleanupジョブはchromium固定
           key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
           restore-keys: |
