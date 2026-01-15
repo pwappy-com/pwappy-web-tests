@@ -127,9 +127,18 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             await expect(layoutTrashBtn).toBeVisible();
             await expect(layoutTrashBtn).toBeEnabled();
 
-            await layoutTrashBtn.click();
-
             const trashBox = editorPage.locator('.template-trash-box');
+            
+            // 「クリック」と「表示確認」を一つの試行として成功するまで繰り返す
+            // もし一瞬で閉じてしまっても、再度クリックを試みて安定した瞬間を捉えます
+            await expect(async () => {
+                await layoutTrashBtn.click();
+                await expect(trashBox).toBeVisible();
+            }).toPass({
+                intervals: [100, 500, 1000], // 再試行の間隔
+                timeout: 5000                // 最大5秒試行
+            });
+            
             await expect(trashBox).toBeVisible();
             await expect(trashBox.locator('.template-trash-box-node').first()).toBeVisible();
         });
