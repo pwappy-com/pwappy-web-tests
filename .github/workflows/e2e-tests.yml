@@ -147,7 +147,7 @@ jobs:
         shell: bash
         # OS並列で実行。ワーカー数はリソース競合を防ぐため2に設定。
         run: |
-          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --workers=4
+          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --workers=2
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }} 
