@@ -16,16 +16,17 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
     // 各テストの実行前に認証情報を設定し、ダッシュボードの初期ページに遷移します。
     test.beforeEach(async ({ page, context }) => {
-        // ブラウザ内のコンソールログ（エラー・警告）をターミナルに出力する
-        page.on('console', msg => {
-            if (msg.type() === 'error' || msg.type() === 'warning') {
-                console.log(`[Browser ${msg.type()}]: ${msg.text()}`);
-            }
-        });
-        // 未処理の例外もキャッチする
-        page.on('pageerror', exception => {
-            console.log(`[Browser Exception]: ${exception.message}`);
-        });
+        /** エラー表示(デバッグ用) */
+        // // ブラウザ内のコンソールログ（エラー・警告）をターミナルに出力する
+        // page.on('console', msg => {
+        //     if (msg.type() === 'error' || msg.type() === 'warning') {
+        //         console.log(`[Browser ${msg.type()}]: ${msg.text()}`);
+        //     }
+        // });
+        // // 未処理の例外もキャッチする
+        // page.on('pageerror', exception => {
+        //     console.log(`[Browser Exception]: ${exception.message}`);
+        // });
 
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
         const domain = testUrl.hostname;
