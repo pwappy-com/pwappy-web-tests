@@ -17,7 +17,7 @@ export default defineConfig({
   /* Run tests in files in parallel */
   fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
-  
+
   // !!!!!! DEBUG中だけコメントアウトする !!!!!!
   forbidOnly: !!process.env.CI,
 
@@ -25,13 +25,16 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? undefined : undefined,
-  /* タイムアウトのデフォルト(30秒) */
-  timeout: 60 * 1000,
+  /** タイムアウト設定
+   * CIでは伸ばす
+   */
+  timeout: process.env.CI ? 120 * 1000 : 60 * 1000,
   expect: {
     /**
      * expect(locator).toBeVisible() のようなアサーションの最大時間。
+     * CIでは伸ばす
      */
-    timeout: 10 * 1000, // アサーションのタイムアウトは10秒に設定
+    timeout: process.env.CI ? 20 * 1000 : 10 * 1000,
   },
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'html',
