@@ -5,7 +5,7 @@ name: Multi-OS E2E Tests
 on:
   # 定期実行 (schedule)
   schedule:
-    # UTCの3時間毎に実行。ただし、UTC 0時 (JST 9時) および UTC 16-19時 (JST 1-4時台) は除外 (Normalテスト用)
+    # UTCの3時間毎に実行。JST 10時, 13時, 16時, 19時, 22時, 翌5時, 8時に実行 (Normalテスト用)
     - cron: '0 1,4,7,10,13,20,23 * * *'
     # UTCの毎日0時0分 (JST 9時) に実行 (Premiumテスト用)
     - cron: '0 0 * * *'
@@ -37,20 +37,20 @@ on:
 # ワークフローを構成するジョブを定義
 jobs:
   # ===================================================================
-  # ジョブ 1: 実行するテストのマトリックスを動的に準備する
+  # ジョブ 1: 実行するテストのマトリックスとフラグを動的に準備する
   # ===================================================================
-  # ワークフローのトリガー条件に応じて、実行すべきOSとブラウザの組み合わせを決定し、
-  # 後続のテストジョブに引き渡します。
   prepare-matrix:
     runs-on: ubuntu-latest
-    # このジョブの出力を定義。後続のジョブが 'needs.prepare-matrix.outputs.matrix' で参照可能になる。
+    # このジョブの出力を定義。後続のジョブの条件分岐やマトリックスとして使用。
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      run_normal: ${{ steps.get_suite.outputs.run_normal }}
+      run_premium: ${{ steps.get_suite.outputs.run_premium }}
     steps:
       - name: Determine test matrix
         id: set-matrix
         run: |
-          # スケジュール実行か、手動実行で 'all' が選択された場合は、すべてのOSでテストする
+          # 全OS実行か個別OS実行かに基づいてマトリックスJSONを生成
           if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event.inputs.os }}" == "all" ]]; then
             echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium"}, {"os": "windows-latest", "browser": "chromium"}, {"os": "macos-latest", "browser": "webkit"}]' >> $GITHUB_OUTPUT
           else
@@ -68,31 +68,38 @@ jobs:
             esac
           fi
 
+      - name: Determine Test Suite Flags
+        id: get_suite
+        shell: bash
+        run: |
+          # 実行すべきスイート（Normal/Premium）をフラグとして出力
+          if [ "${{ github.event_name }}" == "schedule" ]; then
+            if [ "${{ github.event.schedule }}" == "0 0 * * *" ]; then
+              echo "run_premium=true" >> $GITHUB_OUTPUT
+            else
+              echo "run_normal=true" >> $GITHUB_OUTPUT
+            fi
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            SUITE="${{ github.event.inputs.test_suite }}"
+            if [ "$SUITE" == "normal" ] || [ "$SUITE" == "all" ]; then echo "run_normal=true" >> $GITHUB_OUTPUT; fi
+            if [ "$SUITE" == "premium" ] || [ "$SUITE" == "all" ]; then echo "run_premium=true" >> $GITHUB_OUTPUT; fi
+          fi
+
   # ===================================================================
-  # ジョブ 2: E2Eテストの実行
+  # ジョブ 2: Normalテストの実行 (OS間並列 / 内部2ワーカー)
   # ===================================================================
-  # 'prepare-matrix' ジョブの結果に基づき、指定されたOSとブラウザの組み合わせでテストを実行します。
-  e2e-test:
-    # 'prepare-matrix' ジョブが完了してからこのジョブを開始する
+  e2e-normal:
     needs: prepare-matrix
-    # 'prepare-matrix' がマトリックスを生成した場合のみジョブを実行する (エラー防止)
-    if: ${{ needs.prepare-matrix.outputs.matrix != '' }}
+    if: ${{ needs.prepare-matrix.outputs.run_normal == 'true' }}
     strategy:
-      # 1つのOSでテストが失敗しても、他のOSのテストは中断せずに続行する
       fail-fast: false
-      # 同時に実行するジョブの数を1に制限し、OS間で直列実行を実現する
-      max-parallel: 1
-      # 'prepare-matrix' が出力したJSON文字列を解釈し、動的にマトリックスを構築する
+      # 同時に実行するジョブの数を1に制限し、OS間で直列実行を実現する(3でubuntu,window,macで並列)
+      max-parallel: 3
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
-    
-    # マトリックスで指定されたOSのランナーでジョブを実行する
     runs-on: ${{ matrix.os }}
-    
-    # Playwrightのブラウザインストール先を固定し、OS間のパス不整合を解消
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -108,86 +115,41 @@ jobs:
 
       - name: Get daily cache key
         id: get-date
-        # 1日ごとのキャッシュキーを生成するために現在の日付を取得
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         shell: bash
-
 
       - name: Cache Playwright browsers
         id: cache-playwright-browsers
         uses: actions/cache@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          # キー: OS-ブラウザ-依存関係ハッシュ-日付
+          # 日次単位のキーでキャッシュを管理。
           key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
-          # 復元キー: まず同じ日のキャッシュを探し、なければ前日以前の最新版を探す
           restore-keys: |
             ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-
             ${{ runner.os }}-playwright-${{ matrix.browser }}-
 
       - name: Install Playwright Browsers
-        # キャッシュが復元された場合は、このインストールステップをスキップする
         if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
-      # 実行するテストスイートのパスを決定する
-      - name: Determine Test Suite
-        id: get_suite
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" == "schedule" ]; then
-            if [ "${{ github.event.schedule }}" == "0 0 * * *" ]; then
-              echo "SUITE_NAME=premium" >> $GITHUB_ENV
-              echo "TEST_PATH=tests/specs/premium" >> $GITHUB_ENV
-              echo "WORKERS=1" >> $GITHUB_ENV  # プレミアムは直列
-            else
-              # 3時間ごとのスケジュール (0 1,4,7,10,13,20,23 * * *)
-              echo "SUITE_NAME=normal" >> $GITHUB_ENV
-              echo "TEST_PATH=tests/specs/normal" >> $GITHUB_ENV
-              echo "WORKERS=2" >> $GITHUB_ENV  # ノーマルは並列
-            fi
-          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            SUITE="${{ github.event.inputs.test_suite }}"
-            echo "SUITE_NAME=$SUITE" >> $GITHUB_ENV
-            if [ "$SUITE" == "normal" ]; then
-              echo "TEST_PATH=tests/specs/normal" >> $GITHUB_ENV
-              echo "WORKERS=2" >> $GITHUB_ENV
-            elif [ "$SUITE" == "premium" ]; then
-              echo "TEST_PATH=tests/specs/premium" >> $GITHUB_ENV
-              echo "WORKERS=1" >> $GITHUB_ENV
-            else
-              echo "TEST_PATH=" >> $GITHUB_ENV
-              echo "WORKERS=1" >> $GITHUB_ENV
-            fi
-          fi
-      
-      # OSごとのユニークな接尾辞を環境変数に設定
-      - name: Set short OS name
+      - name: Set OS Short Name
         shell: bash
         run: |
           OS_NAME="${{ matrix.os }}"
-          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
-            echo "OS_SHORT_NAME=ubuntu" >> $GITHUB_ENV
-          elif [[ "$OS_NAME" == "windows-latest" ]]; then
-            echo "OS_SHORT_NAME=win" >> $GITHUB_ENV
-          elif [[ "$OS_NAME" == "macos-latest" ]]; then
-            echo "OS_SHORT_NAME=macos" >> $GITHUB_ENV
-          else
-            echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV
-          fi
+          if [[ "$OS_NAME" == "ubuntu-latest" ]];then echo "OS_SHORT_NAME=ubuntu" >> $GITHUB_ENV;
+          elif [[ "$OS_NAME" == "windows-latest" ]]; then echo "OS_SHORT_NAME=win" >> $GITHUB_ENV;
+          elif [[ "$OS_NAME" == "macos-latest" ]]; then echo "OS_SHORT_NAME=macos" >> $GITHUB_ENV;
+          else echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV; fi
 
-      - name: Run Playwright tests for ${{ matrix.browser }} on ${{ matrix.os }}
-        id: run_playwright_tests
-        # すべてのOSでbashを使用するようにシェルを明示的に指定
+      - name: Run Normal E2E Tests
+        id: run_tests
         shell: bash
-        # '--project' オプションで、実行するブラウザを明示的に指定する
+        # OS並列で実行。ワーカー数はリソース競合を防ぐため2に設定。
         run: |
-          npx playwright test ${{ env.TEST_PATH }} --project=${{ matrix.browser }} --workers=${{ env.WORKERS }}
-          echo "PLAYWRIGHT_EXIT_CODE=$?" >> $GITHUB_OUTPUT
-        # テストが失敗してもワークフローを中断せず、後続のステップ（アーティファクトのアップロードなど）を実行する
-        # continue-on-error: true
+          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --workers=2
+          echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
-          # DEBUG: pw:api
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }} 
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
@@ -196,37 +158,117 @@ jobs:
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
       - name: Upload Test Results
-        # 先行ステップの成否にかかわらず、常に実行する
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          # アーティファクト名を一意にして、どのテスト結果か分かりやすくする
-          name: playwright-report-${{ matrix.os }}-${{ matrix.browser }}-${{ env.SUITE_NAME }}-${{ github.run_id }}
+          name: playwright-report-normal-${{ matrix.os }}-${{ matrix.browser }}-${{ github.run_id }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
-      
-      - name: Mark Job as Failed if Playwright Tests Failed
-        # Playwright_EXIT_CODEが0でなければ（つまり、テストが失敗していたら）このステップを実行
-        if: ${{ steps.run_playwright_tests.outputs.PLAYWRIGHT_EXIT_CODE != '0' }}
-        run: |
-          echo "Playwright tests reported failures. Marking this job instance as failed."
-          exit 1
-  # ===================================================================
-  # ジョブ 3: クリーンアップ
-  # ===================================================================
-  # すべてのテストジョブが完了した後に、1回だけ実行される後片付け用のジョブです。
-  cleanup:
-    # 'e2e-test' のすべてのマトリックスジョブが完了するのを待つ
-    needs: e2e-test
-    # 'e2e-test' が失敗した場合でも、このクリーンアップジョブは必ず実行する
-    if: always()
-    # クリーンアップは特定の環境で一度だけ実行すればよいため、ubuntu-latestに固定
-    runs-on: ubuntu-latest
 
+      - name: Mark Job Failure
+        if: steps.run_tests.outputs.EXIT_CODE != '0'
+        run: exit 1
+
+  # ===================================================================
+  # ジョブ 3: Premiumテストの実行 (OS間直列 / 内部1ワーカー)
+  # ===================================================================
+  e2e-premium:
+    needs: prepare-matrix
+    if: ${{ needs.prepare-matrix.outputs.run_premium == 'true' }}
+    strategy:
+      fail-fast: false
+      # ポイント消費の重複や競合を防ぐため、OS間でも1つずつ順番に実行する。
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Get daily cache key
+        id: get-date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Cache Playwright browsers
+        id: cache-playwright-browsers
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-
+            ${{ runner.os }}-playwright-${{ matrix.browser }}-
+
+      - name: Install Playwright Browsers
+        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Set OS Short Name
+        shell: bash
+        run: |
+          OS_NAME="${{ matrix.os }}"
+          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
+            echo "OS_SHORT_NAME=ubuntu" >> $GITHUB_ENV;
+          elif [[ "$OS_NAME" == "windows-latest" ]]; then
+            echo "OS_SHORT_NAME=win" >> $GITHUB_ENV;
+          elif [[ "$OS_NAME" == "macos-latest" ]]; then
+            echo "OS_SHORT_NAME=macos" >> $GITHUB_ENV;
+          else
+            echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV;
+          fi
+
+      - name: Run Premium E2E Tests
+        id: run_tests
+        shell: bash
+        # 最も安定した直列実行(1ワーカー)で実行。
+        run: |
+          npx playwright test tests/specs/premium --project=${{ matrix.browser }} --workers=1
+          echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
+        env:
+          TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }} 
+          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
+          PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
+          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
+          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
+          TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-premium-${{ matrix.os }}-${{ matrix.browser }}-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Mark Job Failure
+        if: steps.run_tests.outputs.EXIT_CODE != '0'
+        run: exit 1
+
+  # ===================================================================
+  # ジョブ 4: クリーンアップ (全テスト完了後に実行)
+  # ===================================================================
+  cleanup:
+    # NormalまたはPremiumいずれかの実行が終わった後、常に呼び出す。
+    needs: [e2e-normal, e2e-premium]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
       - name: Checkout repository for cleanup
         uses: actions/checkout@v4
@@ -245,20 +287,18 @@ jobs:
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         shell: bash
 
-
       - name: Cache Playwright browsers for cleanup
         id: cache-playwright-browsers-cleanup
         uses: actions/cache@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          # cleanupジョブはchromium固定
+          # cleanupジョブはchromium固定のキャッシュを使用
           key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
           restore-keys: |
             ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}-
             ${{ runner.os }}-playwright-chromium-
 
       - name: Install Playwright Browsers
-        # キャッシュが復元された場合は、このインストールステップをスキップする
         if: steps.cache-playwright-browsers-cleanup.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
 
@@ -272,8 +312,11 @@ jobs:
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
       - name: Check upstream job status
-        # 先行するe2e-testジョブの結果が 'failure' だったら
-        if: needs.e2e-test.result == 'failure'
+        # 先行するe2e-normalまたはe2e-premiumの結果を確認。
+        # 実行されたジョブがいずれか一方でも失敗（failure）していたら、このジョブも失敗させる。
+        if: |
+          (needs.e2e-normal.result == 'failure') || 
+          (needs.e2e-premium.result == 'failure')
         run: |
-          echo "Upstream e2e-test job failed. Propagating failure status."
-          exit 1 # このジョブを失敗させる
+          echo "One or more upstream test jobs reported failure. Propagating status."
+          exit 1
