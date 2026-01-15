@@ -125,7 +125,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await modal.getByRole('button', { name: '保存' }).click();
 
             // 編集が反映され、一覧の表示が更新されることを確認します。
-            await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
+            await page.getByText('処理中...').waitFor({ state: 'hidden' });
+            await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
             await expectAppVisibility(page, editedAppName, true);
             await expectAppVisibility(page, appName, false);
         });
@@ -135,76 +136,6 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await expectAppVisibility(page, editedAppName, false);
         });
     });
-
-    // -----------------------------------------
-    // アーカイブと復元はpremiumに移動
-    // -----------------------------------------
-    // test('WB-APP-ARC & AR-APP-REST: アプリケーションのアーカイブと復元', async ({ page }) => {
-    //     const timestamp = Date.now().toString();
-    //     const appName = `アーカイブテスト-${timestamp}`.slice(0, 30);
-    //     const appKey = `archive-app-${timestamp}`.slice(0, 30);
-
-    //     await test.step('セットアップ: アーカイブ対象のアプリを作成', async () => {
-    //         await createApp(page, appName, appKey);
-    //         await expectAppVisibility(page, appName, true);
-    //     });
-
-    //     await test.step('テスト: アプリケーションをアーカイブする', async () => {
-    //         const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-    //         await appRow.getByRole('button', { name: 'アーカイブ' }).click();
-
-    //         // アーカイブ確認ダイアログで実行します。
-    //         const confirmDialog = page.locator('message-box#archive-confirm');
-    //         await expect(confirmDialog).toBeVisible();
-    //         await confirmDialog.getByRole('button', { name: 'アーカイブ' }).click();
-
-    //         await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
-
-    //         // 成功メッセージが表示され、ワークベンチの一覧から消えることを確認します。
-    //         const alertDialog = page.locator('alert-component');
-    //         await expect(alertDialog).toBeVisible();
-    //         await expect(alertDialog).toContainText(`アプリ「${appKey}」をアーカイブしました`);
-    //         await alertDialog.getByRole('button', { name: '閉じる' }).click();
-
-    //         await expectAppVisibility(page, appName, false);
-    //     });
-
-    //     await test.step('テスト: アーカイブタブで表示されることを確認', async () => {
-    //         await navigateToTab(page, 'archive');
-    //         await expectAppVisibility(page, appName, true);
-    //     });
-
-    //     await test.step('テスト: アーカイブから復元する', async () => {
-    //         await navigateToTab(page, 'archive');
-
-    //         const archiveRow = page.locator('.app-list tbody tr', { hasText: appName });
-    //         await archiveRow.getByRole('button', { name: 'ワークベンチに復元' }).click();
-
-    //         // 復元確認ダイアログで実行します。
-    //         const confirmDialog = page.locator('message-box#restore-confirm');
-    //         await expect(confirmDialog).toBeVisible();
-    //         await confirmDialog.getByRole('button', { name: '復元' }).click();
-
-    //         await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
-
-    //         // 成功メッセージが表示されることを確認します。
-    //         const alertDialog = page.locator('alert-component');
-    //         await expect(alertDialog).toBeVisible();
-    //         await expect(alertDialog).toContainText(`アプリ「${appKey}」をアーカイブからワークベンチに復元しました`);
-    //         await alertDialog.getByRole('button', { name: '閉じる' }).click();
-
-    //         // アーカイブタブの一覧から消えることを確認します。
-    //         await navigateToTab(page, 'archive');
-    //         await expectAppVisibility(page, appName, false);
-    //     });
-
-    //     await test.step('クリーンアップ: 復元後、ワークベンチで削除する', async () => {
-    //         await navigateToTab(page, 'workbench');
-    //         await expectAppVisibility(page, appName, true);
-    //         await deleteApp(page, appName);
-    //         await expectAppVisibility(page, appName, false);
-    //     });
-    // });
 
     test('WB-APP-EDIT (Abnormal): 編集時のバリデーションをテストする', async ({ page }) => {
         const workerIndex = test.info().workerIndex;

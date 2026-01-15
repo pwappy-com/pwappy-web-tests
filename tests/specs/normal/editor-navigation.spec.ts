@@ -234,7 +234,6 @@ test.describe('エディタ内機能のテスト', () => {
             await editorHelper.selectNodeInDomTree(buttonNode);
             await editorHelper.openAttributeEditor();
             await editorHelper.addAttributeDefinition({ name: attrName, template: 'input[text]', scope: 'tag' });
-            //await editorPage.locator('property-container').getByTitle('属性を編集').click(); // モーダルを閉じる
         });
 
         await test.step('検証: 属性の値の変更、空文字設定、クリアができること', async () => {
