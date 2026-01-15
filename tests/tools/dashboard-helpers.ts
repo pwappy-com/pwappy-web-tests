@@ -291,6 +291,7 @@ export async function expectVersionVisibility(page: Page, version: string, isVis
 export async function addVersion(page: Page, versionName: string): Promise<void> {
     await page.getByTitle('バージョンの追加').click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
     const modal = page.locator('dashboard-modal-window#versionModal');
     await expect(modal.getByRole('heading', { name: 'バージョンの追加' })).toBeVisible();
 
@@ -337,6 +338,7 @@ export async function editVersion(page: Page, oldVersion: string, newVersion: st
     const versionRow = page.locator('.version-list tbody tr', { hasText: oldVersion });
     await versionRow.getByRole('button', { name: '編集' }).click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
 
     const modal = page.locator('dashboard-modal-window#versionModal');
     await expect(modal.getByRole('heading', { name: 'バージョンの編集' })).toBeVisible();

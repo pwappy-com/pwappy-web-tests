@@ -450,6 +450,15 @@ export class EditorHelper {
      * @returns 開かれた実機テストページのPageオブジェクト
      */
     async saveAndOpenTestPage(): Promise<Page> {
+        const alertDialog = this.page.locator('alert-component');
+        // もし予期せぬアラートが出ていたら、その内容をエラーとして報告して落とす（原因特定のため）
+        const isAlertVisible = await alertDialog.isVisible();
+        if (isAlertVisible) {
+            const msg = await alertDialog.textContent();
+            throw new Error(`[Test Blocked] 予期せぬアラートが表示されているため操作を続行できません: ${msg}`);
+        }
+        // --------------------------------------------
+
         const menuButton = this.page.locator('#fab-bottom-menu-box');
         await expect(menuButton).toBeVisible();
         await expect(menuButton).toBeEnabled();
@@ -459,10 +468,15 @@ export class EditorHelper {
         await expect(platformBottomMenu).toBeVisible();
 
         await platformBottomMenu.getByText('保存', { exact: true }).click();
-        await this.page.waitForTimeout(500);
 
-        await menuButton.click();
-        await expect(platformBottomMenu).toBeVisible();
+        // 処理中オーバーレイが消えるのを確実に待つ
+        await this.page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
+
+        // 保存後にメニューが閉じている場合があるため、再度開く
+        if (!await platformBottomMenu.isVisible()) {
+            await menuButton.click();
+            await expect(platformBottomMenu).toBeVisible();
+        }
 
         const testPagePromise = this.page.context().waitForEvent('page');
         await this.page.locator('#qrcode').click();
@@ -557,31 +571,29 @@ export class EditorHelper {
 
         const viewLines = monacoEditor.locator('.view-lines');
         await expect(viewLines).toBeVisible();
+
+        // 確実にフォーカスを当てるため、1行目をクリック
         const firstLine = viewLines.locator('.view-line').first();
         await firstLine.click();
+
+        // 全選択して削除
         await this.page.keyboard.press('ControlOrMeta+A');
         await this.page.keyboard.press('Delete');
 
-        const browserName = this.page.context().browser()?.browserType().name();
-
-        if (browserName === 'chromium' || browserName === 'webkit') {
-            await monacoEditor.locator('textarea').fill(scriptContent);
-        } else if (browserName === 'firefox') {
-            const viewLine = monacoEditor.locator('.view-line').first();
-            await expect(viewLine).toBeVisible();
-            await viewLine.pressSequentially(scriptContent);
-        } else {
-            console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
-            const viewLine = monacoEditor.locator('.view-line').first();
-            await expect(viewLine).toBeVisible();
-            await viewLine.pressSequentially(scriptContent);
-        }
+        // WebKit/Windowsでのクラッシュを防ぐため fill ではなく pressSequentially を使用
+        // 1文字 10ms のディレイを入れることでブラウザプロセスの過負荷を防ぎます
+        await this.page.keyboard.type(scriptContent, { delay: 10 });
+        // ------------------------------------
 
         const saveButton = scriptContainer.getByTitle('スクリプトの保存');
         const saveIcon = saveButton.locator('i');
-        await expect(saveIcon).toHaveAttribute("class", "fa-solid fa-floppy-disk shake-save-button");
+
+        // 保存前に「変更あり」のクラス（shake-save-button）が付くのを待つ
+        await expect(saveIcon).toHaveClass(/shake-save-button/);
         await saveButton.click();
-        await expect(saveIcon).toHaveAttribute("class", "fa-solid fa-floppy-disk");
+
+        // 保存完了（クラスが消える）を待つ
+        await expect(saveIcon).not.toHaveClass(/shake-save-button/);
     }
 
     /**
