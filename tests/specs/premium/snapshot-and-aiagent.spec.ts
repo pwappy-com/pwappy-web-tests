@@ -28,15 +28,16 @@ const test = base.extend<{ appName: string }>({
     },
 });
 
+test.describe.configure({ mode: 'serial' });
+
 /**
  * AIエージェント機能およびスナップショット管理機能の統合テストスイート。
  * 
  * 重要: 
  * AI機能の有効化/無効化やAPIキーの設定はダッシュボード上のグローバルな設定を操作するため、
  * 「設定変更の完了後にエディタを開く」という順序を厳守する必要があります。
- * また、並列実行による状態の不整合を防ぐため .serial を使用します。
  */
-test.describe.serial('AIエージェントとスナップショット機能の統合テスト', () => {
+test.describe('AIエージェントとスナップショット機能の統合テスト', () => {
     let appKey: string;
 
     /**
