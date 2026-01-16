@@ -37,32 +37,53 @@ export class EditorHelper {
      * 常にクリーンな状態から開始したいため、検出した場合はすべて破棄します。
      */
     async handleSnapshotRestoreDialog(): Promise<void> {
-        await test.step('スナップショット復元ダイアログのチェック', async () => {
+        await test.step('スナップショット復元ダイアログのチェックとクリーンアップ', async () => {
+            // 1. まずローディングオーバーレイが完全に消えるのを待つ
+            const loadingOverlay = this.page.locator('app-container-loading-overlay');
+            await expect(loadingOverlay).toBeHidden({ timeout: 30000 });
+
             const snapshotConfirmDialog = this.page.locator('message-box', {
                 hasText: '前回正常に終了されなかった可能性'
             });
 
-            // ダイアログが表示されるか短時間待機
-            // (isVisible() を使用することで、エラーを投げずに状態を確認できます)
+            // 2. 最初のダイアログが表示されるか確認
             if (await snapshotConfirmDialog.isVisible({ timeout: 5000 }).catch(() => false)) {
 
                 await test.step('検出されたスナップショットの破棄実行', async () => {
-                    // 「破棄する」ボタンをクリック
-                    await snapshotConfirmDialog.getByRole('button', { name: '破棄する' }).click();
+                    // --- 最初のダイアログ ---
+                    const discardBtn = snapshotConfirmDialog.getByRole('button', { name: '破棄する' });
+                    await expect(discardBtn).toBeVisible();
+                    await discardBtn.click();
 
-                    // 破棄の再確認ダイアログを処理
+                    // アニメーションを待機（MessageBoxの slideUp/setTimeout を待つ）
+                    await expect(snapshotConfirmDialog).toBeHidden();
+
+                    // --- 破棄の再確認ダイアログ ---
                     const discardConfirmDialog = this.page.locator('message-box', {
                         hasText: 'すべてのスナップショットを破棄しますか？'
                     });
+
+                    // 次のダイアログが完全に表示されるのを待つ
                     await expect(discardConfirmDialog).toBeVisible();
-                    await discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' }).click();
+                    const yesBtn = discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' });
+                    await expect(yesBtn).toBeVisible();
 
-                    // 完了通知アラート（alert-component）が表示されるのを待機して閉じる
-                    const alert = this.page.locator('alert-component');
-                    await expect(alert).toContainText('不要なスナップショットを破棄しました。');
-                    await alert.getByRole('button', { name: '閉じる' }).click();
+                    // ブラウザ標準のダイアログ (window.alert) を待ち受ける設定
+                    // ボタンを押す「前」にリスナーを準備する必要があります
+                    const dialogPromise = this.page.waitForEvent('dialog');
 
-                    console.log('--- 警告: 未保存のスナップショットを検出したため、破棄してクリーンアップしました。 ---');
+                    // ボタンをクリック
+                    await yesBtn.click();
+
+                    // ブラウザ標準の alert を捕捉して検証
+                    const dialog = await dialogPromise;
+                    expect(dialog.message()).toBe('不要なスナップショットを破棄しました。');
+                    await dialog.accept(); // OKボタンを押す操作に相当
+
+                    // 最後に、確認ダイアログ自体が消え去るのを待つ
+                    await expect(discardConfirmDialog).toBeHidden();
+
+                    console.log('--- クリーンアップ完了: スナップショットを破棄しました ---');
                 });
             }
         });
