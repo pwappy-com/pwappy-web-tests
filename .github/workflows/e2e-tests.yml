@@ -86,15 +86,18 @@ jobs:
           fi
 
   # ===================================================================
-  # ジョブ 2: Normalテストの実行 (OS間並列 / 内部2ワーカー)
+  # ジョブ 2: Normalテストの実行
   # ===================================================================
   e2e-normal:
     needs: prepare-matrix
     if: ${{ needs.prepare-matrix.outputs.run_normal == 'true' }}
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       # 同時に実行するジョブの数を1に制限し、OS間で直列実行を実現する(3でubuntu,window,macで並列)
-      max-parallel: 3
+      max-parallel: 33
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
@@ -103,6 +106,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # キャッシュキー接頭辞の設定
+      - name: Set cache key prefix
+        run: |
+          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -113,7 +121,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Get daily cache key
+      # Ubuntuランナーには日本語フォントがないためインストール (文字化け/トーフ対策)
+      - name: Install Japanese fonts (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+
+      - name: Get daily cache key suffix
         id: get-date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         shell: bash
@@ -123,11 +138,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          # 日次単位のキーでキャッシュを管理。
-          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
+          key: ${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}
           restore-keys: |
-            ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-
-            ${{ runner.os }}-playwright-${{ matrix.browser }}-
+            ${{ env.CACHE_KEY_PREFIX }}-
 
       - name: Install Playwright Browsers
         if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
@@ -157,6 +170,15 @@ jobs:
           PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
+      # テスト失敗時に現在のキャッシュを削除し、次回のクリーンな再インストールを保証する
+      - name: Delete cache on failure
+        if: failure()
+        run: |
+          echo "Test failed. Deleting cache to ensure fresh state on next run..."
+          gh cache delete "${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -171,11 +193,14 @@ jobs:
         run: exit 1
 
   # ===================================================================
-  # ジョブ 3: Premiumテストの実行 (OS間直列 / 内部1ワーカー)
+  # ジョブ 3: Premiumテストの実行
   # ===================================================================
   e2e-premium:
     needs: prepare-matrix
     if: ${{ needs.prepare-matrix.outputs.run_premium == 'true' }}
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       # ポイント消費の重複や競合を防ぐため、OS間でも1つずつ順番に実行する。
@@ -189,6 +214,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set cache key prefix
+        run: |
+          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -198,7 +227,13 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Get daily cache key
+      - name: Install Japanese fonts (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+
+      - name: Get daily cache key suffix
         id: get-date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         shell: bash
@@ -208,10 +243,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          key: ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
+          key: ${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}
           restore-keys: |
-            ${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}-
-            ${{ runner.os }}-playwright-${{ matrix.browser }}-
+            ${{ env.CACHE_KEY_PREFIX }}-
 
       - name: Install Playwright Browsers
         if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
@@ -221,15 +255,10 @@ jobs:
         shell: bash
         run: |
           OS_NAME="${{ matrix.os }}"
-          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then
-            echo "OS_SHORT_NAME=ubuntu" >> $GITHUB_ENV;
-          elif [[ "$OS_NAME" == "windows-latest" ]]; then
-            echo "OS_SHORT_NAME=win" >> $GITHUB_ENV;
-          elif [[ "$OS_NAME" == "macos-latest" ]]; then
-            echo "OS_SHORT_NAME=macos" >> $GITHUB_ENV;
-          else
-            echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV;
-          fi
+          if [[ "$OS_NAME" == "ubuntu-latest" ]]; then echo "OS_SHORT_NAME=ubuntu" >> $GITHUB_ENV;
+          elif [[ "$OS_NAME" == "windows-latest" ]]; then echo "OS_SHORT_NAME=win" >> $GITHUB_ENV;
+          elif [[ "$OS_NAME" == "macos-latest" ]]; then echo "OS_SHORT_NAME=macos" >> $GITHUB_ENV;
+          else echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV; fi
 
       - name: Run Premium E2E Tests
         id: run_tests
@@ -245,6 +274,14 @@ jobs:
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
           PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
+
+      - name: Delete cache on failure
+        if: failure()
+        run: |
+          echo "Test failed. Deleting cache to ensure fresh state on next run..."
+          gh cache delete "${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}" || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Test Results
         if: always()
@@ -267,11 +304,18 @@ jobs:
     needs: [e2e-normal, e2e-premium]
     if: always()
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
       - name: Checkout repository for cleanup
         uses: actions/checkout@v4
+
+      - name: Set cache key prefix for cleanup
+        run: |
+          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js for cleanup
         uses: actions/setup-node@v4
@@ -282,7 +326,7 @@ jobs:
       - name: Install dependencies for cleanup
         run: npm install
 
-      - name: Get daily cache key
+      - name: Get daily cache key suffix
         id: get-date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         shell: bash
@@ -292,11 +336,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          # cleanupジョブはchromium固定のキャッシュを使用
-          key: ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}-${{ steps.get-date.outputs.date }}
+          key: ${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}
           restore-keys: |
-            ${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}-
-            ${{ runner.os }}-playwright-chromium-
+            ${{ env.CACHE_KEY_PREFIX }}-
 
       - name: Install Playwright Browsers
         if: steps.cache-playwright-browsers-cleanup.outputs.cache-hit != 'true'
