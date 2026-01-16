@@ -82,8 +82,6 @@ export class EditorHelper {
 
                     // 最後に、確認ダイアログ自体が消え去るのを待つ
                     await expect(discardConfirmDialog).toBeHidden();
-
-                    console.log('--- クリーンアップ完了: スナップショットを破棄しました ---');
                 });
             }
         });
