@@ -1,4 +1,4 @@
-import { expect, type Page, type Locator, FrameLocator } from '@playwright/test';
+import { test, expect, type Page, type Locator, FrameLocator } from '@playwright/test';
 
 /**
  * Playwrightテスト用のエディタ操作ヘルパークラス。
@@ -32,38 +32,40 @@ export class EditorHelper {
     // =================================================================
 
     /**
-     * エディタを開いた際に表示される可能性のあるスナップショット復元ダイアログを処理します。
-     * 表示された場合は「破棄」を選択して、クリーンな状態でテストを開始できるようにします。
+     * エディタ起動時に表示される可能性のある「スナップショット復元ダイアログ」を処理します。
+     * 自動保存された未反映のデータがある場合に表示されますが、E2Eテストでは
+     * 常にクリーンな状態から開始したいため、検出した場合はすべて破棄します。
      */
     async handleSnapshotRestoreDialog(): Promise<void> {
-        // スナップショット復元ダイアログ（message-box）を特定
-        const snapshotConfirmDialog = this.page.locator('message-box', { hasText: '前回正常に終了されなかった可能性' });
+        await test.step('スナップショット復元ダイアログのチェック', async () => {
+            const snapshotConfirmDialog = this.page.locator('message-box', {
+                hasText: '前回正常に終了されなかった可能性'
+            });
 
-        try {
-            // ダイアログが短時間で表示されるかチェック（タイムアウトを短く設定）
-            await expect(snapshotConfirmDialog).toBeVisible({ timeout: 5000 });
-            console.log('スナップショット復元ダイアログを検出しました。');
+            // ダイアログが表示されるか短時間待機
+            // (isVisible() を使用することで、エラーを投げずに状態を確認できます)
+            if (await snapshotConfirmDialog.isVisible({ timeout: 5000 }).catch(() => false)) {
 
-            // 「破棄する」ボタンをクリック
-            await snapshotConfirmDialog.getByRole('button', { name: '破棄する' }).click();
+                await test.step('検出されたスナップショットの破棄実行', async () => {
+                    // 「破棄する」ボタンをクリック
+                    await snapshotConfirmDialog.getByRole('button', { name: '破棄する' }).click();
 
-            // 破棄の再確認ダイアログが表示されるのを待つ
-            const discardConfirmDialog = this.page.locator('message-box', { hasText: 'すべてのスナップショットを破棄しますか？' });
-            await expect(discardConfirmDialog).toBeVisible();
+                    // 破棄の再確認ダイアログを処理
+                    const discardConfirmDialog = this.page.locator('message-box', {
+                        hasText: 'すべてのスナップショットを破棄しますか？'
+                    });
+                    await expect(discardConfirmDialog).toBeVisible();
+                    await discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' }).click();
 
-            // 「はい、破棄します」ボタンをクリック
-            await discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' }).click();
+                    // 完了通知アラート（alert-component）が表示されるのを待機して閉じる
+                    const alert = this.page.locator('alert-component');
+                    await expect(alert).toContainText('不要なスナップショットを破棄しました。');
+                    await alert.getByRole('button', { name: '閉じる' }).click();
 
-            // 破棄完了のアラートが表示されるのを待ち、閉じる
-            const alert = this.page.locator('alert-component');
-            await expect(alert).toContainText('不要なスナップショットを破棄しました。');
-            await alert.getByRole('button', { name: '閉じる' }).click();
-
-            console.log('スナップショットを破棄しました。');
-        } catch (e) {
-            // タイムアウトした場合（ダイアログが表示されなかった場合）は、正常なフローとして処理を続ける
-            console.log('スナップショット復元ダイアログは表示されませんでした。');
-        }
+                    console.log('--- 警告: 未保存のスナップショットを検出したため、破棄してクリーンアップしました。 ---');
+                });
+            }
+        });
     }
 
     /**
