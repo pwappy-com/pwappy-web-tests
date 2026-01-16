@@ -96,7 +96,7 @@ jobs:
       actions: write
     strategy:
       fail-fast: false
-      # 同時に実行するジョブの数を1に制限し、OS間で直列実行を実現する(3でubuntu,window,macで並列)
+      # 同時に実行するOS(3でubuntu,window,macを並列実行)
       max-parallel: 3
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
@@ -159,9 +159,8 @@ jobs:
       - name: Run Normal E2E Tests
         id: run_tests
         shell: bash
-        # OS並列で実行
         run: |
-          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --workers=1
+          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --workers=4
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }} 
