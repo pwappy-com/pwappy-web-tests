@@ -150,7 +150,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, appName, false); // 汎用ヘルパーで確認
+            await expectAppVisibility(page, appKey, false); // 汎用ヘルパーで確認
         });
     });
 
@@ -213,7 +213,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, appName, false);
+            await expectAppVisibility(page, appKey, false);
         });
     });
 
@@ -278,7 +278,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, appName, false);
+            await expectAppVisibility(page, appKey, false);
         });
     });
 
@@ -325,7 +325,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, appName, false);
+            await expectAppVisibility(page, appKey, false);
         });
     });
 });

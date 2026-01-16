@@ -40,7 +40,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
 
         await test.step('セットアップ: アーカイブ対象のアプリを作成', async () => {
             await createApp(page, appName, appKey);
-            await expectAppVisibility(page, appName, true);
+            await expectAppVisibility(page, appKey, true);
         });
 
         await test.step('テスト: アプリケーションをアーカイブする', async () => {
@@ -60,12 +60,12 @@ test.describe('アーカイブ E2Eシナリオ', () => {
             await expect(alertDialog).toContainText(`アプリ「${appKey}」をアーカイブしました`);
             await alertDialog.getByRole('button', { name: '閉じる' }).click();
 
-            await expectAppVisibility(page, appName, false);
+            await expectAppVisibility(page, appKey, false);
         });
 
         await test.step('テスト: アーカイブタブで表示されることを確認', async () => {
             await navigateToTab(page, 'archive');
-            await expectAppVisibility(page, appName, true);
+            await expectAppVisibility(page, appKey, true);
         });
 
         await test.step('テスト: アーカイブから復元する', async () => {
@@ -89,14 +89,14 @@ test.describe('アーカイブ E2Eシナリオ', () => {
 
             // アーカイブタブの一覧から消えることを確認します。
             await navigateToTab(page, 'archive');
-            await expectAppVisibility(page, appName, false);
+            await expectAppVisibility(page, appKey, false);
         });
 
         await test.step('クリーンアップ: 復元後、ワークベンチで削除する', async () => {
             await navigateToTab(page, 'workbench');
-            await expectAppVisibility(page, appName, true);
+            await expectAppVisibility(page, appKey, true);
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, appName, false);
+            await expectAppVisibility(page, appKey, false);
         });
     });
 });

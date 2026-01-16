@@ -50,7 +50,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
         await test.step('セットアップ: 重複キーテスト用のアプリを作成', async () => {
             await createApp(page, existingAppName, existingAppKey);
-            await expectAppVisibility(page, existingAppName, true);
+            await expectAppVisibility(page, existingAppKey, true);
         });
 
         await test.step('テスト: バリデーションと正常作成', async () => {
@@ -88,14 +88,14 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await appKeyInput.fill(appKey);
             await modal.getByRole('button', { name: '保存' }).click();
             await expect(modal).toBeHidden();
-            await expectAppVisibility(page, appName, true);
+            await expectAppVisibility(page, appKey, true);
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
             await deleteApp(page, appKey);
             await deleteApp(page, existingAppKey);
-            await expectAppVisibility(page, appName, false);
-            await expectAppVisibility(page, existingAppName, false);
+            await expectAppVisibility(page, appKey, false);
+            await expectAppVisibility(page, existingAppKey, false);
         });
     });
 
@@ -109,7 +109,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
         await test.step('セットアップ: 編集・削除対象のアプリを作成', async () => {
             await createApp(page, appName, appKey);
-            await expectAppVisibility(page, appName, true);
+            await expectAppVisibility(page, appKey, true);
         });
 
         await test.step('テスト: アプリケーションを編集する', async () => {
@@ -127,13 +127,19 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             // 編集が反映され、一覧の表示が更新されることを確認します。
             await page.getByText('処理中...').waitFor({ state: 'hidden' });
             await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
-            await expectAppVisibility(page, editedAppName, true);
-            await expectAppVisibility(page, appName, false);
+
+            // App Keyで可視性を確認 (アプリが存在すること)
+            await expectAppVisibility(page, appKey, true);
+
+            // 名前が変更されたことを確認
+            // appKeyを含む行の最初のセル(Name)が editedAppName であること
+            const editedAppRow = page.locator('.app-list tbody tr', { has: page.locator('td:nth-child(2)', { hasText: new RegExp(`^${appKey}$`) }) });
+            await expect(editedAppRow.locator('td').first()).toHaveText(editedAppName);
         });
 
         await test.step('クリーンアップ: アプリケーションを削除する', async () => {
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, editedAppName, false);
+            await expectAppVisibility(page, appKey, false);
         });
     });
 
@@ -146,7 +152,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
         await test.step('セットアップ: テスト対象のアプリを作成', async () => {
             await createApp(page, appName, appKey);
-            await expectAppVisibility(page, appName, true);
+            await expectAppVisibility(page, appKey, true);
         });
 
         await test.step('テスト: 編集ダイアログでバリデーションエラーを確認', async () => {
@@ -193,7 +199,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, appName, false);
+            await expectAppVisibility(page, appKey, false);
         });
     });
 
@@ -232,7 +238,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
     //         // アプリを削除します。
     //         await deleteApp(page, appName);
-    //         await expectAppVisibility(page, appName, false);
+    //         await expectAppVisibility(page, appKey, false);
     //     });
     // });
 
@@ -248,8 +254,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         await test.step('セットアップ: 2つのアプリを作成する', async () => {
             await createApp(page, appA_Name, appA_Key);
             await createApp(page, appB_Name, appB_Key);
-            await expectAppVisibility(page, appA_Name, true);
-            await expectAppVisibility(page, appB_Name, true);
+            await expectAppVisibility(page, appA_Key, true);
+            await expectAppVisibility(page, appB_Key, true);
         });
 
         await test.step('テスト: アプリAのキーをアプリBのキーに変更してエラーを確認', async () => {
@@ -278,8 +284,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         await test.step('クリーンアップ: 作成した2つのアプリを削除', async () => {
             await deleteApp(page, appA_Key);
             await deleteApp(page, appB_Key);
-            await expectAppVisibility(page, appA_Name, false);
-            await expectAppVisibility(page, appB_Name, false);
+            await expectAppVisibility(page, appA_Key, false);
+            await expectAppVisibility(page, appB_Key, false);
         });
     });
 
@@ -292,7 +298,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
         await test.step('セットアップ: テスト対象のアプリを作成', async () => {
             await createApp(page, appName, appKey);
-            await expectAppVisibility(page, appName, true);
+            await expectAppVisibility(page, appKey, true);
         });
 
         await test.step('テスト: 削除確認ダイアログでキャンセルを押し、アプリが削除されないことを確認', async () => {
@@ -306,12 +312,12 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await expect(confirmDialog).toBeHidden();
 
             // アプリが削除されずに残っていることを確認します。
-            await expectAppVisibility(page, appName, true);
+            await expectAppVisibility(page, appKey, true);
         });
 
         await test.step('クリーンアップ: 作成したアプリを削除', async () => {
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, appName, false);
+            await expectAppVisibility(page, appKey, false);
         });
     });
 });

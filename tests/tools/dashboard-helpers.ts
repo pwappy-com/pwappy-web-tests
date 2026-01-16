@@ -120,17 +120,18 @@ export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish'
 /**
  * アプリケーションがリストに表示されているか/いないかを確認します。
  * @param page ダッシュボードのPageオブジェクト
- * @param appName 確認するアプリケーション名
+ * @param appKey 確認するアプリケーションキー
  * @param isVisible trueなら表示されていること、falseなら非表示であることを期待
  */
-export async function expectAppVisibility(page: Page, appName: string, isVisible: boolean): Promise<void> {
+export async function expectAppVisibility(page: Page, appKey: string, isVisible: boolean): Promise<void> {
     // 検証の前に、リストが更新される可能性のあるネットワーク通信が完了するのを待つ
     await page.waitForLoadState('networkidle');
-    const appNameCell = page.locator('.app-list tbody tr td:first-child', { hasText: new RegExp(`^${appName}$`) });
+    // アプリケーションキーは2列目(td:nth-child(2))に表示される
+    const appKeyCell = page.locator('.app-list tbody tr td:nth-child(2)', { hasText: new RegExp(`^${appKey}$`) });
     if (isVisible) {
-        await expect(appNameCell).toBeVisible();
+        await expect(appKeyCell).toBeVisible();
     } else {
-        await expect(appNameCell).toBeHidden();
+        await expect(appKeyCell).toBeHidden();
     }
 }
 
