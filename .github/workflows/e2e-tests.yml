@@ -97,7 +97,7 @@ jobs:
     strategy:
       fail-fast: false
       # 同時に実行するジョブの数を1に制限し、OS間で直列実行を実現する(3でubuntu,window,macで並列)
-      max-parallel: 33
+      max-parallel: 3
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
@@ -128,9 +128,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
 
+      # 日本時間（JST）で日付を取得するように修正
       - name: Get daily cache key suffix
         id: get-date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: echo "date=$(TZ=Asia/Tokyo date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Cache Playwright browsers
@@ -170,12 +171,13 @@ jobs:
           PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
-      # テスト失敗時に現在のキャッシュを削除し、次回のクリーンな再インストールを保証する
+      # テスト失敗時：このブラウザ/OSに関連する「全ての古いキャッシュ」を削除する
       - name: Delete cache on failure
         if: failure()
         run: |
-          echo "Test failed. Deleting cache to ensure fresh state on next run..."
-          gh cache delete "${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}" || true
+          echo "Test failed. Clearing all related caches for ${{ env.CACHE_KEY_PREFIX }}..."
+          # 一致する接頭辞を持つキャッシュをリストアップして全て削除
+          gh cache list --prefix "${{ env.CACHE_KEY_PREFIX }}-" --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -235,7 +237,7 @@ jobs:
 
       - name: Get daily cache key suffix
         id: get-date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: echo "date=$(TZ=Asia/Tokyo date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Cache Playwright browsers
@@ -278,8 +280,8 @@ jobs:
       - name: Delete cache on failure
         if: failure()
         run: |
-          echo "Test failed. Deleting cache to ensure fresh state on next run..."
-          gh cache delete "${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}" || true
+          echo "Test failed. Clearing all related caches for ${{ env.CACHE_KEY_PREFIX }}..."
+          gh cache list --prefix "${{ env.CACHE_KEY_PREFIX }}-" --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -328,7 +330,7 @@ jobs:
 
       - name: Get daily cache key suffix
         id: get-date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: echo "date=$(TZ=Asia/Tokyo date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
         shell: bash
 
       - name: Cache Playwright browsers for cleanup
