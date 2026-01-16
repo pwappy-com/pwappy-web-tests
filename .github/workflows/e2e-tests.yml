@@ -177,7 +177,7 @@ jobs:
         run: |
           echo "Test failed. Clearing all related caches for ${{ env.CACHE_KEY_PREFIX }}..."
           # 一致する接頭辞を持つキャッシュをリストアップして全て削除
-          gh cache list --prefix "${{ env.CACHE_KEY_PREFIX }}-" --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
+          gh cache list --key "${{ env.CACHE_KEY_PREFIX }}-" --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -281,7 +281,7 @@ jobs:
         if: failure()
         run: |
           echo "Test failed. Clearing all related caches for ${{ env.CACHE_KEY_PREFIX }}..."
-          gh cache list --prefix "${{ env.CACHE_KEY_PREFIX }}-" --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
+          gh cache list --key "${{ env.CACHE_KEY_PREFIX }}-" --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
