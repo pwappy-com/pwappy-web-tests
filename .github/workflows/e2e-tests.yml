@@ -160,7 +160,7 @@ jobs:
         id: run_tests
         shell: bash
         run: |
-          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --workers=2
+          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --reporter=line --workers=2
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }} 
@@ -266,7 +266,7 @@ jobs:
         shell: bash
         # 最も安定した直列実行(1ワーカー)で実行。
         run: |
-          npx playwright test tests/specs/premium --project=${{ matrix.browser }} --workers=1
+          npx playwright test tests/specs/premium --project=${{ matrix.browser }} --reporter=line --workers=1
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }} 
