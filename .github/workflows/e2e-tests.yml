@@ -167,7 +167,7 @@ jobs:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
+          PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
       # テスト失敗時：このブラウザ/OSに関連する「全ての古いキャッシュ」を削除する
@@ -273,7 +273,7 @@ jobs:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
+          PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
       - name: Delete cache on failure
@@ -351,7 +351,7 @@ jobs:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_AUTH: ${{ secrets.PWAPPY_TEST_AUTH }}
           PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
-          PWAPPY_LOGIN: ${{ secrets.PWAPPY_LOGIN }}
+          PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
       - name: Check upstream job status
