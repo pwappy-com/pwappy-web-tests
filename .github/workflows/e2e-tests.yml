@@ -8,7 +8,7 @@ on:
     # UTCの3時間毎に実行。JST 10時, 13時, 16時, 19時, 22時, 翌5時, 8時に実行 (Normalテスト用)
     - cron: '0 1,4,7,10,13,20,23 * * *'
     # UTCの毎日0時0分 (JST 9時) に実行 (Premiumテスト用) GeminiAPIキーの有料化に伴い一時停止
-    # - cron: '0 0 * * *'
+    - cron: '0 0 * * *'
   # 手動実行 (workflow_dispatch)
   workflow_dispatch:
     inputs:
