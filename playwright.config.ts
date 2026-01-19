@@ -9,6 +9,9 @@ import 'dotenv/config';
 // import path from 'path';
 // dotenv.config({ path: path.resolve(__dirname, '.env') });
 
+// CI環境（GitHub Actionsなど）かどうかを判定
+const isCI = !!process.env.CI;
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -48,6 +51,16 @@ export default defineConfig({
     //trace: 'on',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    launchOptions: {
+      args: [
+        // CI環境ではない（ローカル）場合のみ CORS を無効化するフラグを追加
+        ...(isCI ? [] : ['--disable-web-security']),
+
+        // このフラグはサイト分離機能を無効にするもので、
+        // セキュリティ上の影響はありますが、CORS回避を安定させるためにローカルでのみ推奨
+        ...(isCI ? [] : ['--disable-features=IsolateOrigins,site-per-process']),
+      ]
+    },
   },
 
   /* Configure projects for major browsers */

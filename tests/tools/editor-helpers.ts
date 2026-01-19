@@ -976,6 +976,302 @@ export class EditorHelper {
         // 5. AIコーディングウィンドウが閉じるのを待つ
         await expect(aiWindow).toBeHidden();
     }
+
+    /**
+     * ファイルエクスプローラーを開きます。
+     */
+    async openFileExplorer(): Promise<void> {
+        // メニューボタンをクリック
+        await this.page.locator('#fab-bottom-menu-box').click();
+
+        // メニューが表示されるのを待つ
+        const menu = this.page.locator('#platformBottomMenu');
+        await expect(menu).toBeVisible();
+
+        // 「ファイル管理」をクリック
+        await menu.getByText('ファイル管理').click();
+
+        // ファイルエクスプローラーが表示されるのを待つ
+        const fileExplorerContainer = this.page.locator('file-explorer .file-explorer-container');
+        await expect(fileExplorerContainer).toBeVisible({ timeout: 10000 });
+
+        // ロード完了を待つ
+        await this.waitForFileExplorerLoading();
+    }
+
+    /**
+     * ファイルエクスプローラーのローディングが消え、ファイルリストが表示されるのを待ちます。
+     */
+    async waitForFileExplorerLoading(): Promise<void> {
+        const loading = this.page.locator('file-explorer-loading-overlay');
+
+        // 1. もしローディングが表示されかけているなら、確実に表示されるまで少し待つ
+        try {
+            await loading.waitFor({ state: 'visible', timeout: 500 });
+        } catch (e) {
+            // 表示されなければ、既にロード済みか、一瞬で終わったとみなす
+        }
+
+        // 2. ローディングが非表示になるのを待つ
+        await expect(loading).toBeHidden({ timeout: 15000 });
+
+        // 3. 【重要】ファイルリスト（または空メッセージ）がレンダリングされるのを待つ
+        // これにより、ロードオーバーレイが消えた直後の「中身が空」の状態を回避する
+        const explorerContent = this.page.locator('file-explorer .file-explorer-content');
+        await expect(explorerContent).toBeVisible();
+    }
+
+    /**
+     * ファイルエクスプローラー内で新規ディレクトリを作成します。
+     */
+    async createDirectory(name: string): Promise<void> {
+        // performFileOperation を利用してメニュー操作を共通化
+        await this.performFileOperation('新規ディレクトリ');
+
+        // 入力ダイアログの実体（.modal）が表示されるのを待つ
+        const dialog = this.page.locator('file-explorer-edit-directory-menu .modal');
+        await expect(dialog).toBeVisible();
+
+        // 名前を入力
+        const input = dialog.locator('.input-field');
+        await input.fill(name);
+
+        // 作成ボタンをクリック
+        await dialog.locator('#ok-button').click();
+
+        // ダイアログが閉じて、リストの更新が終わるのを待つ
+        await expect(dialog).toBeHidden();
+        await this.waitForFileExplorerLoading();
+
+        // 画面上にディレクトリが出現したことを検証
+        await expect(this.page.locator('file-explorer .directory', { hasText: name })).toBeVisible();
+    }
+
+    /**
+     * ファイルまたはディレクトリを選択（クリック）します。
+     * @param name 対象の名前
+     */
+    async selectFileExplorerItem(name: string): Promise<void> {
+        const item = this.page.locator('file-explorer .directory, file-explorer .file').filter({ hasText: name });
+        await expect(item).toBeVisible();
+        await item.click();
+
+        // 選択状態になるまで少し待つ（アプリ側の200msタイマー考慮）
+        await expect(item).toHaveClass(/selected/, { timeout: 5000 });
+    }
+
+    /**
+     * ディレクトリをダブルクリックして中に入ります。
+     */
+    async enterDirectory(name: string): Promise<void> {
+        const explorer = this.page.locator('file-explorer');
+        const dir = explorer.locator('.directory').filter({ hasText: name });
+        await expect(dir).toBeVisible();
+
+        // 現在のパンくずの数を確認
+        const beforeCount = await explorer.locator('.path-link').count();
+
+        await dir.dblclick();
+
+        // 1. ローディングを待つ
+        await this.waitForFileExplorerLoading();
+
+        // 2. パス表示が増え（例: 1つ -> 2つ）、且つ名前にディレクトリ名が含まれるのを待つ
+        await expect(async () => {
+            const afterCount = await explorer.locator('.path-link').count();
+            const pathText = await explorer.locator('.path-display').innerText();
+            expect(afterCount).toBeGreaterThan(beforeCount);
+            expect(pathText).toContain(name);
+        }).toPass({ timeout: 5000 });
+    }
+
+    /**
+     * パンくずリストを使ってルートディレクトリ（アプリのルート）に戻ります。
+     */
+    async goBackToRoot(): Promise<void> {
+        const links = this.page.locator('file-explorer .path-link');
+
+        // アプリのルートはパンくずの 1番目（/[AppKey]）なので nth(0)
+        const rootLink = links.first();
+        await expect(rootLink).toBeVisible();
+
+        // クリック実行
+        await rootLink.click();
+
+        // 1. ローディングを待つ
+        await this.waitForFileExplorerLoading();
+
+        // 2. 【修正】パンくずリストがルートの長さ（1つ）になるまで待機する
+        // パスが "/AppKey" の状態なら、path-link は1つだけになるはずです
+        await expect(async () => {
+            const count = await links.count();
+            expect(count).toBe(1);
+        }).toPass({ timeout: 5000 });
+
+        // 念のため、DOMの安定を待つ
+        await this.page.waitForTimeout(300);
+    }
+
+    /**
+     * サイドバーのボタンをクリックします。
+     * @param label 「アップロード」「ダウンロード」「全選択/全解除」「閉じる」
+     */
+    async clickSidebarButton(label: string): Promise<void> {
+        const btn = this.page.locator('file-explorer .sidebar-icon').filter({ hasText: label });
+        await expect(btn).toBeVisible();
+        // 無効化（sidebar-icon-disable）が解除されるのを待つ
+        await expect(btn).not.toHaveClass(/sidebar-icon-disable/, { timeout: 5000 });
+        await btn.click();
+    }
+
+    /**
+     * 操作メニューからアクションを実行します。
+     * @param action 'コピー' | '切り取り' | '貼り付け' | '削除' | '名前変更' | 'パスをコピー' | '新規ディレクトリ'
+     */
+    async performFileOperation(action: string): Promise<void> {
+        const explorer = this.page.locator('file-explorer');
+        await explorer.locator('#menu-operation').click();
+
+        // メニューの ul 自体はサイズを持っているのでOK
+        const popupList = explorer.locator('file-explorer-popup-menu ul');
+        await expect(popupList).toBeVisible();
+
+        let targetItem: Locator;
+        if (action === '貼り付け') {
+            targetItem = popupList.locator('.menu-text').filter({ hasText: '貼り付け' });
+        } else {
+            targetItem = popupList.locator('.menu-text').getByText(action, { exact: true });
+        }
+
+        await expect(targetItem).toBeVisible();
+        await targetItem.click();
+
+        // ポップアップが消えるのを待つ（ul を待つのが確実）
+        await expect(popupList).toBeHidden();
+
+        if (action === '削除') {
+            const confirmDialog = explorer.locator('#delete-confirm');
+            // 表示確認は Shadow DOM 内のコンテンツで行う
+            const dialogBox = confirmDialog.locator('.message-box-content');
+            await expect(dialogBox).toBeVisible();
+
+            // 重要: #delete-ok は Light DOM (Slotted) 要素なので、
+            // Shadow内の dialogBox からではなく、host である confirmDialog から直接探す
+            const okButton = confirmDialog.locator('#delete-ok');
+            await expect(okButton).toBeVisible();
+            await okButton.click();
+
+            await expect(dialogBox).toBeHidden();
+        }
+
+        if (['貼り付け', '削除', '名前変更', '新規ディレクトリ'].includes(action)) {
+            await this.waitForFileExplorerLoading();
+        }
+    }
+
+    /**
+     * ファイルエクスプローラーを閉じます。
+     */
+    async closeFileExplorer(): Promise<void> {
+        const closeBtn = this.page.locator('file-explorer .sidebar-icon', { hasText: '閉じる' });
+        await closeBtn.click();
+        await expect(this.page.locator('file-explorer')).toBeHidden();
+    }
+
+    /**
+     * サイドバーの「全選択/全解除」ボタンをクリックします。
+     */
+    async toggleAllSelect(): Promise<void> {
+        const explorer = this.page.locator('file-explorer');
+        const btn = explorer.locator('.sidebar-icon', { hasText: '全選択/全解除' });
+        await btn.click();
+    }
+
+    /**
+     * 選択したアイテムの名前を変更します。
+     * (既にアイテムが選択されている前提)
+     */
+    async renameSelectedItem(newName: string): Promise<void> {
+        await this.performFileOperation('名前変更');
+
+        const dialog = this.page.locator('file-explorer-edit-directory-menu .modal');
+        await expect(dialog).toBeVisible();
+
+        const input = dialog.locator('.input-field');
+        await input.fill(newName);
+        await dialog.locator('#ok-button').click();
+
+        await expect(dialog).toBeHidden();
+        await this.waitForFileExplorerLoading();
+    }
+
+    /**
+     * ファイルをアップロードします。
+     * @param filePaths アップロードするファイルのローカルパス（配列）
+     */
+    async uploadFiles(filePaths: string[]): Promise<void> {
+        const explorer = this.page.locator('file-explorer');
+        // 隠しinput要素にファイルをセット
+        const fileChooserPromise = this.page.waitForEvent('filechooser');
+        await explorer.locator('.sidebar-icon', { hasText: 'アップロード' }).click();
+        const fileChooser = await fileChooserPromise;
+        await fileChooser.setFiles(filePaths);
+
+        // アップロード完了（ローディング消去）を待つ
+        await this.waitForFileExplorerLoading();
+    }
+
+    /**
+     * 表示されているトーストメッセージを確認します。
+     */
+    async expectToastMessage(message: string | RegExp): Promise<void> {
+        // 重要：ホスト要素ではなく、中の黒い背景部分（.popup-text）を直接待つ
+        const toastInner = this.page.locator('file-explorer .file-explorer-container popup-message-element .popup-text')
+            .filter({ hasText: message });
+
+        // この .popup-text はサイズを持っているので toBeVisible が通る
+        await expect(toastInner).toBeVisible({ timeout: 10000 });
+    }
+
+    /**
+     * 選択中のアイテムをダウンロードします。
+     */
+    async downloadSelectedItems(): Promise<void> {
+        const explorer = this.page.locator('file-explorer');
+
+        // 1. 割り込みアラート（「コピーしました」など）があれば閉じる
+        // これがないとサイドバーのクリックがブロックされる場合があります
+        const globalAlert = this.page.locator('alert-component');
+        if (await globalAlert.isVisible()) {
+            await globalAlert.getByRole('button', { name: '閉じる' }).click();
+            await expect(globalAlert).toBeHidden();
+        }
+
+        // 2. サイドバーの「ダウンロード」ボタンをクリック
+        const downloadBtn = explorer.locator('.sidebar-icon').filter({ hasText: 'ダウンロード' });
+        await expect(downloadBtn).toBeVisible();
+        await expect(downloadBtn).not.toHaveClass(/sidebar-icon-disable/);
+        await downloadBtn.click();
+
+        // 3. 確認ダイアログの「中身（.message-box-content）」が表示されるのを待つ
+        // ID指定で特定のメニュー（#download-confirm）を狙い撃ちします
+        const confirmDialog = explorer.locator('file-explorer-confirm-menu#download-confirm');
+        const dialogBox = confirmDialog.locator('.message-box-content');
+
+        // 前回のログで element not found だったのは、ホスト要素だけを見ていた可能性があります。
+        // コンテンツ (.message-box-content) が見えるまで最大15秒待機します。
+        await expect(dialogBox).toBeVisible({ timeout: 15000 });
+
+        // 4. ダイアログ内の「ダウンロード」ボタンをクリック
+        // このボタンは Light DOM (スロット) にあるため、ホストから直接 locator で指定します
+        const okButton = confirmDialog.locator('button.confirm-download-button');
+        await expect(okButton).toBeVisible();
+        await okButton.click();
+
+        // 5. ダイアログが消えるのを待つ
+        await expect(dialogBox).toBeHidden();
+        await this.waitForFileExplorerLoading();
+    }
 }
 
 /**

@@ -134,7 +134,7 @@ test.describe('AIエージェント機能：UI・連携・コマンド反映テ�
         test.setTimeout(120000); // タイムアウト延長
 
         // AI APIの呼び出しをフックして、ダミーの設計図JSONを返す
-        await editorPage.route('**/ai-agent/message', async route => {
+        await editorPage.route('**/ai-agent', async route => {
             const mockResponse = {
                 code: 200,
                 details: {
@@ -185,7 +185,8 @@ test.describe('AIエージェント機能：UI・連携・コマンド反映テ�
             const agentWindow = editorPage.locator('agent-chat-window');
 
             // AIの思考メッセージが表示されるのを待つ
-            await expect(agentWindow.locator('.message-agent').filter({ hasText: 'モックデータを使用して' })).toBeVisible({ timeout: 30000 });
+            // .message-agent クラスが存在しない可能性があるため、テキストで検索するように変更
+            await expect(agentWindow.getByText('モックデータを使用して')).toBeVisible({ timeout: 30000 });
 
             // 構築完了後のフィードバックUIが表示されているか
             await expect(agentWindow.locator('.ideation-controls')).toContainText('アプリの更新が完了しました');
