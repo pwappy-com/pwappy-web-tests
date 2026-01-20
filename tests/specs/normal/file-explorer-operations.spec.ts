@@ -40,9 +40,12 @@ const test = base.extend<EditorFixtures>({
 });
 
 test.describe('ファイルエクスプローラー操作テスト', () => {
-    test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
-    test.beforeEach(async ({ page, context }) => {
+    test.beforeEach(async ({ page, context, browserName }) => {
+        if (browserName === 'chromium') {
+            await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+        }
+
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
         const domain = testUrl.hostname;
 
