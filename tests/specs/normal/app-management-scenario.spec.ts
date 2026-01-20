@@ -189,7 +189,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
                 await appKeyInput.focus();
                 // 最も強力な消去方法: 3回クリック(全選択)して Backspace
-                await appKeyInput.click({ clickCount: 3 });
+                await appKeyInput.click({ clickCount: 3, force: true });
                 await page.keyboard.press('Backspace');
 
                 // それでも消えない場合のバックアップ案 (値を直接空にする)
