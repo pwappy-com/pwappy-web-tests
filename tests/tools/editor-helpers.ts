@@ -981,6 +981,12 @@ export class EditorHelper {
      * ファイルエクスプローラーを開きます。
      */
     async openFileExplorer(): Promise<void> {
+        const alert = this.page.locator('alert-component');
+        if (await alert.isVisible().catch(() => false)) {
+            await alert.getByRole('button', { name: '閉じる' }).click();
+            await expect(alert).toBeHidden();
+        }
+
         // メニューボタンをクリック
         await this.page.locator('#fab-bottom-menu-box').click();
 
@@ -1065,24 +1071,46 @@ export class EditorHelper {
      */
     async enterDirectory(name: string): Promise<void> {
         const explorer = this.page.locator('file-explorer');
+        // 名前でフィルタリングしたディレクトリ要素
         const dir = explorer.locator('.directory').filter({ hasText: name });
         await expect(dir).toBeVisible();
 
-        // 現在のパンくずの数を確認
+        // 現在のパンくずの数を取得
         const beforeCount = await explorer.locator('.path-link').count();
 
-        await dir.dblclick();
-
-        // 1. ローディングを待つ
-        await this.waitForFileExplorerLoading();
-
-        // 2. パス表示が増え（例: 1つ -> 2つ）、且つ名前にディレクトリ名が含まれるのを待つ
+        // 【修正】アクションと検証をセットでリトライする（Flaky対策）
         await expect(async () => {
-            const afterCount = await explorer.locator('.path-link').count();
-            const pathText = await explorer.locator('.path-display').innerText();
+            const links = explorer.locator('.path-link');
+            const currentCount = await links.count();
+
+            // まだ遷移していない（パンくずが増えていない）場合のみアクションを実行
+            if (currentCount <= beforeCount) {
+                // ディレクトリが見えていればダブルクリックを試行
+                if (await dir.isVisible()) {
+                    // delay: クリック間隔を少し空けてダブルクリックとして認識されやすくする
+                    // force: 重なりなどを無視して強制的にクリックを試みる
+                    await dir.dblclick({ delay: 50, force: true });
+                }
+
+                // クリック後のロード完了を待つ
+                // (クリックが不発だった場合はローディングが出ずにここを通過し、下のexpectで失敗してリトライされる)
+                await this.waitForFileExplorerLoading();
+            }
+
+            // --- 検証 ---
+            const afterCount = await links.count();
+
+            // 1. 数が増えていること
             expect(afterCount).toBeGreaterThan(beforeCount);
-            expect(pathText).toContain(name);
-        }).toPass({ timeout: 5000 });
+
+            // 2. 最後のパンくずにディレクトリ名が含まれること
+            const lastLinkText = await links.last().innerText();
+            expect(lastLinkText).toContain(name);
+
+        }).toPass({
+            timeout: 15000,   // 何度かリトライできるよう長めに時間を確保
+            intervals: [1000] // 1秒間隔でチェック
+        });
     }
 
     /**

@@ -40,6 +40,7 @@ const test = base.extend<EditorFixtures>({
 });
 
 test.describe('ファイルエクスプローラー操作テスト', () => {
+    test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
 
     test.beforeEach(async ({ page, context }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));

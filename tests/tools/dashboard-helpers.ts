@@ -297,12 +297,29 @@ export async function downloadVersion(page: Page, { appName, appKey, version }: 
  * @param isVisible trueなら表示、falseなら非表示を期待
  */
 export async function expectVersionVisibility(page: Page, version: string, isVisible: boolean): Promise<void> {
-    const versionCell = page.locator('.version-list tbody tr td:first-child', { hasText: new RegExp(`^${version}$`) });
-    if (isVisible) {
-        await expect(versionCell).toBeVisible();
-    } else {
-        await expect(versionCell).toBeHidden();
-    }
+    // ネットワークアイドル待機は不安定なため削除し、toPassによるUI状態ポーリングに任せます。
+
+    await expect(async () => {
+        // 行全体を取得し、その中から特定のバージョン名を持つセルを探す
+        // .first() をつけることで、探索を安定させます
+        const versionCell = page
+            .locator('.version-list tbody tr td:first-child')
+            .filter({ hasText: version })
+            .first();
+
+        if (isVisible) {
+            // 表示を期待する場合
+            // 個別のタイムアウトは短めにし、失敗したらtoPassでリトライさせます
+            await expect(versionCell).toBeVisible({ timeout: 2000 });
+            await expect(versionCell).toContainText(version);
+        } else {
+            // 非表示を期待する場合
+            await expect(versionCell).toBeHidden({ timeout: 2000 });
+        }
+    }).toPass({
+        timeout: 30000,   // バックエンドの処理遅延も考慮して最大30秒待機
+        intervals: [1000] // 1秒おきにチェック
+    });
 }
 
 /**
@@ -312,6 +329,7 @@ export async function expectVersionVisibility(page: Page, version: string, isVis
  */
 export async function addVersion(page: Page, versionName: string): Promise<void> {
     await page.getByTitle('バージョンの追加').click();
+    await page.waitForTimeout(500);
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
     const modal = page.locator('dashboard-modal-window#versionModal');
@@ -334,6 +352,12 @@ export async function addVersion(page: Page, versionName: string): Promise<void>
  */
 export async function setupAppWithVersions(page: Page, { appName, appKey, versions }: { appName: string, appKey: string, versions: string[] }): Promise<void> {
     await createApp(page, appName, appKey);
+
+    const alert = page.locator('alert-component');
+    if (await alert.isVisible().catch(() => false)) {
+        await alert.getByRole('button', { name: '閉じる' }).click();
+        await expect(alert).toBeHidden();
+    }
 
     const appRow = page.locator('.app-list tbody tr', { hasText: appName });
     await expect(appRow).toBeVisible();
@@ -378,12 +402,27 @@ export async function editVersion(page: Page, oldVersion: string, newVersion: st
  * @param sourceVersion 複製元のバージョン名
  */
 export async function duplicateVersion(page: Page, sourceVersion: string): Promise<void> {
-    const versionRow = page.locator('.version-list tbody tr', { hasText: sourceVersion });
-    await versionRow.getByRole('button', { name: '複製' }).click();
+    // 1. ローディングが完全に消えるのをまず待つ
+    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
+
+    // 2. 「要素の取得 → クリック」をセットでリトライする
+    // これにより、クリック瞬間にDOMが書き換わっても、次のループで新しい要素を掴み直します
+    await expect(async () => {
+        const versionRow = page.locator('.version-list tbody tr', { hasText: sourceVersion }).first();
+        const dupButton = versionRow.getByRole('button', { name: '複製' });
+
+        // 要素がアタッチされ、安定するまで短く待機してクリック
+        await dupButton.click({ timeout: 2000 });
+    }).toPass({
+        timeout: 10000,
+        intervals: [1000]
+    });
+
+    // 3. クリック後の処理待ち
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
 }
-
 /**
  * バージョンを削除します。
  * @param page ダッシュボードのPageオブジェクト

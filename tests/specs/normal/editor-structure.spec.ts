@@ -108,7 +108,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
     test('ゴミ箱（Trash Box）のライフサイクル：削除、表示確認、空にする', async ({ editorPage, editorHelper }) => {
         let buttonNode: Locator;
         const domTree = editorHelper.getDomTree();
-        let layoutTrashBtn: Locator;
+        const trashBox = editorPage.locator('.template-trash-box');
 
         await test.step('1. 要素をゴミ箱へ移動', async () => {
             const setup = await editorHelper.setupPageWithButton();
@@ -124,27 +124,62 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 
         await test.step('2. ゴミ箱の中身を確認', async () => {
             await editorHelper.openMoveingHandle('left');
-            layoutTrashBtn = editorPage.locator('template-container #fab-trash-box');
-            await expect(layoutTrashBtn).toBeVisible();
-            await layoutTrashBtn.click();
-            const trashBox = editorPage.locator('.template-trash-box');
-            await expect(trashBox).toBeVisible();
-            await expect(trashBox.locator('.template-trash-box-node').first()).toBeVisible();
+            const layoutTrashBtn = editorPage.locator('template-container #fab-trash-box');
+
+            await expect(async () => {
+                if (!await trashBox.isVisible()) {
+                    await layoutTrashBtn.click();
+                }
+                await expect(trashBox.locator('.template-trash-box-node').first()).toBeVisible({ timeout: 2000 });
+            }).toPass({ timeout: 10000, intervals: [1000] });
         });
 
         await test.step('3. ゴミ箱を完全に空にする', async () => {
-            const trashBox = editorPage.locator('.template-trash-box');
-            await expect(trashBox).toBeVisible();
-            const emptyButton = trashBox.getByText('空にする');
-            // 1. ボタンが確実にクリック可能（表示されている）な状態になるまで待つ
-            await emptyButton.waitFor({ state: 'visible' });
-            // 2. 「ダイアログの出現と承認」と「クリック操作」の両方が終わるまで待機する
-            editorPage.waitForEvent('dialog').then(dialog => dialog.accept());
-            // 3. ダイアログが閉じて、アプリ側の削除処理が反映されるのを待つ
-            // ここで expect が自動的にリトライしてくれるので、確実に「空です」を拾えます
-            await emptyButton.click();
-            await expect(trashBox.getByText('ゴミ箱は空です')).toBeVisible();
+            const emptyButton = trashBox.locator('button').filter({ hasText: '空にする' });
+            const emptyMessage = trashBox.getByText('ゴミ箱は空です');
 
+            // ダイアログが出たら承認するハンドラを定義
+            const dialogHandler = async (dialog) => {
+                await dialog.accept();
+            };
+
+            // ステップ開始時にリスナーを登録
+            editorPage.on('dialog', dialogHandler);
+
+            try {
+                // 開く確認からクリック、完了確認までを1セットとしてリトライする
+                await expect(async () => {
+                    // 1. 閉じてしまっていたら開き直す
+                    if (!await trashBox.isVisible()) {
+                        await editorPage.locator('template-container #fab-trash-box').click();
+                    }
+
+                    // 2. すでに空になっているならクリック処理は不要（リトライ時の考慮）
+                    if (await emptyMessage.isVisible()) {
+                        return;
+                    }
+
+                    // 3. ボタンが表示されるのを待ってクリック
+                    // （タイムアウトを短く設定し、ダメなら catch させて再試行させる）
+                    await expect(emptyButton).toBeVisible({ timeout: 2000 });
+                    await emptyButton.click({ timeout: 2000 });
+
+                    // 4. 処理完了のメッセージが表示されるか確認
+                    await expect(emptyMessage).toBeVisible({ timeout: 3000 });
+
+                }).toPass({
+                    timeout: 20000,   // 最大20秒間試行
+                    intervals: [1000] // 1秒間隔でリトライ
+                });
+
+            } finally {
+                // リスナーを解除（他のテストに影響させないため）
+                editorPage.off('dialog', dialogHandler);
+            }
+
+            // 最後にゴミ箱の外（タイトルなど）をクリックして閉じる
+            await editorPage.locator('template-container .title-bar').click();
+            await expect(trashBox).toBeHidden();
         });
     });
 

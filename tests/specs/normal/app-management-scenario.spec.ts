@@ -70,10 +70,11 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             const appKeyInput = modal.locator('#input-app-key');
             await appNameInput.fill('不正キーテスト');
             await appKeyInput.fill('Invalid-KEY!');
+            await appKeyInput.blur(); // 明示的にフォーカスを外してバリデーションをトリガー
             await modal.getByRole('button', { name: '保存' }).click();
-            const errorAppKey = modal.locator('#error-app-key');
-            await expect(errorAppKey).toBeVisible();
-            await expect(errorAppKey).toContainText('英小文字、数字、ハイフン、アンダーバーのみ入力可能です');
+            await page.waitForTimeout(300);
+            // containText は自動リトライしますが、念のため期待するテキストが表示されるのを待つ
+            await expect(modal.locator('#error-app-key')).toHaveText(/英小文字、数字、ハイフン、アンダーバーのみ入力可能です/, { timeout: 5000 });
 
             // 既存のアプリケーションキーと重複した場合にエラーが表示されることを検証します。
             await appKeyInput.fill(existingAppKey);
@@ -160,40 +161,65 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await appRow.getByRole('button', { name: '編集' }).click();
 
             const modal = page.locator('dashboard-modal-window#appModal');
-            // モーダルダイアログが完全に表示されるのを待機します。
             await expect(modal.getByRole('heading', { name: 'アプリケーションの編集' })).toBeVisible();
 
             const appNameInput = page.locator('#input-app-name');
-            await expect(appNameInput).toBeEditable({ timeout: 10000 });
-
             const appKeyInput = page.locator('#input-app-key');
-            await expect(appKeyInput).toBeEditable({ timeout: 10000 });
 
-            // アプリケーション名を空にして保存し、エラーが表示されることを確認します。
-            await appNameInput.fill('');
-            await expect(appNameInput).toHaveValue('');
-            await modal.getByRole('button', { name: '保存' }).click();
-            await expect(modal.locator('#error-app-name')).toContainText('必須項目です');
+            // --- アプリケーション名を空にする ---
+            await test.step('名前を空にしてバリデーション確認', async () => {
+                await appNameInput.focus();
+                // fill('') を試行し、念のためトリプルクリック+Backspaceで確実に消去
+                await appNameInput.fill('');
+                if (await appNameInput.inputValue() !== '') {
+                    await appNameInput.click({ clickCount: 3 });
+                    await page.keyboard.press('Backspace');
+                }
+                await appNameInput.blur();
 
-            // アプリケーションキーを空にして保存し、エラーが表示されることを確認します。
-            await appNameInput.fill(appName);
-            await appKeyInput.fill('');
-            await expect(appNameInput).toHaveValue(appName);
-            await expect(appKeyInput).toHaveValue('');
-            await modal.getByRole('button', { name: '保存' }).click();
-            await expect(modal.locator('#error-app-key')).toContainText('必須項目です');
+                await expect(appNameInput).toHaveValue('');
+                await modal.getByRole('button', { name: '保存' }).click();
+                await expect(modal.locator('#error-app-name')).toContainText('必須項目です');
+            });
 
-            // アプリケーションキーが最大文字数（30文字）を超えて入力できないことを確認します。
-            await appKeyInput.fill('a'.repeat(31));
-            const appKeyValue = await appKeyInput.inputValue();
-            expect(appKeyValue.length).toBeLessThanOrEqual(30);
+            // --- アプリケーションキーを空にする ---
+            await test.step('キーを空にしてバリデーション確認', async () => {
+                await appNameInput.fill(appName); // 名前を復元
+
+                await appKeyInput.focus();
+                // 最も強力な消去方法: 3回クリック(全選択)して Backspace
+                await appKeyInput.click({ clickCount: 3 });
+                await page.keyboard.press('Backspace');
+
+                // それでも消えない場合のバックアップ案 (値を直接空にする)
+                if (await appKeyInput.inputValue() !== '') {
+                    await appKeyInput.evaluate(el => (el as HTMLInputElement).value = '');
+                    await appKeyInput.type(' '); // イベントを発火させるためのダミー入力
+                    await page.keyboard.press('Backspace');
+                }
+
+                await appKeyInput.blur();
+
+                await expect(appKeyInput).toHaveValue('', { timeout: 5000 });
+                await modal.getByRole('button', { name: '保存' }).click();
+                await expect(modal.locator('#error-app-key')).toContainText('必須項目です');
+            });
+
+            // --- アプリケーションキーの文字数制限 (30文字) ---
+            await test.step('キーの文字数制限確認', async () => {
+                const longValue = 'a'.repeat(31);
+                // fillはmaxlengthを無視して入力することがあるため、typeまたは一気に入力
+                await appKeyInput.fill(longValue);
+                await appKeyInput.blur();
+
+                const appKeyValue = await appKeyInput.inputValue();
+                expect(appKeyValue.length).toBeLessThanOrEqual(30);
+            });
 
             await modal.getByRole('button', { name: 'キャンセル' }).click();
             await expect(modal).toBeHidden();
 
-            // WebKitではなぜかダイアログが消えないことがあるのでリロード
             await page.reload({ waitUntil: 'domcontentloaded' });
-            // リロード後、メインコンテンツが表示されるのを待つ
             await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
         });
 

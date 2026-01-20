@@ -201,11 +201,21 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         await test.step('セットアップ: 文字数制限いっぱいのバージョンを持つアプリを作成', async () => {
             await setupAppWithVersions(page, { appName, appKey, versions: ['1.0.0'] });
             await deleteVersion(page, '1.0.0');
+
+            // 削除後のリスト更新を待つ
+            await page.waitForLoadState('networkidle');
+
             await addVersion(page, tooLongVersion);
+
+            // 重要：ここで確実に表示されるのを待つ（前の回答で修正したexpectVersionVisibilityを使用）
             await expectVersionVisibility(page, tooLongVersion, true);
+
+            // DOMの書き換えが激しい場合、念のため少しだけ待機（200ms程度）
+            await page.waitForTimeout(200);
         });
 
         await test.step('テスト: 30文字のバージョンを複製しようとするとエラーになる', async () => {
+            // ヘルパー内の toPass でデタッチエラーを回避しながらクリック
             await duplicateVersion(page, tooLongVersion);
 
             const alertDialog = page.locator('alert-component');
