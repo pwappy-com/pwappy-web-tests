@@ -159,6 +159,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         await test.step('テスト: 編集ダイアログでバリデーションエラーを確認', async () => {
             const appRow = page.locator('.app-list tbody tr', { hasText: appName });
             await appRow.getByRole('button', { name: '編集' }).click();
+            await page.waitForTimeout(500);
 
             const modal = page.locator('dashboard-modal-window#appModal');
             await expect(modal.getByRole('heading', { name: 'アプリケーションの編集' })).toBeVisible();
