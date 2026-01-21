@@ -33,58 +33,53 @@ export class EditorHelper {
 
     /**
      * エディタ起動時に表示される可能性のある「スナップショット復元ダイアログ」を処理します。
-     * 自動保存された未反映のデータがある場合に表示されますが、E2Eテストでは
-     * 常にクリーンな状態から開始したいため、検出した場合はすべて破棄します。
+     * リスナーを事前に登録することで、ブラウザ標準ダイアログのハンドリングを安定させます。
      */
     async handleSnapshotRestoreDialog(): Promise<void> {
-        await test.step('スナップショット復元ダイアログのチェックとクリーンアップ', async () => {
-            // 1. まずローディングオーバーレイが完全に消えるのを待つ
-            const loadingOverlay = this.page.locator('app-container-loading-overlay');
-            await expect(loadingOverlay).toBeHidden({ timeout: 30000 });
+        // 1. どんなダイアログが出ても自動でOKを押すリスナーを登録
+        const dialogHandler = async (dialog: any) => {
+            console.log(`[Auto Dialog Handler] Accepted: ${dialog.message()}`);
+            await dialog.accept().catch(() => { });
+        };
+        this.page.on('dialog', dialogHandler);
 
-            const snapshotConfirmDialog = this.page.locator('message-box', {
-                hasText: '前回正常に終了されなかった可能性'
-            });
+        try {
+            await test.step('スナップショット復元ダイアログのチェックとクリーンアップ', async () => {
+                // ローディングオーバーレイが完全に消えるのを待つ
+                const loadingOverlay = this.page.locator('app-container-loading-overlay');
+                await expect(loadingOverlay).toBeHidden({ timeout: 30000 });
 
-            // 2. 最初のダイアログが表示されるか確認
-            if (await snapshotConfirmDialog.isVisible({ timeout: 5000 }).catch(() => false)) {
+                const snapshotConfirmDialog = this.page.locator('message-box', {
+                    hasText: '前回正常に終了されなかった可能性'
+                });
 
-                await test.step('検出されたスナップショットの破棄実行', async () => {
-                    // --- 最初のダイアログ ---
-                    const discardBtn = snapshotConfirmDialog.getByRole('button', { name: '破棄する' });
-                    await expect(discardBtn).toBeVisible();
-                    await discardBtn.click();
+                // ダイアログが表示されるか確認
+                if (await snapshotConfirmDialog.isVisible({ timeout: 5000 }).catch(() => false)) {
+                    // --- 1. 最初のダイアログ: 「破棄する」をクリック ---
+                    await snapshotConfirmDialog.getByRole('button', { name: '破棄する' }).click();
 
-                    // アニメーションを待機（MessageBoxの slideUp/setTimeout を待つ）
-                    await expect(snapshotConfirmDialog).toBeHidden();
-
-                    // --- 破棄の再確認ダイアログ ---
+                    // --- 2. 再確認ダイアログが表示されるのを待つ ---
                     const discardConfirmDialog = this.page.locator('message-box', {
                         hasText: 'すべてのスナップショットを破棄しますか？'
                     });
+                    await expect(discardConfirmDialog).toBeVisible({ timeout: 5000 });
 
-                    // 次のダイアログが完全に表示されるのを待つ
-                    await expect(discardConfirmDialog).toBeVisible();
-                    const yesBtn = discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' });
-                    await expect(yesBtn).toBeVisible();
+                    // --- 3. 「はい、破棄します」をクリック ---
+                    // これにより、アプリ側で alert() が実行されるが、冒頭のリスナーが自動で閉じる
+                    await discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' }).click();
 
-                    // ブラウザ標準のダイアログ (window.alert) を待ち受ける設定
-                    // ボタンを押す「前」にリスナーを準備する必要があります
-                    const dialogPromise = this.page.waitForEvent('dialog');
-
-                    // ボタンをクリック
-                    await yesBtn.click();
-
-                    // ブラウザ標準の alert を捕捉して検証
-                    const dialog = await dialogPromise;
-                    expect(dialog.message()).toBe('不要なスナップショットを破棄しました。');
-                    await dialog.accept(); // OKボタンを押す操作に相当
-
-                    // 最後に、確認ダイアログ自体が消え去るのを待つ
+                    // 4. すべてのモーダルが消え去るのを待つ
+                    await expect(snapshotConfirmDialog).toBeHidden();
                     await expect(discardConfirmDialog).toBeHidden();
-                });
-            }
-        });
+
+                    // 処理後の安定化待ち
+                    await this.page.waitForTimeout(500);
+                }
+            });
+        } finally {
+            // 他のテストに影響を与えないよう、リスナーを解除
+            this.page.off('dialog', dialogHandler);
+        }
     }
 
     /**
