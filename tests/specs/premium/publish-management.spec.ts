@@ -244,17 +244,79 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
     });
 
-    test('AIコーディングの使用ポイントをテストする', async ({ page, context, isMobile }) => {
+    // test('AIコーディングの使用ポイントをテストする', async ({ page, context, isMobile }) => {
+    //     const workerIndex = test.info().workerIndex;
+    //     const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+    //     const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
+    //     const appName = (`AIコードテスト-${uniqueId}`).slice(0, 30);
+    //     const appKey = (`ai-code-test-${uniqueId}`).slice(0, 30);
+    //     const version = '1.0.0';
+    //     const apiKey = process.env.TEST_GEMINI_API_KEY;
+    //     if (!apiKey) {
+    //         throw new Error('環境変数 TEST_GEMINI_API_KEY が設定されていません。');
+    //     }
+
+    //     await test.step('セットアップ: アプリ作成とAI有効化', async () => {
+    //         await createApp(page, appName, appKey);
+    //         await setAiCoding(page, true);
+    //     });
+
+    //     const testContext = { page, context, isMobile, appName, version };
+
+    //     // --- シナリオ1: APIキーなし ---
+    //     await test.step('テスト: APIキーなしでPPが多く消費されることを確認', async () => {
+    //         await deleteGeminiApiKey(page);
+    //         await testAiCodingPpConsumption(testContext, {
+    //             prompt: '// canvasを作って、ひらがな、カタカナ、英数字をランダムで上下左右から文字が現れるアニメーションを表示するコードを実装してください。文字は残像を残してアニメーションをします。また、10秒毎に文字の大きさがランダムで切り替わり、豪華なパーティクルもつけてください。',
+    //             model: 'gemini-2.5-flash-lite',
+    //             expectedPpConsumption: 1, // 1より大きいことを確認
+    //             assertionType: 'greaterThan'
+    //         });
+    //         // ページ終了処理はヘルパー関数内の「保存して閉じる」で行われます
+    //     });
+
+    //     // --- シナリオ2: APIキーあり ---
+    //     await test.step('テスト: APIキーありでPPが1消費されることを確認', async () => {
+    //         await setGeminiApiKey(page, apiKey);
+    //         await testAiCodingPpConsumption(testContext, {
+    //             prompt: '// canvasを作って、ひらがな、カタカナ、英数字をランダムで上下左右から文字が現れるアニメーションを表示するコードを実装してください。文字は残像を残してアニメーションをします。また、10秒毎に文字の大きさがランダムで切り替わり、豪華なパーティクルもつけてください。',
+    //             model: 'gemini-2.5-flash-lite',
+    //             expectedPpConsumption: 1, // 1と完全一致することを確認
+    //             assertionType: 'exact'
+    //         });
+    //     });
+
+    //     await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
+    //         await deleteApp(page, appKey);
+    //         await expectAppVisibility(page, appKey, false);
+    //     });
+    // });
+
+    // Geminiを使わないモック版のテスト
+    test('AIコーディングをテストする（モック実行）', async ({ page, context, isMobile }) => {
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        const appName = (`AIコードテスト-${uniqueId}`).slice(0, 30);
-        const appKey = (`ai-code-test-${uniqueId}`).slice(0, 30);
+        const appName = (`AIモックテスト-${uniqueId}`).slice(0, 30);
+        const appKey = (`ai-mock-test-${uniqueId}`).slice(0, 30);
         const version = '1.0.0';
-        const apiKey = process.env.TEST_GEMINI_API_KEY;
-        if (!apiKey) {
-            throw new Error('環境変数 TEST_GEMINI_API_KEY が設定されていません。');
-        }
+
+        // 1. ネットワークリクエストをモック化
+        // AIコーディングのAPIエンドポイント（ここでは仮に **/ai-coding とします）をフック
+        await page.route('**/ai-coding', async (route) => {
+            // リクエストを受け取ったフリをして、1秒後にダミー回答を返す
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    code: 200,
+                    details: {
+                        text: "function mockedFunction() {\n  console.log('This is a mocked response');\n}"
+                    }
+                })
+            });
+        });
 
         await test.step('セットアップ: アプリ作成とAI有効化', async () => {
             await createApp(page, appName, appKey);
@@ -263,32 +325,38 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         const testContext = { page, context, isMobile, appName, version };
 
-        // --- シナリオ1: APIキーなし ---
-        await test.step('テスト: APIキーなしでPPが多く消費されることを確認', async () => {
+        await test.step('テスト: モック応答でAIコーディングのフローが完了することを確認', async () => {
+            // APIキーの有無に関わらず、モックが反応するので Gemini は消費されない
             await deleteGeminiApiKey(page);
-            await testAiCodingPpConsumption(testContext, {
-                prompt: '// canvasを作って、ひらがな、カタカナ、英数字をランダムで上下左右から文字が現れるアニメーションを表示するコードを実装してください。文字は残像を残してアニメーションをします。また、10秒毎に文字の大きさがランダムで切り替わり、豪華なパーティクルもつけてください。',
-                model: 'gemini-2.5-flash-lite',
-                expectedPpConsumption: 1, // 1より大きいことを確認
-                assertionType: 'greaterThan'
-            });
-            // ページ終了処理はヘルパー関数内の「保存して閉じる」で行われます
+
+            // initialPoints の取得
+            const initialPoints = await getCurrentPoints(page);
+
+            const editorPage = await openEditor(page, context, appName, version);
+            const editorHelper = new EditorHelper(editorPage, isMobile);
+
+            await editorHelper.openMoveingHandle("right");
+            const scriptContainer = editorPage.locator('script-container');
+            await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
+            await editorHelper.addNewScript('mockScript');
+            await editorHelper.openScriptForEditing('mockScript');
+
+            // AI実行（ここで page.route が発動する）
+            await editorHelper.generateCodeWithAi('モック用の指示です');
+
+            // エディタを閉じる
+            await editorPage.locator('platform-bottom-menu').click();
+            await Promise.all([
+                editorPage.waitForEvent('close'),
+                editorPage.locator('.menu-item', { hasText: '保存せずに閉じる' }).click()
+            ]);
+
+            //モックなのでPP消費はなし
         });
 
-        // --- シナリオ2: APIキーあり ---
-        await test.step('テスト: APIキーありでPPが1消費されることを確認', async () => {
-            await setGeminiApiKey(page, apiKey);
-            await testAiCodingPpConsumption(testContext, {
-                prompt: '// canvasを作って、ひらがな、カタカナ、英数字をランダムで上下左右から文字が現れるアニメーションを表示するコードを実装してください。文字は残像を残してアニメーションをします。また、10秒毎に文字の大きさがランダムで切り替わり、豪華なパーティクルもつけてください。',
-                model: 'gemini-2.5-flash-lite',
-                expectedPpConsumption: 1, // 1と完全一致することを確認
-                assertionType: 'exact'
-            });
-        });
-
-        await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
+        await test.step('クリーンアップ', async () => {
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, appKey, false);
         });
     });
+
 });

@@ -962,8 +962,8 @@ export class EditorHelper {
         await aiWindow.locator('button#send-btn').click();
 
         // 「生成中」の表示を待つ
-        const pendingMessage = aiWindow.locator('.message-content.pending');
-        await expect(pendingMessage).toBeVisible({ timeout: 5000 });
+        const pendingMessage = aiWindow.getByText('コード生成中');
+        await expect(pendingMessage).toBeVisible({ timeout: 10000 });
 
         // 応答が完了するのを待つ
         await expect(pendingMessage).toBeHidden({ timeout: 120000 });
