@@ -81,21 +81,28 @@ test.describe('AI設定の永続化テスト', () => {
 
             const aiWindow = editorPage.locator('ai-coder-window');
             await aiWindow.locator('#setting-btn').click();
-            const settingWindow = aiWindow.locator('.setting-window');
+            const settingWindow = aiWindow.locator('#setting-window');
 
-            const select = settingWindow.locator('select');
+            // 表示されるまで待機
+            await expect(settingWindow).toBeVisible();
+
+            const select = settingWindow.locator('select.modern-select');
             targetModel = await getRandomOptionValue(select);
             console.log(`[AI Coder Test] UIから取得したランダムモデル: ${targetModel}`);
 
             await select.selectOption({ value: targetModel });
             await settingWindow.locator('input[type="range"]').fill(targetTemp);
 
+            // スイッチ部分をクリック
             const checkbox = settingWindow.locator('#use-onsenui-check');
             if (await checkbox.isChecked() !== targetOnsen) {
-                await checkbox.click();
+                await settingWindow.locator('label.switch').click();
             }
 
-            await settingWindow.locator('#close-btn').click();
+            // 閉じるボタンをクリック
+            const closeBtn = settingWindow.locator('#close-btn');
+            await expect(closeBtn).toBeVisible();
+            await closeBtn.click();
         });
 
         await test.step('2. ページをリロードし、スナップショットを破棄', async () => {
@@ -114,10 +121,11 @@ test.describe('AI設定の永続化テスト', () => {
 
             const aiWindow = editorPage.locator('ai-coder-window');
             await aiWindow.locator('#setting-btn').click();
-            const settingWindow = aiWindow.locator('.setting-window');
+            const settingWindow = aiWindow.locator('#setting-window');
+            await expect(settingWindow).toBeVisible();
 
             // 保持されている値の検証
-            await expect(settingWindow.locator('select')).toHaveValue(targetModel);
+            await expect(settingWindow.locator('select.modern-select')).toHaveValue(targetModel);
             await expect(settingWindow.locator('input[type="range"]')).toHaveValue(targetTemp);
             if (targetOnsen) {
                 await expect(settingWindow.locator('#use-onsenui-check')).toBeChecked();
@@ -150,7 +158,7 @@ test.describe('AI設定の永続化テスト', () => {
             await modal.locator('#max-recovery-input').fill(targetRecovery);
             await modal.getByRole('button', { name: '設定を保存' }).click();
 
-            const modeBtn = agentWindow.locator('.mode-selector button', { hasText: targetMode });
+            const modeBtn = agentWindow.locator('.mode-btn').filter({ hasText: targetMode });
             await modeBtn.click();
         });
 
@@ -165,7 +173,7 @@ test.describe('AI設定の永続化テスト', () => {
             await editorPage.locator('#platformBottomMenu').getByText('AIエージェント').click();
             const agentWindow = editorPage.locator('agent-chat-window');
 
-            const modeBtn = agentWindow.locator('.mode-selector button', { hasText: targetMode });
+            const modeBtn = agentWindow.locator('.mode-btn').filter({ hasText: targetMode });
             await expect(modeBtn).toHaveClass(/active/);
 
             await agentWindow.locator('.settings-btn').click();

@@ -947,26 +947,34 @@ export class EditorHelper {
             await aiWindow.locator('button#setting-btn').click();
             const settingsWindow = aiWindow.locator('div#setting-window');
             await expect(settingsWindow).toBeVisible();
-            await settingsWindow.locator('select').selectOption({ value: options.model });
+
+            // モデル選択 (modern-selectクラス)
+            await settingsWindow.locator('select.modern-select').selectOption({ value: options.model });
+
+            // 「設定を適用して戻る」ボタン
             await settingsWindow.locator('button#close-btn').click();
             await expect(settingsWindow).toBeHidden();
         }
 
         // 3. プロンプトを入力して送信し、応答を待つ
-        await aiWindow.locator('textarea#user-input').fill(prompt);
+        const inputArea = aiWindow.locator('textarea#user-input');
+        await inputArea.fill(prompt);
         await aiWindow.locator('button#send-btn').click();
 
         // 「生成中」の表示を待つ
         const pendingMessage = aiWindow.locator('.message-content.pending');
         await expect(pendingMessage).toBeVisible({ timeout: 5000 });
 
-        // 応答が完了するのを待つ (AIの応答は時間がかかるためタイムアウトを長く設定)
+        // 応答が完了するのを待つ
         await expect(pendingMessage).toBeHidden({ timeout: 120000 });
 
         // 4. 最新の応答メッセージを取得し、「置き換え」ボタンをクリック
         const lastBotMessage = aiWindow.locator('.message.bot').last();
         await expect(lastBotMessage).toBeVisible();
-        await lastBotMessage.getByRole('button', { name: '置き換え' }).click();
+
+        // 刷新されたボタンクラス（.paste-btn または .bottom-btn）に対応
+        const replaceBtn = lastBotMessage.locator('button').filter({ hasText: '置き換え' });
+        await replaceBtn.click();
 
         // 5. AIコーディングウィンドウが閉じるのを待つ
         await expect(aiWindow).toBeHidden();
