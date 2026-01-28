@@ -52,18 +52,30 @@ jobs:
         run: |
           # 全OS実行か個別OS実行かに基づいてマトリックスJSONを生成
           if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event.inputs.os }}" == "all" ]]; then
-            echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium"}, {"os": "windows-latest", "browser": "chromium"}, {"os": "macos-latest", "browser": "webkit"}]' >> $GITHUB_OUTPUT
+            echo 'matrix=[ \
+              {"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"}, \
+              {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"}, \
+              {"os": "windows-latest", "browser": "chromium", "binary": "chromium"}, \
+              {"os": "macos-latest", "browser": "webkit", "binary": "webkit"}, \
+              {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"} \
+            ]' >> $GITHUB_OUTPUT
           else
             # 手動実行で特定のOSが選択された場合は、そのOSに対応する組み合わせのみを生成する
             case "${{ github.event.inputs.os }}" in
               "ubuntu-latest")
-                echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium"}]' >> $GITHUB_OUTPUT
+                echo 'matrix=[ \
+                  {"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"}, \
+                  {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"} \
+                ]' >> $GITHUB_OUTPUT
                 ;;
               "windows-latest")
-                echo 'matrix=[{"os": "windows-latest", "browser": "chromium"}]' >> $GITHUB_OUTPUT
+                echo 'matrix=[{"os": "windows-latest", "browser": "chromium", "binary": "chromium"}]' >> $GITHUB_OUTPUT
                 ;;
               "macos-latest")
-                echo 'matrix=[{"os": "macos-latest", "browser": "webkit"}]' >> $GITHUB_OUTPUT
+                echo 'matrix=[ \
+                  {"os": "macos-latest", "browser": "webkit", "binary": "webkit"}, \
+                  {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"} \
+                ]' >> $GITHUB_OUTPUT
                 ;;
             esac
           fi
@@ -96,8 +108,8 @@ jobs:
       actions: write
     strategy:
       fail-fast: false
-      # 同時に実行するOS(3でubuntu,window,macを並列実行)
-      max-parallel: 3
+      # 最大並列数をPC(Linux,Windows,Mac),Mobile(Android,iOS)の５つ
+      max-parallel: 5
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
@@ -107,10 +119,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # キャッシュキー接頭辞の設定
+      # キャッシュキー接頭辞の設定 (バイナリエンジン単位でキャッシュを共有)
       - name: Set cache key prefix
         run: |
-          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
+          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -143,9 +155,10 @@ jobs:
           restore-keys: |
             ${{ env.CACHE_KEY_PREFIX }}-
 
+      # 指定されたバイナリをインストール
       - name: Install Playwright Browsers
         if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps ${{ matrix.browser }}
+        run: npx playwright install --with-deps ${{ matrix.binary }}
 
       - name: Set OS Short Name
         shell: bash
@@ -156,6 +169,7 @@ jobs:
           elif [[ "$OS_NAME" == "macos-latest" ]]; then echo "OS_SHORT_NAME=macos" >> $GITHUB_ENV;
           else echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV; fi
 
+      # プロジェクト名を指定してテスト実行
       - name: Run Normal E2E Tests
         id: run_tests
         shell: bash
@@ -170,7 +184,7 @@ jobs:
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
-      # テスト失敗時：このブラウザ/OSに関連する「全ての古いキャッシュ」を削除する
+      # テスト失敗時：このブラウザエンジン/OSに関連する「全ての古いキャッシュ」を削除する
       - name: Delete cache on failure
         if: failure()
         run: |
@@ -217,7 +231,7 @@ jobs:
 
       - name: Set cache key prefix
         run: |
-          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.browser }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
+          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -250,7 +264,7 @@ jobs:
 
       - name: Install Playwright Browsers
         if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps ${{ matrix.browser }}
+        run: npx playwright install --with-deps ${{ matrix.binary }}
 
       - name: Set OS Short Name
         shell: bash
