@@ -49,33 +49,41 @@ jobs:
     steps:
       - name: Determine test matrix
         id: set-matrix
+        shell: bash
         run: |
           # 全OS実行か個別OS実行かに基づいてマトリックスJSONを生成
+          # 複数行のJSONを出力するために EOF デリミタを使用
           if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event.inputs.os }}" == "all" ]]; then
-            echo 'matrix=[ \
-              {"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"}, \
-              {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"}, \
-              {"os": "windows-latest", "browser": "chromium", "binary": "chromium"}, \
-              {"os": "macos-latest", "browser": "webkit", "binary": "webkit"}, \
-              {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"} \
+            echo "matrix<<EOF" >> $GITHUB_OUTPUT
+            echo '[
+              {"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"},
+              {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"},
+              {"os": "windows-latest", "browser": "chromium", "binary": "chromium"},
+              {"os": "macos-latest", "browser": "webkit", "binary": "webkit"},
+              {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}
             ]' >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
           else
             # 手動実行で特定のOSが選択された場合は、そのOSに対応する組み合わせのみを生成する
             case "${{ github.event.inputs.os }}" in
               "ubuntu-latest")
-                echo 'matrix=[ \
-                  {"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"}, \
-                  {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"} \
+                echo "matrix<<EOF" >> $GITHUB_OUTPUT
+                echo '[
+                  {"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"},
+                  {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"}
                 ]' >> $GITHUB_OUTPUT
+                echo "EOF" >> $GITHUB_OUTPUT
                 ;;
               "windows-latest")
                 echo 'matrix=[{"os": "windows-latest", "browser": "chromium", "binary": "chromium"}]' >> $GITHUB_OUTPUT
                 ;;
               "macos-latest")
-                echo 'matrix=[ \
-                  {"os": "macos-latest", "browser": "webkit", "binary": "webkit"}, \
-                  {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"} \
+                echo "matrix<<EOF" >> $GITHUB_OUTPUT
+                echo '[
+                  {"os": "macos-latest", "browser": "webkit", "binary": "webkit"},
+                  {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}
                 ]' >> $GITHUB_OUTPUT
+                echo "EOF" >> $GITHUB_OUTPUT
                 ;;
             esac
           fi
