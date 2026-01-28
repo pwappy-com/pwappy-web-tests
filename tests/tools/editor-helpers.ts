@@ -153,6 +153,9 @@ export class EditorHelper {
      * @param nodeLocator 選択したいノードのLocator
      */
     async selectNodeInDomTree(nodeLocator: Locator): Promise<void> {
+        // 左ハンドルをオープン
+        await this.openMoveingHandle('left');
+        
         await nodeLocator.click({ position: { x: 0, y: 10 } });
         await expect(nodeLocator).toHaveClass(/node-select/);
     }
@@ -371,7 +374,7 @@ export class EditorHelper {
             await handle.tap();
         }
 
-        if (!await templateContainer.isVisible()) {
+        if (await templateContainer.isVisible()) {
             const handle = this.page.locator(`#leftMovingHandle`);
             await handle.tap();
             await handle.tap();
@@ -878,22 +881,55 @@ export class EditorHelper {
 
     /**
      * Monaco Editorの現在のテキストコンテンツを取得します。
+     * モバイル/デスクトップ問わず、Monacoの内部Modelから直接値を取得します。
      * @returns エディタの現在のテキスト
      */
     async getMonacoEditorContent(): Promise<string> {
-        // スクリプトコンテナ内のエディタに絞り込む
         const scriptContainer = this.page.locator('script-container');
         const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
 
-        // Monaco Editor の内部にある入力用のtextareaは常に存在し、
-        // ユーザーには見えないが値は持っている。これを直接ターゲットにする。
-        // これにより、エディタ全体の表示状態に依存せず値を取得できる。
+        // エディタが表示されるのを待つ
+        await expect(monacoEditor).toBeVisible();
+
+        // 方法1: Monaco EditorのAPIを叩いて、Modelから直接値を取得する（推奨）
+        // HTML属性からURIを取得し、それに対応するModelを探します
+        const uri = await monacoEditor.getAttribute('data-uri');
+
+        const contentFromApi = await this.page.evaluate((targetUri) => {
+            // @ts-ignore
+            const monaco = window.monaco;
+            if (monaco && monaco.editor) {
+                const models = monaco.editor.getModels();
+
+                // data-uri属性がある場合は特定する
+                if (targetUri) {
+                    const model = models.find((m: any) => m.uri.toString() === targetUri);
+                    if (model) return model.getValue();
+                }
+
+                // URIで特定できない、または見つからない場合は、
+                // 現在フォーカスがある、または最初のモデルを返す
+                if (models.length > 0) {
+                    return models[0].getValue();
+                }
+            }
+            return null;
+        }, uri);
+
+        if (contentFromApi !== null) {
+            return contentFromApi;
+        }
+
+        // 方法2: APIが使えない場合のフォールバック（モバイル向け）
+        // .view-lines の見た目のテキストを取得する
+        // 注意: ファイルが非常に長い場合、仮想化により画面外の行が取得できない可能性があります
+        const viewLines = monacoEditor.locator('.view-lines');
+        if (await viewLines.isVisible()) {
+            return await viewLines.innerText();
+        }
+
+        // 方法3: 最後の手段として textarea を確認（デスクトップ向け）
         const textArea = monacoEditor.locator('textarea.inputarea');
-
-        // textAreaがDOMに存在することを確認する
-        await expect(textArea).toBeAttached();
-
-        // 隠されたtextareaから直接値を取得する
         return await textArea.inputValue();
     }
 

@@ -127,6 +127,7 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
             });
 
             await test.step('3. スナップショットから復元を実行', async () => {
+                await editorHelper.closeMoveingHandle();
                 const menuButton = editorPage.locator('#fab-bottom-menu-box');
                 await menuButton.click();
                 await editorPage.locator('#platformBottomMenu').getByText('スナップショット管理').click();

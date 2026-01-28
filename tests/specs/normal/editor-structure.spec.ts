@@ -2,7 +2,6 @@ import { test as base, expect, Page, Locator } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
-import { transcode } from 'buffer';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
@@ -139,7 +138,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             const emptyMessage = trashBox.getByText('ゴミ箱は空です');
 
             // ダイアログが出たら承認するハンドラを定義
-            const dialogHandler = async (dialog) => {
+            const dialogHandler = async (dialog: any) => {
                 await dialog.accept();
             };
 
@@ -200,6 +199,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
         });
 
         await test.step('2. 検索とジャンプ', async () => {
+            editorHelper.openMoveingHandle('left');
             await editorPage.locator('.title-icon-bar-button[title="レイアウト検索"]').click();
             const searchWindow = editorPage.locator('template-search-sub-window');
             await expect(searchWindow).toBeVisible();
@@ -221,55 +221,216 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 
         await editorHelper.handleSnapshotRestoreDialog();
 
-        await test.step('1. ページと2つのボタンを配置', async () => {
+        /**
+         * ツールボックスからコンポーネントを探し（必要ならスクロール）、
+         * DOMツリーのターゲットへ自動スクロールを監視しながら手動でドラッグ＆ドロップする内部関数
+         */
+        const dragComponentFromToolbox = async (componentName: string, targetLocator: Locator) => {
+            const toolbox = editorPage.locator('tool-box');
+            const toolboxContainer = toolbox.locator('.container');
+            const toolboxItem = toolbox.locator(`tool-box-item[data-item-type="${componentName}"]`);
+            const layoutPanel = editorPage.locator('template-container .panel');
+
+            // --- 1. ツールボックスからアイテムを探す（スクロール探索） ---
+            await editorHelper.openMoveingHandle('left');
+
+            await test.step(`ツールボックス内で ${componentName} をスクロールして探す`, async () => {
+                const maxScrollAttempts = 15;
+                for (let i = 0; i < maxScrollAttempts; i++) {
+                    const itemBox = await toolboxItem.boundingBox();
+                    const containerBox = await toolboxContainer.boundingBox();
+
+                    if (itemBox && containerBox) {
+                        // アイテムがコンテナの表示範囲内（Y座標）にあるか厳密に判定
+                        const isInView = (itemBox.y >= containerBox.y) &&
+                            (itemBox.y + itemBox.height <= containerBox.y + containerBox.height);
+
+                        if (isInView) {
+                            console.log(`Found ${componentName} in view.`);
+                            break;
+                        }
+                    }
+
+                    console.log(`${componentName} not in view, scrolling toolbox...`);
+                    // 100pxずつスクロールさせて探す
+                    await toolboxContainer.evaluate(el => el.scrollTop += 100);
+                    await editorPage.waitForTimeout(200);
+
+                    if (i === maxScrollAttempts - 1) {
+                        throw new Error(`ツールボックス内で ${componentName} を見つけることができませんでした。`);
+                    }
+                }
+            });
+
+            // --- 2. アイテムを掴む ---
+            const sourceBox = await toolboxItem.boundingBox();
+            if (!sourceBox) throw new Error(`${componentName} の座標が取得できません`);
+
+            await editorPage.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+            await editorPage.mouse.down();
+            await editorPage.waitForTimeout(400); // 長押し判定待ち
+
+            // --- 3. ターゲット（DOMツリー内のノード）へ追尾移動 ---
+            let lastTargetY = 0;
+            let stagnationCount = 0;
+            const scrollThreshold = 30;
+
+            for (let i = 0; i < 150; i++) {
+                const pBox = await layoutPanel.boundingBox();
+                const tBox = await targetLocator.boundingBox();
+
+                if (!pBox || !tBox) break;
+
+                const panelTop = pBox.y;
+                const panelBottom = pBox.y + pBox.height;
+
+                // 目的地：ターゲットノードの内側（上から15px）
+                const destX = tBox.x + 20;
+                const destY = tBox.y + 15;
+
+                // スクロール監視
+                if (Math.abs(tBox.y - lastTargetY) < 0.5) {
+                    stagnationCount++;
+                } else {
+                    stagnationCount = 0;
+                }
+                lastTargetY = tBox.y;
+
+                // ターゲットがパネルの可視エリア内にいるか
+                const isTargetVisible = destY > panelTop + scrollThreshold && destY < panelBottom - scrollThreshold;
+
+                if (isTargetVisible) {
+                    await editorPage.mouse.move(destX, destY, { steps: 5 });
+                    if (Math.abs(destY - destY) < 5) break;
+                } else {
+                    const isScrollingDown = destY >= panelBottom - scrollThreshold;
+                    if (stagnationCount > 3) {
+                        // 【再進入フォールバック】一度スクロールエリア外へ戻ってから入り直す
+                        const resetY = isScrollingDown ? (panelBottom - 60) : (panelTop + 60);
+                        await editorPage.mouse.move(destX, resetY, { steps: 5 });
+                        await editorPage.waitForTimeout(100);
+                        const retryY = isScrollingDown ? (panelBottom - 15) : (panelTop + 15);
+                        await editorPage.mouse.move(destX, retryY, { steps: 5 });
+                        stagnationCount = 0;
+                    } else {
+                        const hoverY = isScrollingDown ? (panelBottom - 15) : (panelTop + 15);
+                        await editorPage.mouse.move(destX, hoverY, { steps: 2 });
+                    }
+                }
+                await editorPage.waitForTimeout(100);
+            }
+
+            // --- 4. ドロップ ---
+            const finalBox = await targetLocator.boundingBox();
+            if (finalBox) {
+                await editorPage.mouse.move(finalBox.x + 20, finalBox.y + 15, { steps: 5 });
+            }
+            await editorPage.waitForTimeout(200);
+            await editorPage.mouse.up();
+            await editorPage.waitForTimeout(500);
+        };
+
+        // =============================================================
+        // 実際のテストステップ実行
+        // =============================================================
+
+        await test.step('1. ページを追加し、ツールボックスからボタンを2つドラッグ＆ドロップで配置', async () => {
+            // 新しいページを作成
             await editorHelper.addPage();
-            const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
 
-            // ボタンを2回追加
-            await editorHelper.addComponent('ons-button', contentAreaSelector);
-            await editorHelper.addComponent('ons-button', contentAreaSelector);
+            // DOMツリー内のドロップ先（コンテンツエリア）を特定
+            const contentArea = editorPage.locator('template-container .node[data-node-explain="コンテンツ"]');
 
-            // ボタンのIDを確認（初期状態）
-            // アプリ仕様：新しい要素が上(index 0)に追加されるため、nth(0)がons-button2となる
-            const buttons = editorPage.locator('.node[data-node-type="ons-button"]');
+            // 【重要】ここで定義した手動ドラッグ関数を呼び出す
+            await dragComponentFromToolbox('ons-button', contentArea);
+            await dragComponentFromToolbox('ons-button', contentArea);
+
+            // 初期状態の確認（新しい要素が上に挿入される仕様を検証）
+            const buttons = editorPage.locator('template-container .node[data-node-type="ons-button"]');
             await expect(buttons).toHaveCount(2);
             await expect(buttons.nth(0)).toHaveAttribute('data-node-dom-id', 'ons-button2');
             await expect(buttons.nth(1)).toHaveAttribute('data-node-dom-id', 'ons-button1');
         });
 
-        await test.step('2. ドラッグ操作による順序反転', async () => {
-            const btnTop = editorPage.locator('.node[data-node-dom-id="ons-button2"]');
-            const btnBottom = editorPage.locator('.node[data-node-dom-id="ons-button1"]');
+        await test.step('2. ドラッグ操作による順序反転（再進入スクロール発火版）', async () => {
+            // 操作対象のノード
+            const btnTop = editorPage.locator('template-container .node[data-node-dom-id="ons-button2"]');
+            const btnBottom = editorPage.locator('template-container .node[data-node-dom-id="ons-button1"]');
+            const layoutPanel = editorPage.locator('template-container .panel');
+            const targetInsertPoint = editorPage.locator('template-container .node[data-node-dom-id="ons-button1"] + .node-add-point');
 
-            // 下のボタンを確実に表示させて座標を取得（先にスクロールをしないと座標がずれるので必ず必要な処理、省略してはいけない
-            await btnBottom.scrollIntoViewIfNeeded();
+            // --- 1. ドラッグ開始 ---
+            await btnTop.scrollIntoViewIfNeeded();
+            const startBox = await btnTop.boundingBox();
+            if (!startBox) throw new Error('btnTopが見つかりません');
 
-            const boxTop = await btnTop.boundingBox();
+            let currentX = startBox.x + startBox.width / 2;
+            let currentY = startBox.y + startBox.height / 2;
 
-            if (boxTop) {
-                // 上のボタンの中心付近を掴む
-                await editorPage.mouse.move(boxTop.x + boxTop.width / 2, boxTop.y + boxTop.height / 2);
-                await editorPage.mouse.down();
-                await editorPage.waitForTimeout(600);
+            await editorPage.mouse.move(currentX, currentY);
+            await editorPage.mouse.down();
+            await editorPage.waitForTimeout(400);
 
-                // スクロール等で位置が変わる可能性があるため、ターゲットの座標を再取得
-                const boxBottomUpdated = await btnBottom.boundingBox();
+            // --- 2. ターゲット追尾・スクロール監視ループ ---
+            let lastTargetY = 0;
+            let stagnationCount = 0;
+            const scrollThreshold = 30;
 
-                if (boxBottomUpdated) {
-                    // 下のボタンの「内側の下端ギリギリ」を狙って移動（stepsを増やして移動を検知させる）
-                    // 要素の外ではなく、要素内の「中心より下」にポインタを置くことで、その要素の「後ろ」への挿入が発火する
-                    await editorPage.mouse.move(
-                        boxBottomUpdated.x + boxBottomUpdated.width / 2,
-                        boxBottomUpdated.y + boxBottomUpdated.height - 2 + 10,
-                        { steps: 20 }
-                    );
-                    await editorPage.waitForTimeout(300); // ドラッグ先の判定確定を待つ
-                    await editorPage.mouse.up();
+            for (let i = 0; i < 150; i++) {
+                const pBox = await layoutPanel.boundingBox();
+                const tBox = await btnBottom.boundingBox();
+                const iBox = await targetInsertPoint.boundingBox();
+
+                if (!pBox || !tBox) break;
+
+                const panelTop = pBox.y;
+                const panelBottom = pBox.y + pBox.height;
+
+                const destX = tBox.x + tBox.width / 2;
+                const destY = (iBox && iBox.height > 2) ? (iBox.y + iBox.height / 2) : (tBox.y + tBox.height + 10);
+
+                if (Math.abs(tBox.y - lastTargetY) < 0.5) {
+                    stagnationCount++;
+                } else {
+                    stagnationCount = 0;
                 }
+                lastTargetY = tBox.y;
+
+                const isTargetVisible = destY > panelTop + scrollThreshold && destY < panelBottom - scrollThreshold;
+
+                if (isTargetVisible) {
+                    currentX = destX;
+                    currentY = destY;
+                    await editorPage.mouse.move(currentX, currentY, { steps: 5 });
+                    if (Math.abs(currentY - destY) < 5) break;
+                } else {
+                    const isScrollingDown = destY >= panelBottom - scrollThreshold;
+                    if (stagnationCount > 3) {
+                        const resetY = isScrollingDown ? (panelBottom - 60) : (panelTop + 60);
+                        await editorPage.mouse.move(destX, resetY, { steps: 5 });
+                        await editorPage.waitForTimeout(100);
+                        currentY = isScrollingDown ? (panelBottom - 15) : (panelTop + 15);
+                        await editorPage.mouse.move(destX, currentY, { steps: 5 });
+                        stagnationCount = 0;
+                    } else {
+                        currentY = isScrollingDown ? (panelBottom - 15) : (panelTop + 15);
+                        await editorPage.mouse.move(destX, currentY, { steps: 2 });
+                    }
+                }
+                await editorPage.waitForTimeout(100);
             }
 
-            // 順序が入れ替わったことを検証
-            const finalNodes = editorPage.locator('.node[data-node-type="ons-button"]');
+            // --- 3. 最終位置調整とドロップ ---
+            const finalBox = await targetInsertPoint.boundingBox() || await btnBottom.boundingBox();
+            if (finalBox) {
+                await editorPage.mouse.move(finalBox.x + finalBox.width / 2, finalBox.y + finalBox.height / 2, { steps: 5 });
+            }
+            await editorPage.waitForTimeout(400);
+            await editorPage.mouse.up();
+            await editorPage.waitForTimeout(500);
+
+            // 検証
+            const finalNodes = editorPage.locator('template-container .node[data-node-type="ons-button"]');
             await expect(finalNodes.nth(0)).toHaveAttribute('data-node-dom-id', 'ons-button1');
             await expect(finalNodes.nth(1)).toHaveAttribute('data-node-dom-id', 'ons-button2');
         });

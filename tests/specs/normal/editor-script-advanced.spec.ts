@@ -1,7 +1,7 @@
 import { test as base, expect, Page, Locator } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
-import { EditorHelper } from '../../tools/editor-helpers';
+import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
@@ -245,7 +245,7 @@ customElements.define('${componentTagName}', ${scriptName});
         });
     });
 
-    test('コーディング支援：IDペーストと影響範囲検索', async ({ editorPage, editorHelper }) => {
+    test('コーディング支援：IDペーストと影響範囲検索', async ({ editorPage, editorHelper, isMobile }) => {
         const scriptName = 'testIdPaste';
         const buttonId = 'target-btn';
 
@@ -269,6 +269,10 @@ customElements.define('${componentTagName}', ${scriptName});
             // スクリプト編集画面を開く
             await editorHelper.openScriptForEditing(scriptName);
 
+            for (let i = 0; i < 4; i++) {
+                await editorPage.keyboard.press('ArrowDown');
+            }
+
             // プロパティタブ（属性）を開き、ID行にあるペーストボタンをクリック
             await editorHelper.switchTabInContainer(editorPage.locator('property-container'), '属性');
             const propertyContainer = editorHelper.getPropertyContainer();
@@ -283,7 +287,14 @@ customElements.define('${componentTagName}', ${scriptName});
 
             // エディタの内容を取得し、ID取得コードが挿入されているか確認
             const editorContent = await editorHelper.getMonacoEditorContent();
-            expect(editorContent).toContain(`const targetBtn = document.getElementById('${buttonId}');`);
+            //expect(editorContent).toContain(`const targetBtn = document.getElementById('${buttonId}');`);
+            const expectedPart = `const targetBtn = document.getElementById('${buttonId}');`;
+
+            // 改行、インデント、型注釈などの差異を許容するために normalizeWhitespace を使用する
+            const normalizedReceived = normalizeWhitespace(editorContent);
+            const normalizedExpected = normalizeWhitespace(expectedPart);
+
+            expect(normalizedReceived).toContain(normalizedExpected);
 
             // エディタを閉じる（保存して戻る）
             await editorPage.locator('script-container #fab-save').click();
