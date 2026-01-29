@@ -592,17 +592,23 @@ export class EditorHelper {
         const browserName = this.page.context().browser()?.browserType().name();
         const textarea = monacoEditor.locator('textarea.inputarea');
 
-        // エディタ（textarea）に確実にフォーカスを当てる
+        // エディタ（textarea）に確実にフォーカスを当てるため、視覚的なラインをクリック
+        await monacoEditor.locator('.view-lines').click();
         await textarea.focus();
 
-        // 全選択して削除 (WebKit/Mac環境への対応)
-        const selectAllKey = browserName === 'webkit' ? 'Meta+A' : 'Control+A';
-        await this.page.keyboard.press(selectAllKey);
-        await this.page.keyboard.press('Delete');
+        // 既存の入力サジェストやオーバーレイを消す
+        await this.page.keyboard.press('Escape');
 
-        // WebKit/Windowsでのクラッシュを防ぎ、かつ確実に内部モデルを更新するため
-        // keyboard.pressSequentially ではなく locator.pressSequentially を使用
-        await textarea.pressSequentially(scriptContent, { delay: 10 });
+        // 全選択して削除 (WebKit/Mac環境への対応強化: locator.press を使用して対象を明示)
+        // Backspace は Mac/iOS での選択範囲消去に最も安定したキーです
+        await textarea.press('ControlOrMeta+A');
+        await textarea.press('Backspace');
+
+        // 削除後の反映待ち
+        await this.page.waitForTimeout(200);
+
+        // 入力 (安定性を高めるため、ディレイを微増)
+        await textarea.pressSequentially(scriptContent, { delay: 20 });
 
         const saveButton = scriptContainer.getByTitle('スクリプトの保存');
         const saveIcon = saveButton.locator('i');
@@ -726,17 +732,17 @@ export class EditorHelper {
         const textarea = monacoEditor.locator('textarea.inputarea');
 
         // エディタにフォーカスを当て、内容を全選択して削除
+        await monacoEditor.locator('.view-lines').click();
         await textarea.focus();
-        const selectAllKey = browserName === 'webkit' ? 'Meta+A' : 'Control+A';
-        await this.page.keyboard.press(selectAllKey);
-        await this.page.keyboard.press('Delete');
+        await this.page.keyboard.press('Escape');
 
-        // Chromium系であれば fill() も動作するが、Monacoの安定性のため WebKit/Firefox含め pressSequentially 推奨
-        if (browserName === 'chromium') {
-            await textarea.fill(scriptContent);
-        } else {
-            await textarea.pressSequentially(scriptContent, { delay: 10 });
-        }
+        // 全選択して消去
+        await textarea.press('ControlOrMeta+A');
+        await textarea.press('Backspace');
+
+        // 入力 (Safari/Mac環境での安定性のため pressSequentially を一貫して使用)
+        await this.page.waitForTimeout(200);
+        await textarea.pressSequentially(scriptContent, { delay: 20 });
 
         await scriptContainer.locator('#fab-save').click();
     }
@@ -856,14 +862,18 @@ export class EditorHelper {
         const browserName = this.page.context().browser()?.browserType().name();
         const textarea = monacoEditor.locator('textarea.inputarea');
 
-        // エディタにフォーカスを当て、内容を全選択して削除
+        // フォーカス
+        await monacoEditor.locator('.view-lines').click();
         await textarea.focus();
-        const selectAllKey = browserName === 'webkit' ? 'Meta+A' : 'Control+A';
-        await this.page.keyboard.press(selectAllKey);
-        await this.page.keyboard.press('Delete');
+        await this.page.keyboard.press('Escape');
+
+        // 全選択して削除
+        await textarea.press('ControlOrMeta+A');
+        await textarea.press('Backspace');
 
         // 入力
-        await textarea.pressSequentially(scriptContent, { delay: 10 });
+        await this.page.waitForTimeout(200);
+        await textarea.pressSequentially(scriptContent, { delay: 20 });
     }
 
     /**
