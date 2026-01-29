@@ -589,8 +589,19 @@ export class EditorHelper {
         const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
         await expect(monacoEditor).toBeVisible();
 
-        // APIを使用して値を設定（Safariでのオートコンプリート干渉回避のため推奨）
+        const browserName = this.page.context().browser()?.browserType().name();
+
+        // APIを使用して値を設定（Safari等の自動補完干渉回避のため優先実行）
         const isSetViaApi = await this.setMonacoValue(monacoEditor, scriptContent);
+
+        if (browserName === 'webkit') {
+            const actualValue = await this.getMonacoEditorContent();
+            if (actualValue !== scriptContent) {
+                console.error(`[Safari Debug] Script mismatch detection in editScript:
+                Expected: ${scriptContent}
+                Actual:   ${actualValue}`);
+            }
+        }
 
         if (!isSetViaApi) {
             const textarea = monacoEditor.locator('textarea.inputarea');
@@ -602,17 +613,26 @@ export class EditorHelper {
             // 既存の入力サジェストやオーバーレイを消す
             await this.page.keyboard.press('Escape');
 
-            // 全選択して削除 (WebKit/Mac環境への対応強化)
-            await this.page.keyboard.press('Control+A');
-            await this.page.keyboard.press('Meta+A');
+            // 全選択して削除 (Mac/Safari対応を含む確実な方法)
+            await this.page.keyboard.press('ControlOrMeta+A');
             await this.page.keyboard.press('Delete');
             await this.page.keyboard.press('Backspace');
 
             // 削除後の反映待ち
             await this.page.waitForTimeout(200);
 
-            // WebKit/Windowsでのクラッシュを防ぐため fill ではなく pressSequentially を使用
-            await textarea.pressSequentially(scriptContent, { delay: 20 });
+            // Safari(WebKit)の場合は補完干渉を防ぐためfillを使用、それ以外はキー入力をシミュレート
+            if (browserName === 'webkit') {
+                await textarea.fill(scriptContent);
+                const postFillValue = await this.getMonacoEditorContent();
+                if (postFillValue !== scriptContent) {
+                    console.error(`[Safari Debug] Fallback fill failed in editScript:
+                    Expected: ${scriptContent}
+                    Actual:   ${postFillValue}`);
+                }
+            } else {
+                await textarea.pressSequentially(scriptContent, { delay: 10 });
+            }
         }
 
         const saveButton = scriptContainer.getByTitle('スクリプトの保存');
@@ -713,7 +733,7 @@ export class EditorHelper {
         await expect(addMenu).toBeVisible();
         await addMenu.locator(`input[type="radio"][value="${scriptType}"]`).check();
         await addMenu.locator('input#script-name').fill(scriptName);
-        await addMenu.locator('button:has-text("追加")').click();
+        await addMenu.getByRole('button', { name: '追加' }).click();
         await expect(addMenu).toBeHidden();
         await expect(scriptContainer.locator(`.editor-row-left:has-text("${scriptName}")`)).toBeVisible();
     }
@@ -733,8 +753,19 @@ export class EditorHelper {
         const monacoEditor = editorContainer.locator('.monaco-editor[role="code"]');
         await expect(monacoEditor).toBeVisible();
 
-        // APIを使用して値を設定（Safariでのオートコンプリート干渉回避のため推奨）
+        const browserName = this.page.context().browser()?.browserType().name();
+
+        // APIを使用して値を設定（優先実行）
         const isSetViaApi = await this.setMonacoValue(monacoEditor, scriptContent);
+
+        if (browserName === 'webkit') {
+            const actualValue = await this.getMonacoEditorContent();
+            if (actualValue !== scriptContent) {
+                console.error(`[Safari Debug] Script mismatch detection in editScriptContent:
+                Expected: ${scriptContent}
+                Actual:   ${actualValue}`);
+            }
+        }
 
         if (!isSetViaApi) {
             const textarea = monacoEditor.locator('textarea.inputarea');
@@ -744,21 +775,23 @@ export class EditorHelper {
             await textarea.focus();
             await this.page.keyboard.press('Escape');
 
-            // 全選択して削除 (Mac/Safari対応を含む)
-            await this.page.keyboard.press('Control+A');
-            await this.page.keyboard.press('Meta+A');
+            // 全選択して削除
+            await this.page.keyboard.press('ControlOrMeta+A');
             await this.page.keyboard.press('Delete');
             await this.page.keyboard.press('Backspace');
 
-            const browserName = this.page.context().browser()?.browserType().name();
-            if (browserName === 'chromium') {
-                await monacoEditor.locator('textarea').fill(scriptContent);
-            } else if (browserName === 'webkit') {
-                await textarea.pressSequentially(scriptContent, { delay: 10 });
-            } else if (browserName === 'firefox') {
-                await textarea.pressSequentially(scriptContent, { delay: 10 });
+            // Safari(WebKit)の場合は補完干渉を防ぐためfillを使用
+            if (browserName === 'webkit') {
+                await textarea.fill(scriptContent);
+                const postFillValue = await this.getMonacoEditorContent();
+                if (postFillValue !== scriptContent) {
+                    console.error(`[Safari Debug] Fallback fill failed in editScriptContent:
+                    Expected: ${scriptContent}
+                    Actual:   ${postFillValue}`);
+                }
+            } else if (browserName === 'chromium') {
+                await textarea.fill(scriptContent);
             } else {
-                console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
             }
         }
@@ -878,11 +911,21 @@ export class EditorHelper {
         const monacoEditor = editorContainer.locator('.monaco-editor[role="code"]');
         await expect(monacoEditor).toBeVisible();
 
-        // APIを使用して値を設定
+        const browserName = this.page.context().browser()?.browserType().name();
+
+        // APIを使用して値を設定（優先実行）
         const isSetViaApi = await this.setMonacoValue(monacoEditor, scriptContent);
 
+        if (browserName === 'webkit') {
+            const actualValue = await this.getMonacoEditorContent();
+            if (actualValue !== scriptContent) {
+                console.error(`[Safari Debug] Script mismatch detection in fillScriptContent:
+                Expected: ${scriptContent}
+                Actual:   ${actualValue}`);
+            }
+        }
+
         if (!isSetViaApi) {
-            const browserName = this.page.context().browser()?.browserType().name();
             const textarea = monacoEditor.locator('textarea.inputarea');
 
             // フォーカス
@@ -890,19 +933,23 @@ export class EditorHelper {
             await textarea.focus();
             await this.page.keyboard.press('Escape');
 
-            // 全選択して削除 (Mac/Safari対応)
-            await this.page.keyboard.press('Control+A');
-            await this.page.keyboard.press('Meta+A');
+            // 全選択して削除
+            await this.page.keyboard.press('ControlOrMeta+A');
             await this.page.keyboard.press('Delete');
             await this.page.keyboard.press('Backspace');
 
             // 入力
-            if (browserName === 'chromium' || browserName === 'webkit') {
-                await textarea.pressSequentially(scriptContent, { delay: 10 });
-            } else if (browserName === 'firefox') {
-                await textarea.pressSequentially(scriptContent, { delay: 10 });
+            if (browserName === 'webkit') {
+                await textarea.fill(scriptContent);
+                const postFillValue = await this.getMonacoEditorContent();
+                if (postFillValue !== scriptContent) {
+                    console.error(`[Safari Debug] Fallback fill failed in fillScriptContent:
+                    Expected: ${scriptContent}
+                    Actual:   ${postFillValue}`);
+                }
+            } else if (browserName === 'chromium') {
+                await textarea.fill(scriptContent);
             } else {
-                console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
             }
         }
@@ -988,15 +1035,12 @@ export class EditorHelper {
                 }
 
                 if (model) {
-                    // pushEditOperationsを使用することでUndoスタックを維持しつつ値を変更できるが、
-                    // 全置換の場合はsetValueがシンプルで確実。
                     model.setValue(value);
                     return true;
                 }
                 return false;
             }, { uri, value });
         } catch (e) {
-            // エラー時はfalseを返してフォールバックさせる
             return false;
         }
     }
