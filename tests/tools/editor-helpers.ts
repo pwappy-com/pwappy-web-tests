@@ -155,7 +155,7 @@ export class EditorHelper {
     async selectNodeInDomTree(nodeLocator: Locator): Promise<void> {
         // 左ハンドルをオープン
         await this.openMoveingHandle('left');
-        
+
         await nodeLocator.click({ position: { x: 0, y: 10 } });
         await expect(nodeLocator).toHaveClass(/node-select/);
     }
@@ -589,21 +589,20 @@ export class EditorHelper {
         const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
         await expect(monacoEditor).toBeVisible();
 
-        const viewLines = monacoEditor.locator('.view-lines');
-        await expect(viewLines).toBeVisible();
+        const browserName = this.page.context().browser()?.browserType().name();
+        const textarea = monacoEditor.locator('textarea.inputarea');
 
-        // 確実にフォーカスを当てるため、1行目をクリック
-        const firstLine = viewLines.locator('.view-line').first();
-        await firstLine.click();
+        // エディタ（textarea）に確実にフォーカスを当てる
+        await textarea.focus();
 
-        // 全選択して削除
-        await this.page.keyboard.press('ControlOrMeta+A');
+        // 全選択して削除 (WebKit/Mac環境への対応)
+        const selectAllKey = browserName === 'webkit' ? 'Meta+A' : 'Control+A';
+        await this.page.keyboard.press(selectAllKey);
         await this.page.keyboard.press('Delete');
 
-        // WebKit/Windowsでのクラッシュを防ぐため fill ではなく pressSequentially を使用
-        // 1文字 10ms のディレイを入れることでブラウザプロセスの過負荷を防ぎます
-        await this.page.keyboard.type(scriptContent, { delay: 10 });
-        // ------------------------------------
+        // WebKit/Windowsでのクラッシュを防ぎ、かつ確実に内部モデルを更新するため
+        // keyboard.pressSequentially ではなく locator.pressSequentially を使用
+        await textarea.pressSequentially(scriptContent, { delay: 10 });
 
         const saveButton = scriptContainer.getByTitle('スクリプトの保存');
         const saveIcon = saveButton.locator('i');
@@ -703,7 +702,7 @@ export class EditorHelper {
         await expect(addMenu).toBeVisible();
         await addMenu.locator(`input[type="radio"][value="${scriptType}"]`).check();
         await addMenu.locator('input#script-name').fill(scriptName);
-        await addMenu.locator('button:has-text("追加")').click();
+        await addMenu.getByRole('button', { name: '追加' }).click();
         await expect(addMenu).toBeHidden();
         await expect(scriptContainer.locator(`.editor-row-left:has-text("${scriptName}")`)).toBeVisible();
     }
@@ -723,26 +722,20 @@ export class EditorHelper {
         const monacoEditor = editorContainer.locator('.monaco-editor[role="code"]');
         await expect(monacoEditor).toBeVisible();
 
-        await monacoEditor.locator('.view-lines').click();
-        await this.page.keyboard.press('ControlOrMeta+A');
+        const browserName = this.page.context().browser()?.browserType().name();
+        const textarea = monacoEditor.locator('textarea.inputarea');
+
+        // エディタにフォーカスを当て、内容を全選択して削除
+        await textarea.focus();
+        const selectAllKey = browserName === 'webkit' ? 'Meta+A' : 'Control+A';
+        await this.page.keyboard.press(selectAllKey);
         await this.page.keyboard.press('Delete');
 
-        const browserName = this.page.context().browser()?.browserType().name();
-        if (browserName === 'chromium' || browserName === 'webkit') {
-            await monacoEditor.locator('textarea').fill(scriptContent);
-        } else if (browserName === 'firefox') {
-            const viewLine = monacoEditor.locator('.view-line').first();
-            await expect(viewLine).toBeVisible();
-            await viewLine.pressSequentially(scriptContent);
-            await viewLine.press('Shift+Control+End');
-            await viewLine.press('Delete');
+        // Chromium系であれば fill() も動作するが、Monacoの安定性のため WebKit/Firefox含め pressSequentially 推奨
+        if (browserName === 'chromium') {
+            await textarea.fill(scriptContent);
         } else {
-            console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
-            const viewLine = monacoEditor.locator('.view-line').first();
-            await expect(viewLine).toBeVisible();
-            await viewLine.pressSequentially(scriptContent);
-            await viewLine.press('Shift+Control+End');
-            await viewLine.press('Delete');
+            await textarea.pressSequentially(scriptContent, { delay: 10 });
         }
 
         await scriptContainer.locator('#fab-save').click();
@@ -860,23 +853,17 @@ export class EditorHelper {
         const monacoEditor = editorContainer.locator('.monaco-editor[role="code"]');
         await expect(monacoEditor).toBeVisible();
 
-        await monacoEditor.locator('.view-lines').click();
-        await this.page.keyboard.press('ControlOrMeta+A');
+        const browserName = this.page.context().browser()?.browserType().name();
+        const textarea = monacoEditor.locator('textarea.inputarea');
+
+        // エディタにフォーカスを当て、内容を全選択して削除
+        await textarea.focus();
+        const selectAllKey = browserName === 'webkit' ? 'Meta+A' : 'Control+A';
+        await this.page.keyboard.press(selectAllKey);
         await this.page.keyboard.press('Delete');
 
-        const browserName = this.page.context().browser()?.browserType().name();
-        if (browserName === 'chromium' || browserName === 'webkit') {
-            await monacoEditor.locator('textarea').fill(scriptContent);
-        } else if (browserName === 'firefox') {
-            const viewLine = monacoEditor.locator('.view-line').first();
-            await expect(viewLine).toBeVisible();
-            await viewLine.pressSequentially(scriptContent);
-        } else {
-            console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
-            const viewLine = monacoEditor.locator('.view-line').first();
-            await expect(viewLine).toBeVisible();
-            await viewLine.pressSequentially(scriptContent);
-        }
+        // 入力
+        await textarea.pressSequentially(scriptContent, { delay: 10 });
     }
 
     /**
