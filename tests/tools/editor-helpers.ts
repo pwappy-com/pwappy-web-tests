@@ -485,7 +485,7 @@ export class EditorHelper {
         await this.page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
         // 保存成功のアラートが出ていたら閉じる ---
-        // これをしないと、この後の menuButton.click() がアラートに遮られて失敗します
+        // これをしないと、この後の menuButton.click() アラートに遮られて失敗します
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
             await alert.getByRole('button', { name: '閉じる' }).click();
             await expect(alert).toBeHidden();
@@ -589,26 +589,24 @@ export class EditorHelper {
         const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
         await expect(monacoEditor).toBeVisible();
 
-        const browserName = this.page.context().browser()?.browserType().name();
-        const textarea = monacoEditor.locator('textarea.inputarea');
+        const viewLines = monacoEditor.locator('.view-lines');
+        await expect(viewLines).toBeVisible();
 
-        // エディタ（textarea）に確実にフォーカスを当てるため、視覚的なラインをクリック
-        await monacoEditor.locator('.view-lines').click();
-        await textarea.focus();
+        // 確実にフォーカスを当てるため、1行目をクリック
+        const firstLine = viewLines.locator('.view-line').first();
+        await firstLine.click();
 
-        // 既存の入力サジェストやオーバーレイを消す
-        await this.page.keyboard.press('Escape');
+        // 確実に既存の内容を全選択して削除するためのロジック (Mac/Safari対応)
+        // ControlOrMeta+Aが効かないケースに備え、明示的にMeta+Aも試行する
+        await this.page.keyboard.press('Control+A');
+        await this.page.keyboard.press('Meta+A');
+        await this.page.keyboard.press('Delete');
+        await this.page.keyboard.press('Backspace');
 
-        // 全選択して削除 (WebKit/Mac環境への対応強化: locator.press を使用して対象を明示)
-        // Backspace は Mac/iOS での選択範囲消去に最も安定したキーです
-        await textarea.press('ControlOrMeta+A');
-        await textarea.press('Backspace');
-
-        // 削除後の反映待ち
-        await this.page.waitForTimeout(200);
-
-        // 入力 (安定性を高めるため、ディレイを微増)
-        await textarea.pressSequentially(scriptContent, { delay: 20 });
+        // WebKit/Windowsでのクラッシュを防ぐため fill ではなく pressSequentially を使用
+        // 1文字 10ms のディレイを入れることでブラウザプロセスの過負荷を防ぎます
+        await this.page.keyboard.type(scriptContent, { delay: 10 });
+        // ------------------------------------
 
         const saveButton = scriptContainer.getByTitle('スクリプトの保存');
         const saveIcon = saveButton.locator('i');
@@ -708,7 +706,7 @@ export class EditorHelper {
         await expect(addMenu).toBeVisible();
         await addMenu.locator(`input[type="radio"][value="${scriptType}"]`).check();
         await addMenu.locator('input#script-name').fill(scriptName);
-        await addMenu.getByRole('button', { name: '追加' }).click();
+        await addMenu.locator('button:has-text("追加")').click();
         await expect(addMenu).toBeHidden();
         await expect(scriptContainer.locator(`.editor-row-left:has-text("${scriptName}")`)).toBeVisible();
     }
@@ -728,21 +726,31 @@ export class EditorHelper {
         const monacoEditor = editorContainer.locator('.monaco-editor[role="code"]');
         await expect(monacoEditor).toBeVisible();
 
-        const browserName = this.page.context().browser()?.browserType().name();
-        const textarea = monacoEditor.locator('textarea.inputarea');
-
-        // エディタにフォーカスを当て、内容を全選択して削除
         await monacoEditor.locator('.view-lines').click();
-        await textarea.focus();
-        await this.page.keyboard.press('Escape');
 
-        // 全選択して消去
-        await textarea.press('ControlOrMeta+A');
-        await textarea.press('Backspace');
+        // 全選択して削除 (Mac/Safari対応を含む確実な方法)
+        await this.page.keyboard.press('Control+A');
+        await this.page.keyboard.press('Meta+A');
+        await this.page.keyboard.press('Delete');
+        await this.page.keyboard.press('Backspace');
 
-        // 入力 (Safari/Mac環境での安定性のため pressSequentially を一貫して使用)
-        await this.page.waitForTimeout(200);
-        await textarea.pressSequentially(scriptContent, { delay: 20 });
+        const browserName = this.page.context().browser()?.browserType().name();
+        if (browserName === 'chromium') {
+            await monacoEditor.locator('textarea').fill(scriptContent);
+        } else if (browserName === 'webkit') {
+            const viewLine = monacoEditor.locator('.view-line').first();
+            await expect(viewLine).toBeVisible();
+            await viewLine.pressSequentially(scriptContent, { delay: 10 });
+        } else if (browserName === 'firefox') {
+            const viewLine = monacoEditor.locator('.view-line').first();
+            await expect(viewLine).toBeVisible();
+            await viewLine.pressSequentially(scriptContent, { delay: 10 });
+        } else {
+            console.warn(`Unsupported browser for optimized fill: ${browserName}. Falling back to pressSequentially.`);
+            const viewLine = monacoEditor.locator('.view-line').first();
+            await expect(viewLine).toBeVisible();
+            await viewLine.pressSequentially(scriptContent, { delay: 10 });
+        }
 
         await scriptContainer.locator('#fab-save').click();
     }
@@ -859,21 +867,23 @@ export class EditorHelper {
         const monacoEditor = editorContainer.locator('.monaco-editor[role="code"]');
         await expect(monacoEditor).toBeVisible();
 
+        await monacoEditor.locator('.view-lines').click();
+
+        // 全選択して削除 (Safari対応)
+        await this.page.keyboard.press('Control+A');
+        await this.page.keyboard.press('Meta+A');
+        await this.page.keyboard.press('Delete');
+        await this.page.keyboard.press('Backspace');
+
         const browserName = this.page.context().browser()?.browserType().name();
         const textarea = monacoEditor.locator('textarea.inputarea');
-
-        // フォーカス
-        await monacoEditor.locator('.view-lines').click();
-        await textarea.focus();
-        await this.page.keyboard.press('Escape');
-
-        // 全選択して削除
-        await textarea.press('ControlOrMeta+A');
-        await textarea.press('Backspace');
-
-        // 入力
-        await this.page.waitForTimeout(200);
-        await textarea.pressSequentially(scriptContent, { delay: 20 });
+        if (browserName === 'chromium' || browserName === 'webkit') {
+            await textarea.pressSequentially(scriptContent, { delay: 10 });
+        } else if (browserName === 'firefox') {
+            await textarea.pressSequentially(scriptContent, { delay: 10 });
+        } else {
+            await textarea.pressSequentially(scriptContent, { delay: 10 });
+        }
     }
 
     /**
