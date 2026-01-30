@@ -3,8 +3,14 @@ import 'dotenv/config';
 
 test.describe('クーポン機能 E2Eシナリオ', () => {
 
-    test.skip(process.platform !== 'linux', 'クーポンロック回避のため、Linux環境以外ではスキップします');
-    test.skip(({ browserName }) => browserName !== 'chromium', 'クーポンロック回避のため、Chrome(Chromium)以外ではスキップします');
+    test.skip(({ browserName, isMobile }) => {
+        const isLinux = process.platform === 'linux';
+        const isChromium = browserName === 'chromium';
+        const isDesktop = !isMobile; // isMobileフィクスチャで判定
+
+        // 「Ubuntu かつ Chromium かつ デスクトップ」 以外の場合はスキップ
+        return !(isLinux && isChromium && isDesktop);
+    }, 'クーポンロック回避のため、Ubuntu PC (Desktop Chromium) 環境以外ではスキップします');
 
     test.beforeEach(async ({ page, context }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));

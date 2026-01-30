@@ -121,7 +121,7 @@ customElements.define('${tagName}', ${scriptName});
 
         await test.step('1. Web Componentのスクリプトを作成・編集する', async () => {
             // スクリプトタブに切り替える
-            editorHelper.openMoveingHandle('right');
+            await editorHelper.openMoveingHandle('right');
             const scriptContainer = editorPage.locator('script-container');
             await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
 
@@ -143,7 +143,7 @@ customElements.define('${tagName}', ${scriptName});
             await editorHelper.selectNodeInDomTree(componentNode);
 
             // プロパティコンテナを取得
-            editorHelper.openMoveingHandle('right');
+            await editorHelper.openMoveingHandle('right');
             const propertyContainer = editorHelper.getPropertyContainer();
             await expect(propertyContainer).toBeVisible();
 

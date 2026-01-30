@@ -344,6 +344,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
             // AI実行（ここで page.route が発動する）
             await editorHelper.generateCodeWithAi('モック用の指示です');
 
+            await editorHelper.closeMoveingHandle();
+
             // エディタを閉じる
             await editorPage.locator('platform-bottom-menu').click();
             await Promise.all([

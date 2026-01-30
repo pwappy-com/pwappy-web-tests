@@ -72,22 +72,22 @@ test.describe('エディタ内機能のテスト', () => {
         });
 
         await test.step('検証: DOMツリーのノード選択に応じてプロパティ表示が追従すること', async () => {
-            editorHelper.openMoveingHandle('left');
+            await editorHelper.openMoveingHandle('left');
             const domTree = editorPage.locator('#dom-tree');
-            editorHelper.openMoveingHandle('right');
+            await editorHelper.openMoveingHandle('right');
             const propertyContainer = editorPage.locator('property-container');
             const propertyIdInput = propertyContainer.locator('input[data-attribute-type="domId"]');
 
             // 「コンテンツ」ノードのテキスト部分をクリックし、対応するプロパティが表示されるか確認
-            editorHelper.openMoveingHandle('left');
+            await editorHelper.openMoveingHandle('left');
             const contentNode = domTree.locator('div[data-node-explain="コンテンツ"]');
             await contentNode.getByText('コンテンツ', { exact: true }).click();
 
-            editorHelper.openMoveingHandle('right');
+            await editorHelper.openMoveingHandle('right');
             await propertyContainer.getByText('属性', { exact: true }).click();
             await expect(propertyIdInput).toHaveValue('div2');
 
-            editorHelper.openMoveingHandle('left');
+            await editorHelper.openMoveingHandle('left');
             // 次に「ボタン」ノードをクリックし、プロパティ表示が切り替わるか確認
             await domTree.locator('.node[data-node-type="ons-button"]').click();
             await expect(propertyIdInput).toHaveValue('ons-button1');
@@ -98,7 +98,7 @@ test.describe('エディタ内機能のテスト', () => {
             const propertyTextInput = editorPage.locator('property-container input[data-attribute-type="text"]');
             const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
 
-            editorHelper.openMoveingHandle('right');
+            await editorHelper.openMoveingHandle('right');
             await propertyTextInput.fill('Button2');
             await propertyTextInput.press('Enter');
 
@@ -166,7 +166,7 @@ test.describe('エディタ内機能のテスト', () => {
         });
 
         await test.step('検証: 属性の追加、値の変更、空文字設定、クリアボタンの動作', async () => {
-            editorHelper.openMoveingHandle('right');
+            await editorHelper.openMoveingHandle('right');
             const propertyContainer = editorPage.locator('property-container');
             const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
 
@@ -294,7 +294,7 @@ test.describe('エディタ内機能のテスト', () => {
         });
 
         await test.step('検証: 「要素に」属性を追加するとUIがハイライトされる', async () => {
-            editorHelper.openMoveingHandle('right');
+            await editorHelper.openMoveingHandle('right');
             const propertyContainer = editorPage.locator('property-container');
 
             await propertyContainer.getByTitle('属性を編集').click();

@@ -232,6 +232,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 const setUp = await editorHelper.setupPageWithButton();
                 pageId = await setUp.pageNode.getAttribute('data-node-id') as string;
 
+                await editorHelper.closeMoveingHandle();
                 await editorPage.locator('#fab-bottom-menu-box').click();
                 await editorPage.locator('#platformBottomMenu').getByText('AIエージェント').click();
                 const agentWindow = editorPage.locator('agent-chat-window');
@@ -252,6 +253,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
             });
 
             await test.step('4. 破壊的な変更を加える（要素の削除）', async () => {
+                await editorHelper.openMoveingHandle('left');
                 const domTree = editorHelper.getDomTree();
                 const buttonNode = domTree.locator('.node[data-node-type="ons-button"]').first();
 
@@ -262,6 +264,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
             });
 
             await test.step('5. スナップショット管理画面から復元を実行', async () => {
+                await editorHelper.closeMoveingHandle();
                 await editorPage.locator('#fab-bottom-menu-box').click();
                 await editorPage.locator('#platformBottomMenu').getByText('スナップショット管理').click();
 

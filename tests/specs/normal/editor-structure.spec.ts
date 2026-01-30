@@ -199,7 +199,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
         });
 
         await test.step('2. 検索とジャンプ', async () => {
-            editorHelper.openMoveingHandle('left');
+            await editorHelper.openMoveingHandle('left');
             await editorPage.locator('.title-icon-bar-button[title="レイアウト検索"]').click();
             const searchWindow = editorPage.locator('template-search-sub-window');
             await expect(searchWindow).toBeVisible();

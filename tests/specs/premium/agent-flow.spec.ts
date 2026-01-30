@@ -194,7 +194,7 @@ test.describe('AIエージェント機能：UI・連携・コマンド反映テ�
             // AIエージェント画面を閉じる
             await agentWindow.locator('.close-btn').click();
 
-            // --- 修正箇所: ページの切り替えと検証 ---
+            // ページの切り替えと検証
             await editorHelper.openMoveingHandle('left');
 
             // テンプレートリスト（プルダウン）を開く
@@ -217,13 +217,12 @@ test.describe('AIエージェント機能：UI・連携・コマンド反映テ�
             await editorHelper.openMoveingHandle('right');
             const scriptContainer = editorPage.locator('script-container');
             await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
-
             // スクリプトが作成されているか
             await expect(scriptContainer.locator('.editor-row', { hasText: 'sayHello' })).toBeVisible();
-
             // イベント紐付けがされているか（属性パネルで確認）
             // 直前のステップで "ホーム画面" に切り替えているため、ここからボタンを選択可能
             const button = await editorHelper.selectNodeByAttribute('data-node-dom-id', 'hello-btn');
+            await editorHelper.openMoveingHandle('right');
             await editorHelper.switchTabInContainer(scriptContainer, 'イベント');
             await expect(editorPage.locator('event-container').locator('.editor-row-right-item', { hasText: 'sayHello' })).toBeVisible();
         });
