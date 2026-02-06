@@ -522,18 +522,42 @@ export class EditorHelper {
      * DOMツリーで選択中のコンテキスト（トップレベルテンプレート）を切り替えます。
      * @param templateId 'アプリケーション' またはページのdata-template-id
      */
+    /**
+         * DOMツリーで選択中のコンテキスト（トップレベルテンプレート）を切り替えます。
+         */
     async switchTopLevelTemplate(templateId: string): Promise<void> {
+        console.log(`[Debug] switchTopLevelTemplate: Attempting to switch to "${templateId}"`);
         await this.openMoveingHandle('left');
+
         const topContainer = this.page.locator('.top-container');
-        await topContainer.click();
-        const topTemplateListContainer = topContainer.locator('#top-template-list');
-        await expect(topTemplateListContainer).toBeVisible();
+        const selectBox = topContainer.locator('.select');
+        await selectBox.click();
+
+        const topTemplateListContainer = this.page.locator('#top-template-list');
+        // リストが表示されるのを待つ
+        await expect(topTemplateListContainer).toBeVisible({ timeout: 5000 });
 
         const targetToplistItem = topTemplateListContainer.locator(`div.top-template-item[data-template-id="${templateId}"]`);
-        await expect(targetToplistItem).toBeVisible();
-        await expect(targetToplistItem).toBeEnabled();
+
+        try {
+            // ターゲットが見えるかチェック
+            await expect(targetToplistItem).toBeVisible({ timeout: 5000 });
+        } catch (e) {
+            // 【重要】失敗時にリストの中身を全出力して原因を特定する
+            const items = await topTemplateListContainer.locator('div.top-template-item').all();
+            console.log(`[Error-Detail] Template "${templateId}" not found in list. Current items:`);
+            for (const item of items) {
+                const id = await item.getAttribute('data-template-id');
+                const text = await item.innerText();
+                console.log(` - ID: "${id}", Text: "${text.trim()}"`);
+            }
+            throw e;
+        }
+
         await targetToplistItem.click();
         await expect(topTemplateListContainer).toBeHidden();
+        // 切り替え後の再描画待ち
+        await this.page.waitForTimeout(500);
     }
 
     /**
@@ -1514,6 +1538,104 @@ export class EditorHelper {
         // 5. ダイアログが消えるのを待つ
         await expect(dialogBox).toBeHidden();
         await this.waitForFileExplorerLoading();
+    }
+
+    /**
+     * 現在のプロジェクトの状態をファイル（.pwappy）として書き出します。
+     */
+    async exportProjectFile(): Promise<any> {
+        // ハンドルが開いているとメニューボタンが隠れるため確実に閉じる
+        await this.closeMoveingHandle();
+
+        await this.page.locator('#fab-bottom-menu-box').click({ force: true });
+        const platformBottomMenu = this.page.locator('#platformBottomMenu');
+        await expect(platformBottomMenu).toBeVisible();
+        await platformBottomMenu.getByText('スナップショット管理').click();
+
+        const snapshotManager = this.page.locator('snapshot-manager');
+        await expect(snapshotManager.locator('.container')).toBeVisible();
+
+        const downloadPromise = this.page.waitForEvent('download');
+        await snapshotManager.getByRole('button', { name: 'ファイルに出力' }).click();
+        const download = await downloadPromise;
+
+        await snapshotManager.locator('.close-btn').click();
+        await expect(snapshotManager).toBeHidden();
+
+        return download;
+    }
+
+    /**
+     * 指定されたパスのファイルをプロジェクトにインポートします。
+     */
+    async importProjectFile(filePath: string): Promise<void> {
+        console.log(`[Import] --- Start: ${filePath} ---`);
+
+        await this.closeMoveingHandle();
+
+        let successAlertDetected = false;
+        let lastAlertMessage = '';
+
+        // ダイアログハンドラ
+        const dialogHandler = async (dialog: any) => {
+            const message = dialog.message();
+            const type = dialog.type();
+            console.log(`[Import-Dialog] Type: ${type}, Message: ${message}`);
+
+            // 成功メッセージが含まれているか確認
+            if (message.includes('プロジェクトを正常にインポートしました')) {
+                successAlertDetected = true;
+                lastAlertMessage = message;
+            }
+
+            await dialog.accept();
+            console.log(`[Import-Dialog] Accepted.`);
+        };
+
+        this.page.on('dialog', dialogHandler);
+
+        try {
+            console.log(`[Import] Opening Snapshot Manager...`);
+            await this.page.locator('#fab-bottom-menu-box').click();
+            await this.page.locator('#platformBottomMenu').getByText('スナップショット管理').click();
+
+            const snapshotManager = this.page.locator('snapshot-manager');
+            await expect(snapshotManager.locator('.container')).toBeVisible();
+
+            const importLabel = snapshotManager.locator('label.import-label');
+
+            console.log(`[Import] Triggering file chooser...`);
+            const [fileChooser] = await Promise.all([
+                this.page.waitForEvent('filechooser'),
+                importLabel.click(),
+            ]);
+
+            console.log(`[Import] Setting file: ${filePath}`);
+            await fileChooser.setFiles(filePath);
+
+            // --- 完了判定の修正 ---
+            // カスタムコンポーネントを待つのではなく、標準alertが発火したかをポーリング
+            console.log(`[Import] Waiting for completion dialog...`);
+            await expect.poll(() => successAlertDetected, {
+                message: "インポート完了の通知(window.alert)を待機中",
+                timeout: 30000,
+                intervals: [1000]
+            }).toBe(true);
+
+            console.log(`[Import] Success dialog confirmed: ${lastAlertMessage}`);
+
+            // window.alert は自動で閉じているので、あとは Snapshot Manager を閉じるだけ
+            console.log(`[Import] Closing Snapshot Manager.`);
+            await snapshotManager.locator('.close-btn').click();
+            await expect(snapshotManager).toBeHidden();
+
+            console.log(`[Import] --- Finished Successfully ---`);
+        } catch (error) {
+            console.error(`[Import-Error] Process failed:`, error);
+            throw error;
+        } finally {
+            this.page.off('dialog', dialogHandler);
+        }
     }
 }
 
