@@ -370,14 +370,20 @@ export class EditorHelper {
 
         if (await scriptContainer.isVisible()) {
             const handle = this.page.locator(`#rightMovingHandle`);
-            await handle.tap();
-            await handle.tap();
+            await expect(async () => {
+                await handle.tap();
+                await handle.tap();
+                await expect(scriptContainer).toBeHidden({ timeout: 1000 });
+            }).toPass({ timeout: 10000 });
         }
 
         if (await templateContainer.isVisible()) {
             const handle = this.page.locator(`#leftMovingHandle`);
-            await handle.tap();
-            await handle.tap();
+            await expect(async () => {
+                await handle.tap();
+                await handle.tap();
+                await expect(templateContainer).toBeHidden({ timeout: 1000 });
+            }).toPass({ timeout: 10000 });
         }
     }
 

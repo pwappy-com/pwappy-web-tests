@@ -37,6 +37,8 @@ const test = base.extend<EditorFixtures>({
 test.describe('プロジェクトのバックアップ・インポート統合テスト', () => {
 
     test.beforeEach(async ({ page, context }) => {
+        page.on('console', msg => { if (msg.type() === 'error') console.log(`[Browser Error]: ${msg.text()}`); });
+        page.on('pageerror', error => console.log(`[Page Exception]: ${error.message}`));
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
         const domain = testUrl.hostname;
         await context.addCookies([
