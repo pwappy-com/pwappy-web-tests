@@ -260,14 +260,23 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                     await editorPage.mouse.down();
                 }
             },
-            move: async (x: number, y: number) => {
-                if (isMobile && cdpSession) {
-                    await cdpSession.send('Input.dispatchTouchEvent', {
-                        type: 'touchMove',
-                        touchPoints: [{ x: Math.round(x), y: Math.round(y) }]
-                    });
-                } else {
-                    await editorPage.mouse.move(x, y);
+            move: async (fromX: number, fromY: number, toX: number, toY: number, steps: number = 10) => {
+                console.log(`[Action] Move from (${fromX}, ${fromY}) to (${toX}, ${toY}) with ${steps} steps`);
+                const stepX = (toX - fromX) / steps;
+                const stepY = (toY - fromY) / steps;
+
+                for (let i = 1; i <= steps; i++) {
+                    const currentX = fromX + stepX * i;
+                    const currentY = fromY + stepY * i;
+                    if (isMobile && cdpSession) {
+                        await cdpSession.send('Input.dispatchTouchEvent', {
+                            type: 'touchMove',
+                            touchPoints: [{ x: Math.round(currentX), y: Math.round(currentY) }]
+                        });
+                    } else {
+                        await editorPage.mouse.move(currentX, currentY);
+                    }
+                    await editorPage.waitForTimeout(20); // 少し待機してイベントを処理させる
                 }
             },
             up: async (x?: number, y?: number) => {
@@ -345,6 +354,9 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             console.log(`[Debug] Ghost element exists: ${ghostExists}`);
 
             // --- ターゲットへの追尾移動 ---
+            let currentX = startX;
+            let currentY = startY;
+
             for (let i = 0; i < 100; i++) {
                 const pBox = await layoutPanel.boundingBox();
                 const tBox = await targetLocator.boundingBox();
@@ -357,22 +369,27 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 const isTargetVisible = destY > pBox.y + 30 && destY < pBox.y + pBox.height - 30;
 
                 if (isTargetVisible) {
-                    await pointerAction.move(destX, destY);
-                    // 座標が目的地に十分近ければループ終了
-                    if (Math.abs(destY - destY) < 5) break;
+                    await pointerAction.move(currentX, currentY, destX, destY, 15);
+                    currentX = destX;
+                    currentY = destY;
+                    // 座標が目的地に到達したのでループ終了
+                    break;
                 } else {
                     // ターゲットが隠れている場合、パネルの端（スクロール発火エリア）にポインターを置く
                     const hoverY = destY >= pBox.y + pBox.height - 30 ? pBox.y + pBox.height - 15 : pBox.y + 15;
-                    await pointerAction.move(destX, hoverY);
+                    await pointerAction.move(currentX, currentY, destX, hoverY, 10);
+                    currentX = destX;
+                    currentY = hoverY;
                     // アプリ側のスクロールタイマー (setInterval 100ms) が動くのを待つ
                     await editorPage.waitForTimeout(200);
                 }
-                await editorPage.waitForTimeout(100);
             }
 
             const finalBox = await targetLocator.boundingBox();
             if (finalBox) {
-                await pointerAction.move(finalBox.x + 20, finalBox.y + 15);
+                await pointerAction.move(currentX, currentY, finalBox.x + 20, finalBox.y + 15, 5);
+                currentX = finalBox.x + 20;
+                currentY = finalBox.y + 15;
             }
             await editorPage.waitForTimeout(300);
             await pointerAction.up(finalBox?.x, finalBox?.y);
@@ -410,32 +427,40 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             await editorPage.waitForTimeout(600);
 
             // ターゲット追尾
+            let currentX = startBox.x + startBox.width / 2;
+            let currentY = startBox.y + startBox.height / 2;
+
             for (let i = 0; i < 100; i++) {
                 const pBox = await layoutPanel.boundingBox();
                 const tBox = await btnBottom.boundingBox();
-                const iBox = await targetInsertPoint.boundingBox();
-
                 if (!pBox || !tBox) break;
 
                 const destX = tBox.x + tBox.width / 2;
-                const destY = (iBox && iBox.height > 2) ? (iBox.y + iBox.height / 2) : (tBox.y + tBox.height + 10);
+                // btnBottom の下半分（下から5pxのあたり）を狙って、下側インサートポイントを確実に発火させる
+                const destY = tBox.y + tBox.height - 5;
 
                 const isTargetVisible = destY > pBox.y + 30 && destY < pBox.y + pBox.height - 30;
 
                 if (isTargetVisible) {
-                    await pointerAction.move(destX, destY);
-                    if (Math.abs(destY - destY) < 5) break;
+                    await pointerAction.move(currentX, currentY, destX, destY, 15);
+                    currentX = destX;
+                    currentY = destY;
+                    break;
                 } else {
                     const hoverY = destY >= pBox.y + pBox.height - 30 ? pBox.y + pBox.height - 15 : pBox.y + 15;
-                    await pointerAction.move(destX, hoverY);
+                    await pointerAction.move(currentX, currentY, destX, hoverY, 10);
+                    currentX = destX;
+                    currentY = hoverY;
                     await editorPage.waitForTimeout(200);
                 }
-                await editorPage.waitForTimeout(100);
             }
 
-            const finalBox = await targetInsertPoint.boundingBox() || await btnBottom.boundingBox();
+            const finalBox = await btnBottom.boundingBox();
             if (finalBox) {
-                await pointerAction.move(finalBox.x + finalBox.width / 2, finalBox.y + finalBox.height / 2);
+                const finalDestY = finalBox.y + finalBox.height - 5;
+                await pointerAction.move(currentX, currentY, finalBox.x + finalBox.width / 2, finalDestY, 5);
+                currentX = finalBox.x + finalBox.width / 2;
+                currentY = finalDestY;
             }
             await editorPage.waitForTimeout(400);
             await pointerAction.up(finalBox?.x, finalBox?.y);

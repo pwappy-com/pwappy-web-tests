@@ -58,8 +58,8 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
         const eventName = 'DOMContentLoaded';
         const scriptName = 'testDomContentLoadScript';
         const alertText = 'domContentLoaded';
-        const scriptBody = `function ${scriptName}(event) {\nons.notification.alert('${alertText}');`;
-        const layoutModeExpectedScript = `${scriptBody}\n}`;
+        const scriptBody = `function ${scriptName}(event) {\n    ons.notification.alert('${alertText}');\n}`;
+        const layoutModeExpectedScript = scriptBody;
         const runModeExpectedScript = `document.addEventListener('${eventName}', ${scriptName});`;
         const testPageExpectedScripts = [
             `function ${scriptName}(event) {`,
@@ -114,8 +114,8 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
         const eventName = 'load';
         const scriptName = 'testLoadScript';
         const alertText = 'loadScript';
-        const scriptBody = `function ${scriptName}(event) {\nons.notification.alert('${alertText}');`;
-        const layoutModeExpectedScript = `${scriptBody}\n}`;
+        const scriptBody = `function ${scriptName}(event) {\n    ons.notification.alert('${alertText}');\n}`;
+        const layoutModeExpectedScript = scriptBody;
         const runModeExpectedScript = `window.addEventListener('${eventName}', ${scriptName});`;
         const testPageExpectedScripts = [
             `function ${scriptName}(event) {`,
@@ -222,29 +222,26 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             // Page2の各イベントにスクリプトを追加
             // console.log(`page2NodeInner: ${await page2Node.innerHTML()}`)
             // await editorPage.waitForTimeout(500000)
+            // Page2の各イベントにスクリプトを追加
             await editorHelper.addScriptToNodeEvent({ nodeLocator: page2Node, eventName: 'init', scriptName: 'page2Init' });
-            await editorHelper.editScript({ eventName: 'init', scriptName: 'page2Init', scriptContent: "function page2Init(event) {\n    ons.notification.alert('page2_init');\n" });
-
+            await editorHelper.editScript({ eventName: 'init', scriptName: 'page2Init', scriptContent: "function page2Init(event) {\n    ons.notification.alert('page2_init');\n}" });
             await editorHelper.addScriptToNodeEvent({ nodeLocator: page2Node, eventName: 'show', scriptName: 'page2Show' });
-            await editorHelper.editScript({ eventName: 'show', scriptName: 'page2Show', scriptContent: "function page2Show(event) {\n    ons.notification.alert('page2_show');\n" });
-
+            await editorHelper.editScript({ eventName: 'show', scriptName: 'page2Show', scriptContent: "function page2Show(event) {\n    ons.notification.alert('page2_show');\n}" });
             await editorHelper.addScriptToNodeEvent({ nodeLocator: page2Node, eventName: 'hide', scriptName: 'page2Hide' });
-            await editorHelper.editScript({ eventName: 'hide', scriptName: 'page2Hide', scriptContent: "function page2Hide(event) {\n    ons.notification.alert('page2_hide');\n" });
-
+            await editorHelper.editScript({ eventName: 'hide', scriptName: 'page2Hide', scriptContent: "function page2Hide(event) {\n    ons.notification.alert('page2_hide');\n}" });
             await editorHelper.addScriptToNodeEvent({ nodeLocator: page2Node, eventName: 'destroy', scriptName: 'page2Destroy' });
-            await editorHelper.editScript({ eventName: 'destroy', scriptName: 'page2Destroy', scriptContent: "function page2Destroy(event) {\n    ons.notification.alert('page2_destroy');\n" });
+            await editorHelper.editScript({ eventName: 'destroy', scriptName: 'page2Destroy', scriptContent: "function page2Destroy(event) {\n    ons.notification.alert('page2_destroy');\n}" });
+
 
             // トップレベルをPage1に切り替え
             await editorHelper.switchTopLevelTemplate(page1Id);
             const page1Contents = page1Node.locator("div.node").filter({ hasText: "コンテンツ" });
 
-            // page1Contentsにons-buttonを追加
-            // await selectNodeInDomTree(page1Contents);
             // Page1のボタンのclickイベントにページ遷移スクリプトを追加
             const button1Locator = await editorHelper.addComponent('ons-button', page1Contents);
 
             await editorHelper.addScriptToNodeEvent({ nodeLocator: button1Locator, eventName: 'click', scriptName: 'pushPage2' });
-            await editorHelper.editScript({ eventName: 'click', scriptName: 'pushPage2', scriptContent: "function pushPage2(event) {\ndocument.querySelector('ons-navigator').pushPage('page2.html');" });
+            await editorHelper.editScript({ eventName: 'click', scriptName: 'pushPage2', scriptContent: "function pushPage2(event) {\n    document.querySelector('ons-navigator').pushPage('page2.html');\n}" });
         });
 
         await test.step('動作検証: ページ遷移とイベント発火を検証', async () => {

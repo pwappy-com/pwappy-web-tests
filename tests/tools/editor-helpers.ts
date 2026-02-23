@@ -647,7 +647,7 @@ export class EditorHelper {
 
             // フォールバック: 物理入力
             console.log(`[DEBUG] Entering Fallback Input Logic.`);
-            const textarea = monacoEditor.locator('textarea.inputarea');
+            const textarea = monacoEditor.locator('textarea').first();
 
             // エディタ（textarea）に確実にフォーカスを当てるため、視覚的なラインをクリック
             await monacoEditor.locator('.view-lines').click();
@@ -691,13 +691,15 @@ export class EditorHelper {
 
         // 保存完了の判定
         const alert = this.page.locator('alert-component');
-        // 保存に成功してアラートが出たら閉じる
+        // 保存に成功、またはエラーでアラートが出たら判定する
         if (await alert.isVisible({ timeout: 8000 }).catch(() => false)) {
-            // もしエラー内容（「修正してください」など）が含まれていたらテストを落とす
-            const msg = await alert.textContent();
+            // Shadow DOM内部のプロパティやinnerTextから確実に取り出す
+            const msg = await alert.evaluate((el: any) => el.alertMessage || el.innerText || '');
             console.log(`[DEBUG] Save alert appeared: ${msg}`);
+
             if (msg?.includes('エラー') || msg?.includes('修正')) {
-                throw new Error(`スクリプト保存エラー: ${msg}`);
+                // エラー内容を出力してテストを失敗させる
+                throw new Error(`スクリプト保存エラー: ${msg}\n入力したコード:\n${scriptContent}`);
             }
             await alert.getByRole('button', { name: '閉じる' }).click();
             await expect(alert).toBeHidden();
@@ -828,7 +830,7 @@ export class EditorHelper {
 
             // フォールバック
             console.log(`[DEBUG] Entering Fallback Input Logic.`);
-            const textarea = monacoEditor.locator('textarea.inputarea');
+            const textarea = monacoEditor.locator('textarea').first();
 
             // エディタにフォーカスを当て、内容を全選択して削除
             await monacoEditor.locator('.view-lines').click();
@@ -992,7 +994,7 @@ export class EditorHelper {
             console.log(`[DEBUG] Actual start:   ${contentAfterApi.substring(0, 50)}...`);
 
             console.log(`[DEBUG] Entering Fallback.`);
-            const textarea = monacoEditor.locator('textarea.inputarea');
+            const textarea = monacoEditor.locator('textarea').first();
 
             await monacoEditor.locator('.view-lines').click();
             await textarea.focus();
@@ -1020,7 +1022,7 @@ export class EditorHelper {
 
     /**
      * Monaco Editorの現在のテキストコンテンツを取得します。
-     * モバイル/デスクトップ問わず、Monacoの内部Modelから直接値を取得します。
+     * モバイル/デスクトップ問わず、LitElementのホストから直接値を取得します。
      * @returns エディタの現在のテキスト
      */
     async getMonacoEditorContent(): Promise<string> {
@@ -1030,45 +1032,29 @@ export class EditorHelper {
         // エディタが表示されるのを待つ
         await expect(monacoEditor).toBeVisible();
 
-        // 方法1: Monaco EditorのAPIを叩いて、Modelから直接値を取得する（推奨）
-        // HTML属性からURIを取得し、それに対応するModelを探します
-        const uri = await monacoEditor.getAttribute('data-uri');
-
-        const contentFromApi = await this.page.evaluate((targetUri) => {
-            // @ts-ignore
-            const monaco = window.monaco;
-            if (monaco && monaco.editor) {
-                const models = monaco.editor.getModels();
-
-                // data-uri属性がある場合は特定する
-                if (targetUri) {
-                    const model = models.find((m: any) => m.uri.toString() === targetUri);
-                    if (model) return model.getValue();
-                }
-
-                // URIで特定できない、または見つからない場合は、
-                // 現在フォーカスがある、または最初のモデルを返す
-                if (models.length > 0) {
-                    return models[0].getValue();
-                }
+        // 方法1: LitElementのインスタンスから直接エディタAPIを叩く（推奨）
+        const contentFromApi = await monacoEditor.evaluate((element: any) => {
+            const rootNode = element.getRootNode();
+            const hostElement = rootNode.host;
+            if (hostElement && hostElement.styleEditor) {
+                const model = hostElement.styleEditor.getModel();
+                if (model) return model.getValue();
             }
             return null;
-        }, uri);
+        });
 
         if (contentFromApi !== null) {
             return contentFromApi;
         }
 
         // 方法2: APIが使えない場合のフォールバック（モバイル向け）
-        // .view-lines の見た目のテキストを取得する
-        // 注意: ファイルが非常に長い場合、仮想化により画面外の行が取得できない可能性があります
         const viewLines = monacoEditor.locator('.view-lines');
         if (await viewLines.isVisible()) {
             return await viewLines.innerText();
         }
 
         // 方法3: 最後の手段として textarea を確認（デスクトップ向け）
-        const textArea = monacoEditor.locator('textarea.inputarea');
+        const textArea = monacoEditor.locator('textarea').first();
         return await textArea.inputValue();
     }
 
@@ -1080,32 +1066,18 @@ export class EditorHelper {
      */
     async setMonacoValue(editorLocator: Locator, value: string): Promise<{ success: boolean; actual: string; trace?: any[] }> {
         try {
-            // LocatorからDOM要素を渡してevaluateを実行
-            return await editorLocator.evaluate((element, newValue) => {
+            return await editorLocator.evaluate((element: any, newValue) => {
                 const trace: string[] = [];
                 trace.push('evaluate started');
 
-                // @ts-ignore
-                const monaco = window.monaco;
-                if (!monaco || !monaco.editor) {
-                    trace.push('monaco or monaco.editor is missing');
-                    return { success: false, actual: '', trace };
-                }
+                // Shadow DOMのホスト要素（LitElement）を取得
+                const rootNode = element.getRootNode();
+                const hostElement = rootNode.host;
 
-                // 全てのエディタインスタンスを取得
-                const editors = monaco.editor.getEditors();
-                trace.push(`editors found: ${editors.length}`);
-
-                // DOM要素が一致するエディタを探す
-                const targetEditor = editors.find((e: any) => {
-                    const container = e.getContainerDomNode();
-                    // コンテナが一致するか、内包関係にあるかチェック
-                    return container === element || element.contains(container) || container.contains(element);
-                });
-
-                if (targetEditor) {
-                    trace.push('Target editor found by DOM matching');
-                    const model = targetEditor.getModel();
+                if (hostElement && hostElement.styleEditor) {
+                    trace.push('Target editor found on host element');
+                    const editor = hostElement.styleEditor;
+                    const model = editor.getModel();
                     if (model) {
                         trace.push('Model found on editor, setting value...');
                         model.setValue(newValue);
@@ -1114,21 +1086,7 @@ export class EditorHelper {
                         trace.push('Editor found but has no model');
                     }
                 } else {
-                    trace.push('No editor matched DOM element');
-
-                    // フォールバック: 現在表示されているであろうモデルを探す
-                    // getModels() で全モデルを取得し、uriが現在のエディタのdata-uriと一致するものを探すのが理想だが、
-                    // evaluate内ではLocatorのgetAttribute('data-uri')は使えない（引数で渡す必要がある）
-                    // ここでは「エディタが1つしかない」または「フォーカスされている」前提で、最初のモデルを使うなどの強引な手も考えられるが、
-                    // リスクがあるためtraceのみ残してfalseを返す。
-                    const models = monaco.editor.getModels();
-                    trace.push(`Total models in monaco: ${models.length}`);
-                    if (models.length > 0) {
-                        trace.push(`First model URI: ${models[0].uri.toString()}`);
-                        // 試しに最初のモデルに入れてみる（デバッグ目的）
-                        // models[0].setValue(newValue);
-                        // return { success: true, actual: models[0].getValue(), trace };
-                    }
+                    trace.push('Host element or styleEditor not found');
                 }
 
                 return { success: false, actual: '', trace };

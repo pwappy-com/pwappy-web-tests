@@ -271,7 +271,7 @@ customElements.define('${tagName}', ${scriptName});
             await expect(addMenu).toBeHidden();
 
             // 追加したスクリプトを編集
-            await editorHelper.editScript({ eventName: eventName, scriptName: attachedScriptName, scriptContent: `function ${attachedScriptName}(event) {\nons.notification.alert('${alertText}');` });
+            await editorHelper.editScript({ eventName: eventName, scriptName: attachedScriptName, scriptContent: `function ${attachedScriptName}(event) {\n    ons.notification.alert('${alertText}');\n}` });
 
             // 動作モードに切り替え
             await editorHelper.closeMoveingHandle();
