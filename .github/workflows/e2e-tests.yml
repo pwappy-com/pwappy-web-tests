@@ -1,6 +1,12 @@
 # ワークフローの名称
 name: Multi-OS E2E Tests
 
+concurrency:
+  # 同じワークフロー名（Multi-OS E2E Tests）でグループ化
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # 実行中のジョブをキャンセルせず、順番待ちをさせる
+  cancel-in-progress: false
+  
 # ワークフローが実行されるトリガーを定義
 on:
   # 定期実行 (schedule)
