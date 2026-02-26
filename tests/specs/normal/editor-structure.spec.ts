@@ -248,8 +248,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 
         const pointerAction = {
             down: async (x: number, y: number) => {
-                console.log(`[Action] Down at (${x}, ${y})`);
-                await drawDebugPoint(x, y, 'red');
+                                await drawDebugPoint(x, y, 'red');
                 if (isMobile && cdpSession) {
                     await cdpSession.send('Input.dispatchTouchEvent', {
                         type: 'touchStart',
@@ -261,8 +260,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 }
             },
             move: async (fromX: number, fromY: number, toX: number, toY: number, steps: number = 10) => {
-                console.log(`[Action] Move from (${fromX}, ${fromY}) to (${toX}, ${toY}) with ${steps} steps`);
-                const stepX = (toX - fromX) / steps;
+                                const stepX = (toX - fromX) / steps;
                 const stepY = (toY - fromY) / steps;
 
                 for (let i = 1; i <= steps; i++) {
@@ -280,8 +278,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 }
             },
             up: async (x?: number, y?: number) => {
-                console.log(`[Action] Up at (${x ?? 'N/A'}, ${y ?? 'N/A'})`);
-                if (x !== undefined && y !== undefined) {
+                                if (x !== undefined && y !== undefined) {
                     await drawDebugPoint(x, y, 'blue');
                 }
                 if (isMobile && cdpSession) {
@@ -317,19 +314,15 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                         const containerTop = containerBox.y;
                         const containerBottom = containerBox.y + containerBox.height;
 
-                        console.log(`[Debug] Attempt ${i}: Item Y=${itemCenterY}, Container Range=[${containerTop}, ${containerBottom}]`);
-
                         // 判定の緩和
                         const isInView = (itemCenterY >= containerTop + 5) && (itemCenterY <= containerBottom - 5);
 
                         if (isInView) {
-                            console.log(`[Success] Found ${componentName} in view.`);
-                            break;
+                                                        break;
                         }
                     }
 
-                    console.log(`[Info] ${componentName} not centered, scrolling toolbox...`);
-                    await toolboxContainer.evaluate(el => el.scrollTop += 80);
+                                        await toolboxContainer.evaluate(el => el.scrollTop += 80);
                     await editorPage.waitForTimeout(300);
 
                     if (i === maxScrollAttempts - 1) {
@@ -351,7 +344,6 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 
             // ゴーストの出現確認
             const ghostExists = await editorPage.evaluate(() => !!document.querySelector('.custom-drag-image'));
-            console.log(`[Debug] Ghost element exists: ${ghostExists}`);
 
             // --- ターゲットへの追尾移動 ---
             let currentX = startX;

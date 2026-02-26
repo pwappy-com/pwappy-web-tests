@@ -338,4 +338,75 @@ customElements.define('${componentTagName}', ${scriptName});
         });
     });
 
+    test.describe('スクリプト編集のキャンセル機能', () => {
+        const scriptName = 'cancelTestScript';
+        const initialContent = `function ${scriptName}() {\n    console.log("first");\n}`;
+        const modifiedContent = `function ${scriptName}() {\n    console.log("modified");\n}`;
+
+        test.beforeEach(async ({ editorPage, editorHelper }) => {
+            await editorHelper.openMoveingHandle('right');
+            const scriptContainer = editorPage.locator('script-container');
+            await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
+            await editorHelper.addNewScript(scriptName);
+            await editorHelper.editScriptContent(scriptName, initialContent);
+
+            // リストに戻る
+            await scriptContainer.locator('#tab-script').click();
+            await expect(scriptContainer.locator('#script-list-container')).toBeVisible();
+        });
+
+        test('変更がない場合、確認なしでエディタを閉じることができる', async ({ editorPage, editorHelper }) => {
+            const scriptContainer = editorPage.locator('script-container');
+            const editorContainer = scriptContainer.locator('#script-container');
+
+            await editorHelper.openScriptForEditing(scriptName);
+            await expect(editorContainer).toBeVisible();
+
+            const cancelBtn = scriptContainer.locator('#fab-cancel');
+            await cancelBtn.click();
+
+            await expect(scriptContainer.locator('#script-list-container')).toBeVisible();
+            await expect(editorContainer).toBeHidden();
+        });
+
+        test('変更がある場合、確認ダイアログでOKを押すと変更が破棄される', async ({ editorPage, editorHelper }) => {
+            const scriptContainer = editorPage.locator('script-container');
+            const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
+
+            await editorHelper.openScriptForEditing(scriptName);
+
+            // 重要: fillScriptContentを使わず、APIで直接値を書き換える（変更あり状態を作る）
+            await editorHelper.setMonacoValue(monacoEditor, modifiedContent);
+
+            editorPage.once('dialog', async dialog => {
+                expect(dialog.message()).toContain('編集内容が破棄されます');
+                await dialog.accept();
+            });
+
+            await scriptContainer.locator('#fab-cancel').click();
+
+            await expect(scriptContainer.locator('#script-list-container')).toBeVisible();
+
+            await editorHelper.openScriptForEditing(scriptName);
+            const currentContent = await editorHelper.getMonacoEditorContent();
+            expect(normalizeWhitespace(currentContent)).toBe(normalizeWhitespace(initialContent));
+        });
+
+        test('変更がある場合、確認ダイアログでキャンセルを押すと編集を続行できる', async ({ editorPage, editorHelper }) => {
+            const scriptContainer = editorPage.locator('script-container');
+            const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
+
+            await editorHelper.openScriptForEditing(scriptName);
+            await editorHelper.setMonacoValue(monacoEditor, modifiedContent);
+            editorPage.once('dialog', async dialog => {
+                await dialog.dismiss();
+            });
+
+            await scriptContainer.locator('#fab-cancel').click();
+            await expect(scriptContainer.locator('#script-container')).toBeVisible();
+
+            const currentContent = await editorHelper.getMonacoEditorContent();
+            expect(normalizeWhitespace(currentContent)).toBe(normalizeWhitespace(modifiedContent));
+        });
+    });
 });

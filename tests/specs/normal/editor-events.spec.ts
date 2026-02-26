@@ -220,8 +220,7 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             await editorHelper.closeMoveingHandle();
 
             // Page2の各イベントにスクリプトを追加
-            // console.log(`page2NodeInner: ${await page2Node.innerHTML()}`)
-            // await editorPage.waitForTimeout(500000)
+            //             // await editorPage.waitForTimeout(500000)
             // Page2の各イベントにスクリプトを追加
             await editorHelper.addScriptToNodeEvent({ nodeLocator: page2Node, eventName: 'init', scriptName: 'page2Init' });
             await editorHelper.editScript({ eventName: 'init', scriptName: 'page2Init', scriptContent: "function page2Init(event) {\n    ons.notification.alert('page2_init');\n}" });

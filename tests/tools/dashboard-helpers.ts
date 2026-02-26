@@ -11,7 +11,7 @@ import { EditorHelper } from './editor-helpers';
 export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
     const alert = page.locator('alert-component');
     if (await alert.isVisible().catch(() => false)) {
-        console.log('createApp開始前にアラートを検出しました。閉じます。');
+        //console.log('createApp開始前にアラートを検出しました。閉じます。');
         await alert.getByRole('button', { name: '閉じる' }).click();
         await expect(alert).toBeHidden();
     }
@@ -111,8 +111,7 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
  * @param tabName 移動先のタブ名 ('workbench', 'publish', 'archive')
  */
 export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish' | 'archive'): Promise<void> {
-    //console.log(tabName);
-    await page.locator(`#${tabName}`).click();
+    //    await page.locator(`#${tabName}`).click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator(`dashboard-main-content > dashboard-loading-overlay`)).toBeHidden();
 }
@@ -514,7 +513,7 @@ export async function setAiCoding(page: Page, enable: boolean): Promise<void> {
 
     // 3. 目標の状態と現在の状態が同じであれば、何もしないで終了
     if (isCurrentlyEnabled === enable) {
-        console.log(`AI機能は既に ${enable ? '有効' : '無効'} です。`);
+        //console.log(`AI機能は既に ${enable ? '有効' : '無効'} です。`);
         await closeSettings(page); // 設定画面を閉じて終了
         return;
     }
@@ -576,7 +575,7 @@ export async function setGeminiApiKey(page: Page, apiKey: string): Promise<void>
     // 2. APIキー入力フォームが表示されているか確認
     const apiKeyForm = page.locator('.api-key-form');
     if (!(await apiKeyForm.isVisible())) {
-        console.log('APIキーは既に登録されています。処理をスキップします。');
+        //console.log('APIキーは既に登録されています。処理をスキップします。');
         await closeSettings(page); // 設定画面を閉じて終了
         return;
     }
@@ -612,7 +611,7 @@ export async function deleteGeminiApiKey(page: Page): Promise<void> {
     // 2. 「登録済み」の表示が出ているか確認
     const registeredDisplay = page.locator('.api-key-display');
     if (!(await registeredDisplay.isVisible())) {
-        console.log('APIキーは登録されていません。処理をスキップします。');
+        //console.log('APIキーは登録されていません。処理をスキップします。');
         await closeSettings(page); // 設定画面を閉じて終了
         return;
     }

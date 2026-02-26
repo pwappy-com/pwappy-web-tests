@@ -38,8 +38,7 @@ export class EditorHelper {
     async handleSnapshotRestoreDialog(): Promise<void> {
         // 1. どんなダイアログが出ても自動でOKを押すリスナーを登録
         const dialogHandler = async (dialog: any) => {
-            console.log(`[Auto Dialog Handler] Accepted: ${dialog.message()}`);
-            await dialog.accept().catch(() => { });
+                        await dialog.accept().catch(() => { });
         };
         this.page.on('dialog', dialogHandler);
 
@@ -532,7 +531,6 @@ export class EditorHelper {
          * DOMツリーで選択中のコンテキスト（トップレベルテンプレート）を切り替えます。
          */
     async switchTopLevelTemplate(templateId: string): Promise<void> {
-        console.log(`[Debug] switchTopLevelTemplate: Attempting to switch to "${templateId}"`);
         await this.openMoveingHandle('left');
 
         const topContainer = this.page.locator('.top-container');
@@ -551,12 +549,10 @@ export class EditorHelper {
         } catch (e) {
             // 【重要】失敗時にリストの中身を全出力して原因を特定する
             const items = await topTemplateListContainer.locator('div.top-template-item').all();
-            console.log(`[Error-Detail] Template "${templateId}" not found in list. Current items:`);
-            for (const item of items) {
+                        for (const item of items) {
                 const id = await item.getAttribute('data-template-id');
                 const text = await item.innerText();
-                console.log(` - ID: "${id}", Text: "${text.trim()}"`);
-            }
+                            }
             throw e;
         }
 
@@ -603,8 +599,6 @@ export class EditorHelper {
     async editScript(
         { eventName, scriptName, scriptContent }: { eventName: string; scriptName: string; scriptContent: string }
     ): Promise<void> {
-        console.log(`[DEBUG] editScript start: ${eventName} / ${scriptName}`);
-
         await this.openMoveingHandle('right');
         const scriptContainer = this.page.locator('script-container');
         await expect(scriptContainer).toBeVisible();
@@ -623,18 +617,11 @@ export class EditorHelper {
 
         // 編集前の状態ログ
         const contentBefore = await this.getMonacoEditorContent();
-        console.log(`[DEBUG] Content BEFORE editScript API call:\n${contentBefore}`);
-
         const browserName = this.page.context().browser()?.browserType().name();
 
         // APIを使用して値を設定（優先実行）
         // 戻り値を拡張し、API内部のトレース情報を含める
         const apiResult = await this.setMonacoValue(monacoEditor, scriptContent);
-
-        console.log(`[DEBUG] API set result: success=${apiResult.success}`);
-        if (apiResult.trace) {
-            console.log(`[DEBUG] API Trace: ${JSON.stringify(apiResult.trace)}`);
-        }
 
         // 値が正しく反映されたか確認
         const contentAfterApi = await this.getMonacoEditorContent();
@@ -646,7 +633,6 @@ export class EditorHelper {
             Actual start:   "${contentAfterApi.substring(0, 50)}..."`);
 
             // フォールバック: 物理入力
-            console.log(`[DEBUG] Entering Fallback Input Logic.`);
             const textarea = monacoEditor.locator('textarea').first();
 
             // エディタ（textarea）に確実にフォーカスを当てるため、視覚的なラインをクリック
@@ -657,7 +643,6 @@ export class EditorHelper {
             await this.page.keyboard.press('Escape');
 
             // 全選択して削除 (Mac/Safari対応を含む確実な方法)
-            console.log(`[DEBUG] Sending Select All + Delete keys...`);
             await this.page.keyboard.press('Control+A');
             await this.page.keyboard.press('Meta+A');
             await this.page.keyboard.press('Delete');
@@ -667,17 +652,13 @@ export class EditorHelper {
             await this.page.waitForTimeout(300);
 
             const contentAfterClear = await this.getMonacoEditorContent();
-            console.log(`[Safari Debug] Content after physical clear in editScript: "${contentAfterClear}"`);
-
+            
             // 入力
             if (browserName === 'webkit') {
-                console.log(`[DEBUG] Using fill() for WebKit fallback`);
                 await textarea.fill(scriptContent);
                 // fill直後の確認
                 const contentAfterFill = await this.getMonacoEditorContent();
-                console.log(`[DEBUG] Content after fill: "${contentAfterFill.substring(0, 50)}..."`);
             } else {
-                console.log(`[DEBUG] Using pressSequentially() fallback`);
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
             }
         }
@@ -695,7 +676,6 @@ export class EditorHelper {
         if (await alert.isVisible({ timeout: 8000 }).catch(() => false)) {
             // Shadow DOM内部のプロパティやinnerTextから確実に取り出す
             const msg = await alert.evaluate((el: any) => el.alertMessage || el.innerText || '');
-            console.log(`[DEBUG] Save alert appeared: ${msg}`);
 
             if (msg?.includes('エラー') || msg?.includes('修正')) {
                 // エラー内容を出力してテストを失敗させる
@@ -774,7 +754,6 @@ export class EditorHelper {
      * @param scriptType - 'function' または 'class'
      */
     async addNewScript(scriptName: string, scriptType: 'function' | 'class' = 'function'): Promise<void> {
-        console.log(`[DEBUG] addNewScript: ${scriptName} (${scriptType})`);
         const scriptContainer = this.page.locator('script-container');
         const scriptListContainer = scriptContainer.locator('#script-list-container');
         const scriptAddButton = scriptListContainer.getByTitle("スクリプトの追加");
@@ -795,7 +774,6 @@ export class EditorHelper {
      * @param scriptContent - 新しいスクリプトのコード内容
      */
     async editScriptContent(scriptName: string, scriptContent: string): Promise<void> {
-        console.log(`[DEBUG] editScriptContent start: ${scriptName}`);
 
         const scriptContainer = this.page.locator('script-container');
         const scriptRow = scriptContainer.locator('.editor-row', { hasText: scriptName });
@@ -810,13 +788,10 @@ export class EditorHelper {
 
         // 編集前の状態ログ
         const contentBefore = await this.getMonacoEditorContent();
-        console.log(`[DEBUG] Content BEFORE editScriptContent API call:\n${contentBefore}`);
 
         // APIを使用して値を設定
         const apiResult = await this.setMonacoValue(monacoEditor, scriptContent);
-        console.log(`[DEBUG] API set result: success=${apiResult.success}`);
         if (apiResult.trace) {
-            console.log(`[DEBUG] API Trace: ${JSON.stringify(apiResult.trace)}`);
         }
 
         // 値が正しく反映されたか確認
@@ -829,7 +804,6 @@ export class EditorHelper {
             Actual start:   "${contentAfterApi.substring(0, 50)}..."`);
 
             // フォールバック
-            console.log(`[DEBUG] Entering Fallback Input Logic.`);
             const textarea = monacoEditor.locator('textarea').first();
 
             // エディタにフォーカスを当て、内容を全選択して削除
@@ -838,7 +812,6 @@ export class EditorHelper {
             await this.page.keyboard.press('Escape');
 
             // 全選択して削除
-            console.log(`[DEBUG] Sending Select All + Delete keys...`);
             await this.page.keyboard.press('Control+A');
             await this.page.keyboard.press('Meta+A');
             await this.page.keyboard.press('Delete');
@@ -848,14 +821,11 @@ export class EditorHelper {
             await this.page.waitForTimeout(300);
 
             const contentAfterClear = await this.getMonacoEditorContent();
-            console.log(`[Safari Debug] Content after physical clear in editScriptContent: "${contentAfterClear}"`);
-
+            
             if (browserName === 'webkit') {
-                console.log(`[DEBUG] Using fill() for WebKit fallback`);
                 await textarea.fill(scriptContent);
                 const contentAfterFill = await this.getMonacoEditorContent();
-                console.log(`[Safari Debug] Content after fill: "${contentAfterFill.substring(0, 100)}..."`);
-            } else if (browserName === 'chromium') {
+                            } else if (browserName === 'chromium') {
                 await textarea.fill(scriptContent);
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
@@ -968,8 +938,6 @@ export class EditorHelper {
      * @param scriptContent - 新しいスクリプトのコード内容
      */
     async fillScriptContent(scriptName: string, scriptContent: string): Promise<void> {
-        console.log(`[DEBUG] fillScriptContent start: ${scriptName}`);
-
         const scriptContainer = this.page.locator('script-container');
         const scriptRow = scriptContainer.locator('.editor-row', { hasText: scriptName });
         await scriptRow.getByTitle('スクリプトの編集').click();
@@ -983,32 +951,23 @@ export class EditorHelper {
 
         // APIを使用して値を設定（優先実行）
         const apiResult = await this.setMonacoValue(monacoEditor, scriptContent);
-        console.log(`[DEBUG] API set result: success=${apiResult.success}`);
 
         // 値が正しく反映されたか確認
         const contentAfterApi = await this.getMonacoEditorContent();
         const isMatch = contentAfterApi.trim() === scriptContent.trim();
 
         if (!isMatch) {
-            console.log(`[DEBUG] Mismatch. Expected start: ${scriptContent.substring(0, 50)}...`);
-            console.log(`[DEBUG] Actual start:   ${contentAfterApi.substring(0, 50)}...`);
-
-            console.log(`[DEBUG] Entering Fallback.`);
             const textarea = monacoEditor.locator('textarea').first();
 
             await monacoEditor.locator('.view-lines').click();
             await textarea.focus();
             await this.page.keyboard.press('Escape');
-
-            console.log(`[DEBUG] Clearing content...`);
             await this.page.keyboard.press('Control+A');
             await this.page.keyboard.press('Meta+A');
             await this.page.keyboard.press('Delete');
             await this.page.keyboard.press('Backspace');
 
             const contentAfterClear = await this.getMonacoEditorContent();
-            console.log(`[DEBUG] Content after clear: "${contentAfterClear}"`);
-
             if (browserName === 'webkit') {
                 await textarea.fill(scriptContent);
             } else if (browserName === 'chromium') {
@@ -1017,7 +976,6 @@ export class EditorHelper {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
             }
         }
-        console.log(`[DEBUG] fillScriptContent done.`);
     }
 
     /**
@@ -1533,7 +1491,6 @@ export class EditorHelper {
      * 指定されたパスのファイルをプロジェクトにインポートします。
      */
     async importProjectFile(filePath: string): Promise<void> {
-        console.log(`[Import] --- Start: ${filePath} ---`);
 
         await this.closeMoveingHandle();
 
@@ -1544,7 +1501,6 @@ export class EditorHelper {
         const dialogHandler = async (dialog: any) => {
             const message = dialog.message();
             const type = dialog.type();
-            console.log(`[Import-Dialog] Type: ${type}, Message: ${message}`);
 
             // 成功メッセージが含まれているか確認
             if (message.includes('プロジェクトを正常にインポートしました')) {
@@ -1553,14 +1509,12 @@ export class EditorHelper {
             }
 
             await dialog.accept();
-            console.log(`[Import-Dialog] Accepted.`);
         };
 
         this.page.on('dialog', dialogHandler);
 
         try {
-            console.log(`[Import] Opening Snapshot Manager...`);
-            await this.page.locator('#fab-bottom-menu-box').click();
+                        await this.page.locator('#fab-bottom-menu-box').click();
             await this.page.locator('#platformBottomMenu').getByText('スナップショット管理').click();
 
             const snapshotManager = this.page.locator('snapshot-manager');
@@ -1568,33 +1522,27 @@ export class EditorHelper {
 
             const importLabel = snapshotManager.locator('label.import-label');
 
-            console.log(`[Import] Triggering file chooser...`);
-            const [fileChooser] = await Promise.all([
+                        const [fileChooser] = await Promise.all([
                 this.page.waitForEvent('filechooser'),
                 importLabel.click(),
             ]);
 
-            console.log(`[Import] Setting file: ${filePath}`);
-            await fileChooser.setFiles(filePath);
+                        await fileChooser.setFiles(filePath);
 
             // --- 完了判定の修正 ---
             // カスタムコンポーネントを待つのではなく、標準alertが発火したかをポーリング
-            console.log(`[Import] Waiting for completion dialog...`);
-            await expect.poll(() => successAlertDetected, {
+                        await expect.poll(() => successAlertDetected, {
                 message: "インポート完了の通知(window.alert)を待機中",
                 timeout: 30000,
                 intervals: [1000]
             }).toBe(true);
 
-            console.log(`[Import] Success dialog confirmed: ${lastAlertMessage}`);
-
+            
             // window.alert は自動で閉じているので、あとは Snapshot Manager を閉じるだけ
-            console.log(`[Import] Closing Snapshot Manager.`);
-            await snapshotManager.locator('.close-btn').click();
+                        await snapshotManager.locator('.close-btn').click();
             await expect(snapshotManager).toBeHidden();
 
-            console.log(`[Import] --- Finished Successfully ---`);
-        } catch (error) {
+                    } catch (error) {
             console.error(`[Import-Error] Process failed:`, error);
             throw error;
         } finally {
