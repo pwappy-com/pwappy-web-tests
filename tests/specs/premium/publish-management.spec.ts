@@ -234,7 +234,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
             expect(initialPoints - currentPoints).toBe(20);
 
             // OpenAI Moderation審査なので、ユーザーのGeminiキーが無効でも「公開準備完了」になる
-            await waitForVersionStatus(page, appName, version, '公開準備完了');
+            await waitForVersionStatus(page, appName, version, '公開準備完了', { timeout: 150000, intervals: [10000, 20000] });
             await expectVersionStatus(page, version, '公開準備完了');
         });
 
@@ -317,19 +317,70 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
             const editorPage = await openEditor(page, context, appName, version);
 
+            // 状態管理用の変数
+            let isProcessing = false;
+            let getRequestAfterPostCount = 0;
+
             // モックを設定する
-            await editorPage.route('**/ai-coding', async (route) => {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: JSON.stringify({
-                        code: 200,
-                        details: {
-                            text: "function mockedFunction() {\n  console.log('This is a mocked response');\n}"
-                        }
-                    })
-                });
+            // エンドポイントを **/ai-script-coding* に変更し、GET/POSTで分岐
+            // 末尾にワイルドカードをつけることでクエリパラメータ(?ticket=...)に対応
+            await editorPage.route('**/ai-script-coding*', async (route) => {
+                const request = route.request();
+
+                if (request.method() === 'POST') {
+                    // 送信リクエストには受付OKを返す
+                    isProcessing = true;
+                    getRequestAfterPostCount = 0;
+                    await route.fulfill({
+                        status: 200,
+                        contentType: 'application/json',
+                        body: JSON.stringify({ code: 200, message: 'Request accepted' })
+                    });
+                } else if (request.method() === 'GET') {
+                    if (!isProcessing) {
+                        // 初期状態（エディタを開いた直後）は履歴なしを返す
+                        // これで「コード生成中」などの不要なメッセージが出ないようにする
+                        await route.fulfill({
+                            status: 200,
+                            contentType: 'application/json',
+                            body: JSON.stringify({
+                                code: 200,
+                                details: []
+                            })
+                        });
+                    } else {
+                        getRequestAfterPostCount++;
+
+                        // 送信後のポーリングリクエストには、状態を変化させて返す
+                        // 1回目: pending (コード生成中) -> verifyのために必要
+                        // 2回目以降: completed (完了) -> ボタンを表示させるため
+                        const status = getRequestAfterPostCount <= 1 ? "pending" : "completed";
+
+                        await route.fulfill({
+                            status: 200,
+                            contentType: 'application/json',
+                            body: JSON.stringify({
+                                code: 200,
+                                details: [
+                                    {
+                                        ticket: "mock-ticket-12345",
+                                        requestContent: "モック用の指示です",
+                                        // サーバー側でMarkdown記法や説明文は既に除去され、純粋なコードのみになっている状態をシミュレート
+                                        responseContent: status === "completed" ?
+                                            "function mockedFunction() {\n  console.log('This is a mocked response');\n}"
+                                            : null,
+                                        responseFormat: "text",
+                                        status: status,
+                                        createdDate: new Date().toLocaleString(),
+                                        finishReason: status === "completed" ? "STOP" : null
+                                    }
+                                ]
+                            })
+                        });
+                    }
+                } else {
+                    await route.continue();
+                }
             });
 
             const editorHelper = new EditorHelper(editorPage, isMobile);
