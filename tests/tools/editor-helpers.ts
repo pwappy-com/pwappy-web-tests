@@ -90,7 +90,7 @@ export class EditorHelper {
         await this.openMoveingHandle('left');
         const humburgerButton = this.page.locator('template-container #hamburger');
         await expect(humburgerButton).toBeVisible();
-        await this.page.locator('template-container #hamburger').click();
+        await humburgerButton.click();
         const contextMenu = this.page.locator('#contextMenu');
         await expect(contextMenu).toBeVisible();
         await contextMenu.getByText('ページ追加').click();

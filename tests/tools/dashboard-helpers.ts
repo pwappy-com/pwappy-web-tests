@@ -9,22 +9,30 @@ import { EditorHelper } from './editor-helpers';
  * @param appKey 作成するアプリケーションキー
  */
 export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
-    const alert = page.locator('alert-component');
-    if (await alert.isVisible().catch(() => false)) {
-        //console.log('createApp開始前にアラートを検出しました。閉じます。');
-        await alert.getByRole('button', { name: '閉じる' }).click();
-        await expect(alert).toBeHidden();
-    }
-
-    await page.getByTitle('アプリケーションの追加').click();
-
-    // モーダルウィンドウ自体を取得
     const appModal = page.locator('dashboard-modal-window#appModal');
+    const alert = page.locator('alert-component');
 
-    // モーダルの「コンテナ」ではなく、モーダルの「中身」が表示されるのを待つ。
-    // この場合、ヘッダータイトルが最も確実。
-    // これにより、コンテナのサイズが0x0である問題やShadow DOMの問題を回避できる。
-    await expect(appModal.locator('span[slot="header-title"]')).toBeVisible();
+    await expect(async () => {
+        // すでにモーダルが表示されていればこのステップは通過
+        if (await appModal.locator('span[slot="header-title"]').isVisible()) {
+            return;
+        }
+
+        // アラートが被ってクリックを妨害している場合は閉じる
+        if (await alert.isVisible()) {
+            await alert.getByRole('button', { name: '閉じる' }).click();
+            await expect(alert).toBeHidden({ timeout: 3000 });
+        }
+
+        // 短めのタイムアウトでクリックを実行。alert等に被っているとエラーになりリトライされる
+        await page.getByTitle('アプリケーションの追加').click({ timeout: 2000 });
+
+        // モーダルの「中身（タイトル）」が表示されるのを待つ
+        await expect(appModal.locator('span[slot="header-title"]')).toBeVisible({ timeout: 3000 });
+    }).toPass({
+        timeout: 20000,
+        intervals: [1000]
+    });
 
     const appNameInput = page.locator('#input-app-name');
     await expect(appNameInput).toBeFocused();
@@ -62,7 +70,15 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     }
 
     const appRow = page.locator('.app-list tbody tr', { hasText: appKey });
-    if (await appRow.count() > 0) {
+
+    // UIの描画遅延を考慮し、要素が表示されるのを最大5秒待機する
+    try {
+        await appRow.waitFor({ state: 'visible', timeout: 5000 });
+    } catch (e) {
+        // 5秒待っても表示されなかった場合は、すでに削除済み（または存在しない）とみなす
+    }
+
+    if (await appRow.isVisible()) {
         await appRow.getByRole('button', { name: '削除' }).click();
         await page.getByText('処理中...').waitFor({ state: 'hidden' });
         const confirmDialog = page.locator('message-box#delete-confirm');
@@ -123,15 +139,20 @@ export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish'
  * @param isVisible trueなら表示されていること、falseなら非表示であることを期待
  */
 export async function expectAppVisibility(page: Page, appKey: string, isVisible: boolean): Promise<void> {
-    // 検証の前に、リストが更新される可能性のあるネットワーク通信が完了するのを待つ
-    await page.waitForLoadState('networkidle');
-    // アプリケーションキーは2列目(td:nth-child(2))に表示される
-    const appKeyCell = page.locator('.app-list tbody tr td:nth-child(2)', { hasText: new RegExp(`^${appKey}$`) });
-    if (isVisible) {
-        await expect(appKeyCell).toBeVisible();
-    } else {
-        await expect(appKeyCell).toBeHidden();
-    }
+    await expect(async () => {
+        const appKeyCell = page
+            .locator('.app-list tbody tr td:nth-child(2)', { hasText: new RegExp(`^${appKey}$`) })
+            .first();
+
+        if (isVisible) {
+            await expect(appKeyCell).toBeVisible({ timeout: 2000 });
+        } else {
+            await expect(appKeyCell).toBeHidden({ timeout: 2000 });
+        }
+    }).toPass({
+        timeout: 30000,
+        intervals: [1000]
+    });
 }
 
 /**
