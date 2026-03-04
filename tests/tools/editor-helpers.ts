@@ -697,7 +697,7 @@ export class EditorHelper {
      */
     async verifyScriptInPreview(expectedContent: string): Promise<void> {
         const previewFrame = this.getPreviewFrame();
-        await previewFrame.locator('body').waitFor({ state: 'visible' });
+        await previewFrame.locator('body').waitFor({ state: 'attached' });
         const scripts = previewFrame.locator('script');
         const allScriptsContent = await scripts.allTextContents();
         const combinedText = allScriptsContent.join('\n');

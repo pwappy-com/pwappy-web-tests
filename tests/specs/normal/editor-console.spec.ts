@@ -84,7 +84,7 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
         const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
 
         await test.step('各種ログを出力', async () => {
-            await previewFrame.locator('body').waitFor({ state: 'visible' });
+            await previewFrame.locator('body').waitFor({ state: 'attached' });
 
             await previewFrame.locator('body').evaluate(() => {
                 console.log('Test Info Log');
@@ -158,7 +158,7 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
 
         await test.step('ログ出力とコピー実行', async () => {
             const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
-            await previewFrame.locator('body').waitFor({ state: 'visible' });
+            await previewFrame.locator('body').waitFor({ state: 'attached' });
 
             await previewFrame.locator('body').evaluate(() => {
                 console.log('Copy Test Log 1');
@@ -212,7 +212,7 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
 
         await test.step('ログ出力後のクリア動作確認', async () => {
             const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
-            await previewFrame.locator('body').waitFor({ state: 'visible' });
+            await previewFrame.locator('body').waitFor({ state: 'attached' });
             await previewFrame.locator('body').evaluate(() => console.log('Log to clear'));
 
             await expect(consoleContainer.locator('.log-item')).toHaveCount(1);

@@ -97,7 +97,18 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
 };
 
 export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
-    const appRow = page.locator('.app-list tbody tr', { hasText: appName });
+    // アラートが残っていたら閉じるか、消えるのを待つ
+    const alert = page.locator('alert-component');
+    if (await alert.isVisible()) {
+        // 閉じるボタンがあれば押す、なければ消えるのを待つ
+        const closeBtn = alert.getByRole('button', { name: '閉じる' });
+        if (await closeBtn.isVisible()) {
+            await closeBtn.click();
+        }
+        await expect(alert).toBeHidden();
+    }
+
+    const appRow = page.locator('.app-list tbody tr', { hasText: appName }).first();
     await expect(appRow).toBeVisible();
     const selectButton = appRow.getByRole('button', { name: '選択' });
     await expect(selectButton).toBeVisible();
