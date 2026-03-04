@@ -395,7 +395,13 @@ export class EditorHelper {
      */
     async switchTabInContainer(containerLocator: Locator, tabName: string): Promise<void> {
         const tabLocator = containerLocator.locator('.tab', { hasText: tabName });
-        await tabLocator.click();
+        await expect(async () => {
+            const alert = this.page.locator('alert-component');
+            if (await alert.isVisible().catch(() => false)) {
+                await alert.getByRole('button', { name: '閉じる' }).click().catch(() => {});
+            }
+            await tabLocator.click({ timeout: 2000 });
+        }).toPass({ timeout: 15000, intervals: [1000] });
     }
 
     /**
@@ -529,9 +535,6 @@ export class EditorHelper {
      * DOMツリーで選択中のコンテキスト（トップレベルテンプレート）を切り替えます。
      * @param templateId 'アプリケーション' またはページのdata-template-id
      */
-    /**
-         * DOMツリーで選択中のコンテキスト（トップレベルテンプレート）を切り替えます。
-         */
     async switchTopLevelTemplate(templateId: string): Promise<void> {
         await this.openMoveingHandle('left');
 
@@ -1027,7 +1030,7 @@ export class EditorHelper {
     async setMonacoValue(editorLocator: Locator, value: string): Promise<{ success: boolean; actual: string; trace?: any[] }> {
         try {
             return await editorLocator.evaluate((element: any, newValue) => {
-                const trace: string[] = [];
+                const trace: string[] =[];
                 trace.push('evaluate started');
 
                 // Shadow DOMのホスト要素（LitElement）を取得
@@ -1321,11 +1324,18 @@ export class EditorHelper {
      */
     async performFileOperation(action: string): Promise<void> {
         const explorer = this.page.locator('file-explorer');
-        await explorer.locator('#menu-operation').click();
+        
+        await expect(async () => {
+            const alert = this.page.locator('alert-component');
+            if (await alert.isVisible().catch(() => false)) {
+                await alert.getByRole('button', { name: '閉じる' }).click().catch(() => {});
+            }
+            await explorer.locator('#menu-operation').click({ timeout: 2000 });
+            const popupList = explorer.locator('file-explorer-popup-menu ul');
+            await expect(popupList).toBeVisible({ timeout: 2000 });
+        }).toPass({ timeout: 15000, intervals: [1000] });
 
-        // メニューの ul 自体はサイズを持っているのでOK
         const popupList = explorer.locator('file-explorer-popup-menu ul');
-        await expect(popupList).toBeVisible();
 
         let targetItem: Locator;
         if (action === '貼り付け') {
@@ -1337,17 +1347,13 @@ export class EditorHelper {
         await expect(targetItem).toBeVisible();
         await targetItem.click();
 
-        // ポップアップが消えるのを待つ（ul を待つのが確実）
         await expect(popupList).toBeHidden();
 
         if (action === '削除') {
             const confirmDialog = explorer.locator('#delete-confirm');
-            // 表示確認は Shadow DOM 内のコンテンツで行う
             const dialogBox = confirmDialog.locator('.message-box-content');
             await expect(dialogBox).toBeVisible();
 
-            // 重要: #delete-ok は Light DOM (Slotted) 要素なので、
-            // Shadow内の dialogBox からではなく、host である confirmDialog から直接探す
             const okButton = confirmDialog.locator('#delete-ok');
             await expect(okButton).toBeVisible();
             await okButton.click();
@@ -1538,7 +1544,7 @@ export class EditorHelper {
             await expect.poll(() => successAlertDetected, {
                 message: "インポート完了の通知(window.alert)を待機中",
                 timeout: 30000,
-                intervals: [1000]
+                intervals:[1000]
             }).toBe(true);
 
 
@@ -1565,10 +1571,23 @@ export async function verifyScriptInTestPage(testPage: Page, expectedContents: s
     await testPage.waitForLoadState('domcontentloaded');
 
     const mainJsContent = await testPage.evaluate(async () => {
-        const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
-        if (!scriptElement) return null;
-        const response = await fetch(scriptElement.src);
-        return response.ok ? response.text() : null;
+        return new Promise<string | null>((resolve) => {
+            const check = async () => {
+                const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
+                if (scriptElement) {
+                    try {
+                        const response = await fetch(scriptElement.src);
+                        if (response.ok) {
+                            resolve(await response.text());
+                            return;
+                        }
+                    } catch (e) {}
+                }
+                setTimeout(check, 500);
+            };
+            check();
+            setTimeout(() => resolve(null), 15000); // 15秒でタイムアウト
+        });
     });
 
     expect(mainJsContent, '実機テストページのmain.jsが見つからないか、取得に失敗しました。').not.toBeNull();

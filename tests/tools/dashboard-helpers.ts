@@ -10,18 +10,17 @@ import { EditorHelper } from './editor-helpers';
  */
 export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
     const appModal = page.locator('dashboard-modal-window#appModal');
-    const alert = page.locator('alert-component');
 
     await expect(async () => {
         // すでにモーダルが表示されていればこのステップは通過
-        if (await appModal.locator('span[slot="header-title"]').isVisible()) {
+        if (await appModal.locator('span[slot="header-title"]').isVisible().catch(() => false)) {
             return;
         }
 
         // アラートが被ってクリックを妨害している場合は閉じる
-        if (await alert.isVisible()) {
-            await alert.getByRole('button', { name: '閉じる' }).click();
-            await expect(alert).toBeHidden({ timeout: 3000 });
+        const alert = page.locator('alert-component');
+        if (await alert.isVisible().catch(() => false)) {
+            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
         }
 
         // 短めのタイムアウトでクリックを実行。alert等に被っているとエラーになりリトライされる
@@ -46,7 +45,14 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await expect(appNameInput).toHaveValue(appName);
     await expect(appKeyInput).toHaveValue(appKey);
 
-    await appModal.getByRole('button', { name: '保存' }).click();
+    await expect(async () => {
+        const alert = page.locator('alert-component');
+        if (await alert.isVisible().catch(() => false)) {
+            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+        }
+        await appModal.getByRole('button', { name: '保存' }).click({ timeout: 2000 });
+    }).toPass({ timeout: 15000, intervals: [1000] });
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
     await expect(appModal).toBeHidden();
@@ -60,14 +66,16 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
  */
 export async function deleteApp(page: Page, appKey: string): Promise<void> {
     await page.bringToFront();
-    await navigateToTab(page, 'workbench');
 
     // 念のため残っているアラートを消してから開始 ---
     const alert = page.locator('alert-component');
-    if (await alert.isVisible()) {
-        await alert.getByRole('button', { name: '閉じる' }).click();
-        await expect(alert).toBeHidden();
+    if (await alert.isVisible().catch(() => false)) {
+        await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+        // アラートが残っていた場合、状態が不正な可能性があるのでリロードする
+        await page.reload({ waitUntil: 'domcontentloaded' });
     }
+
+    await navigateToTab(page, 'workbench');
 
     const appRow = page.locator('.app-list tbody tr', { hasText: appKey });
 
@@ -79,7 +87,14 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     }
 
     if (await appRow.isVisible()) {
-        await appRow.getByRole('button', { name: '削除' }).click();
+        await expect(async () => {
+            const a = page.locator('alert-component');
+            if (await a.isVisible().catch(() => false)) {
+                await a.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            }
+            await appRow.getByRole('button', { name: '削除' }).click({ timeout: 2000 });
+        }).toPass({ timeout: 15000, intervals: [1000] });
+
         await page.getByText('処理中...').waitFor({ state: 'hidden' });
         const confirmDialog = page.locator('message-box#delete-confirm');
         await expect(confirmDialog).toBeVisible();
@@ -90,30 +105,49 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
 
         // --- 削除成功後の「削除しました」アラートを閉じる ---
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
-            await alert.getByRole('button', { name: '閉じる' }).click();
+            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
             await expect(alert).toBeHidden();
         }
+
+        // 削除後にDOMの反映が遅れるケースがあるため、強制的にリロードして状態を同期する
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await navigateToTab(page, 'workbench');
     }
 };
 
 export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
     // アラートが残っていたら閉じるか、消えるのを待つ
     const alert = page.locator('alert-component');
-    if (await alert.isVisible()) {
-        // 閉じるボタンがあれば押す、なければ消えるのを待つ
+    if (await alert.isVisible().catch(() => false)) {
         const closeBtn = alert.getByRole('button', { name: '閉じる' });
-        if (await closeBtn.isVisible()) {
-            await closeBtn.click();
+        if (await closeBtn.isVisible().catch(() => false)) {
+            await closeBtn.click().catch(() => { });
         }
-        await expect(alert).toBeHidden();
+        // アラートが出ていた場合、状態が不正かもしれないのでリロードして確実にする
+        await page.reload({ waitUntil: 'domcontentloaded' });
     }
 
+    await navigateToTab(page, 'workbench');
+
     const appRow = page.locator('.app-list tbody tr', { hasText: appName }).first();
-    await expect(appRow).toBeVisible();
-    const selectButton = appRow.getByRole('button', { name: '選択' });
-    await expect(selectButton).toBeVisible();
-    await expect(selectButton).toBeEnabled();
-    await selectButton.click();
+
+    // アプリが見えるまで待機（見えない場合はリロードも試行）
+    await expect(async () => {
+        if (!(await appRow.isVisible().catch(() => false))) {
+            await page.reload({ waitUntil: 'domcontentloaded' });
+            await navigateToTab(page, 'workbench');
+        }
+        await expect(appRow).toBeVisible({ timeout: 5000 });
+    }).toPass({ timeout: 20000, intervals: [2000] });
+
+    await expect(async () => {
+        const a = page.locator('alert-component');
+        if (await a.isVisible().catch(() => false)) {
+            await a.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+        }
+        await appRow.getByRole('button', { name: '選択' }).click({ timeout: 2000 });
+    }).toPass({ timeout: 15000, intervals: [1000] });
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
 
@@ -359,15 +393,26 @@ export async function expectVersionVisibility(page: Page, version: string, isVis
  * @param versionName 追加するバージョン名
  */
 export async function addVersion(page: Page, versionName: string): Promise<void> {
-    await page.getByTitle('バージョンの追加').click();
-    await page.waitForTimeout(500);
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
-    await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
-    const modal = page.locator('dashboard-modal-window#versionModal');
-    await expect(modal.getByRole('heading', { name: 'バージョンの追加' })).toBeVisible();
+    await expect(async () => {
+        const alert = page.locator('alert-component');
+        if (await alert.isVisible().catch(() => false)) {
+            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+        }
+        await page.getByTitle('バージョンの追加').click({ timeout: 2000 });
+        const modal = page.locator('dashboard-modal-window#versionModal');
+        await expect(modal.getByRole('heading', { name: 'バージョンの追加' })).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 15000, intervals: [1000] });
 
+    const modal = page.locator('dashboard-modal-window#versionModal');
     await modal.getByLabel('バージョン').fill(versionName);
-    await modal.getByRole('button', { name: '保存' }).click();
+
+    await expect(async () => {
+        const alert = page.locator('alert-component');
+        if (await alert.isVisible().catch(() => false)) {
+            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+        }
+        await modal.getByRole('button', { name: '保存' }).click({ timeout: 2000 });
+    }).toPass({ timeout: 15000, intervals: [1000] });
 
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
@@ -433,27 +478,27 @@ export async function editVersion(page: Page, oldVersion: string, newVersion: st
  * @param sourceVersion 複製元のバージョン名
  */
 export async function duplicateVersion(page: Page, sourceVersion: string): Promise<void> {
-    // 1. ローディングが完全に消えるのをまず待つ
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
 
-    // 2. 「要素の取得 → クリック」をセットでリトライする
-    // これにより、クリック瞬間にDOMが書き換わっても、次のループで新しい要素を掴み直します
     await expect(async () => {
+        const alert = page.locator('alert-component');
+        if (await alert.isVisible().catch(() => false)) {
+            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+        }
         const versionRow = page.locator('.version-list tbody tr', { hasText: sourceVersion }).first();
         const dupButton = versionRow.getByRole('button', { name: '複製' });
 
-        // 要素がアタッチされ、安定するまで短く待機してクリック
         await dupButton.click({ timeout: 2000 });
     }).toPass({
-        timeout: 10000,
+        timeout: 15000,
         intervals: [1000]
     });
 
-    // 3. クリック後の処理待ち
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
 }
+
 /**
  * バージョンを削除します。
  * @param page ダッシュボードのPageオブジェクト

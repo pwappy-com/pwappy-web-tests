@@ -72,7 +72,14 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
         // コンソールタブに切り替える
         const scriptContainer = editorPage.locator('script-container');
         await expect(scriptContainer).toBeVisible();
-        await scriptContainer.locator('#tab-console').click();
+        await expect(async () => {
+            const alert = editorPage.locator('alert-component');
+            if (await alert.isVisible().catch(() => false)) {
+                await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            }
+            await scriptContainer.locator('#tab-console').click({ timeout: 2000 });
+        }).toPass({ timeout: 15000, intervals: [1000] });
+
         await expect(scriptContainer.locator('console-container')).toBeVisible();
     });
 
