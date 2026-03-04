@@ -301,23 +301,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
         const appKey = (`ai-mock-test-${uniqueId}`).slice(0, 30);
         const version = '1.0.0';
 
-        // 1. ネットワークリクエストをモック化
-        // AIコーディングのAPIエンドポイント（ここでは仮に **/ai-coding とします）をフック
-        await page.route('**/ai-coding', async (route) => {
-            // リクエストを受け取ったフリをして、1秒後にダミー回答を返す
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            await route.fulfill({
-                status: 200,
-                contentType: 'application/json',
-                body: JSON.stringify({
-                    code: 200,
-                    details: {
-                        text: "function mockedFunction() {\n  console.log('This is a mocked response');\n}"
-                    }
-                })
-            });
-        });
-
         await test.step('セットアップ: アプリ作成とAI有効化', async () => {
             await createApp(page, appName, appKey);
             await setAiCoding(page, true);
@@ -333,6 +316,22 @@ test.describe('公開管理 E2Eシナリオ', () => {
             const initialPoints = await getCurrentPoints(page);
 
             const editorPage = await openEditor(page, context, appName, version);
+
+            // モックを設定する
+            await editorPage.route('**/ai-coding', async (route) => {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await route.fulfill({
+                    status: 200,
+                    contentType: 'application/json',
+                    body: JSON.stringify({
+                        code: 200,
+                        details: {
+                            text: "function mockedFunction() {\n  console.log('This is a mocked response');\n}"
+                        }
+                    })
+                });
+            });
+
             const editorHelper = new EditorHelper(editorPage, isMobile);
 
             await editorHelper.openMoveingHandle("right");
