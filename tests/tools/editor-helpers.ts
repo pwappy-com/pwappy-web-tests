@@ -398,7 +398,7 @@ export class EditorHelper {
         await expect(async () => {
             const alert = this.page.locator('alert-component');
             if (await alert.isVisible().catch(() => false)) {
-                await alert.getByRole('button', { name: '閉じる' }).click().catch(() => {});
+                await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
             }
             await tabLocator.click({ timeout: 2000 });
         }).toPass({ timeout: 15000, intervals: [1000] });
@@ -1030,7 +1030,7 @@ export class EditorHelper {
     async setMonacoValue(editorLocator: Locator, value: string): Promise<{ success: boolean; actual: string; trace?: any[] }> {
         try {
             return await editorLocator.evaluate((element: any, newValue) => {
-                const trace: string[] =[];
+                const trace: string[] = [];
                 trace.push('evaluate started');
 
                 // Shadow DOMのホスト要素（LitElement）を取得
@@ -1324,11 +1324,11 @@ export class EditorHelper {
      */
     async performFileOperation(action: string): Promise<void> {
         const explorer = this.page.locator('file-explorer');
-        
+
         await expect(async () => {
             const alert = this.page.locator('alert-component');
             if (await alert.isVisible().catch(() => false)) {
-                await alert.getByRole('button', { name: '閉じる' }).click().catch(() => {});
+                await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
             }
             await explorer.locator('#menu-operation').click({ timeout: 2000 });
             const popupList = explorer.locator('file-explorer-popup-menu ul');
@@ -1544,7 +1544,7 @@ export class EditorHelper {
             await expect.poll(() => successAlertDetected, {
                 message: "インポート完了の通知(window.alert)を待機中",
                 timeout: 30000,
-                intervals:[1000]
+                intervals: [1000]
             }).toBe(true);
 
 
@@ -1581,7 +1581,7 @@ export async function verifyScriptInTestPage(testPage: Page, expectedContents: s
                             resolve(await response.text());
                             return;
                         }
-                    } catch (e) {}
+                    } catch (e) { }
                 }
                 setTimeout(check, 500);
             };
