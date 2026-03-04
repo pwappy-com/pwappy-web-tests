@@ -234,7 +234,10 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
                 await editorHelper.closeMoveingHandle();
                 await editorPage.locator('#fab-bottom-menu-box').click();
-                await editorPage.locator('#platformBottomMenu').getByText('AIエージェント').click();
+                const bottomMenu = editorPage.locator('#platformBottomMenu');
+                await expect(bottomMenu).toBeVisible()
+                await bottomMenu.getByText('AIエージェント').click();
+
                 const agentWindow = editorPage.locator('agent-chat-window');
                 await expect(agentWindow).toBeVisible();
 
@@ -266,7 +269,9 @@ test.describe('AIエージェントとスナップショット機能の統合テ
             await test.step('5. スナップショット管理画面から復元を実行', async () => {
                 await editorHelper.closeMoveingHandle();
                 await editorPage.locator('#fab-bottom-menu-box').click();
-                await editorPage.locator('#platformBottomMenu').getByText('スナップショット管理').click();
+                const bottomMenu = editorPage.locator('#platformBottomMenu');
+                await expect(bottomMenu).toBeVisible()
+                await bottomMenu.getByText('スナップショット管理').click();
 
                 const manager = editorPage.locator('snapshot-manager');
                 const item = manager.locator('.snapshot-item', { hasText: snapshotName });

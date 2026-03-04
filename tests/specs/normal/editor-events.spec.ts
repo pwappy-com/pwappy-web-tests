@@ -251,7 +251,9 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             // 動作モードに切り替え
             const platformSwitcher = editorPage.locator('platform-switcher');
             await platformSwitcher.locator('.screen-rotete-container').click();
-            await platformSwitcher.locator('#platformEditMenu').getByText('動作').click();
+            const editMenu = editorPage.locator('#platformEditMenu');
+            await expect(editMenu).toBeVisible();
+            await editMenu.getByText('動作').click();
             await platformSwitcher.locator('.screen-rotete-container').click();
 
             const previewFrame = editorPage.frameLocator('#ios-container #renderzone');

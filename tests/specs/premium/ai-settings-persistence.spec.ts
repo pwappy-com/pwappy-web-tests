@@ -143,7 +143,10 @@ test.describe('AI設定の永続化テスト', () => {
 
         await test.step('1. AIエージェント画面を開き、UIからモデルを取得してランダムに変更', async () => {
             await editorPage.locator('#fab-bottom-menu-box').click();
-            await editorPage.locator('#platformBottomMenu').getByText('AIエージェント').click();
+            const bottomMenu = editorPage.locator('#platformBottomMenu');
+            await expect(bottomMenu).toBeVisible()
+            await bottomMenu.getByText('AIエージェント').click();
+
             const agentWindow = editorPage.locator('agent-chat-window');
 
             await agentWindow.locator('.settings-btn').click();
@@ -170,9 +173,11 @@ test.describe('AI設定の永続化テスト', () => {
 
         await test.step('3. AIエージェントを再度開き、設定が保持されているか確認', async () => {
             await editorPage.locator('#fab-bottom-menu-box').click();
-            await editorPage.locator('#platformBottomMenu').getByText('AIエージェント').click();
-            const agentWindow = editorPage.locator('agent-chat-window');
+            const bottomMenu = editorPage.locator('#platformBottomMenu');
+            await expect(bottomMenu).toBeVisible()
+            await bottomMenu.getByText('AIエージェント').click();
 
+            const agentWindow = editorPage.locator('agent-chat-window');
             const modeBtn = agentWindow.locator('.mode-btn').filter({ hasText: targetMode });
             await expect(modeBtn).toHaveClass(/active/);
 

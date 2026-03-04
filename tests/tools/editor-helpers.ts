@@ -38,7 +38,7 @@ export class EditorHelper {
     async handleSnapshotRestoreDialog(): Promise<void> {
         // 1. どんなダイアログが出ても自動でOKを押すリスナーを登録
         const dialogHandler = async (dialog: any) => {
-                        await dialog.accept().catch(() => { });
+            await dialog.accept().catch(() => { });
         };
         this.page.on('dialog', dialogHandler);
 
@@ -91,8 +91,10 @@ export class EditorHelper {
         const humburgerButton = this.page.locator('template-container #hamburger');
         await expect(humburgerButton).toBeVisible();
         await this.page.locator('template-container #hamburger').click();
-        await expect(this.page.locator('#contextMenu')).toBeVisible();
-        await this.page.locator('#contextMenu').getByText('ページ追加').click();
+        const contextMenu = this.page.locator('#contextMenu');
+        await expect(contextMenu).toBeVisible();
+        await contextMenu.getByText('ページ追加').click();
+
         const newPageNode = this.page.locator('#dom-tree > .node[data-node-type="page"]').last();
         await expect(newPageNode).toBeVisible();
         return newPageNode;
@@ -549,10 +551,10 @@ export class EditorHelper {
         } catch (e) {
             // 【重要】失敗時にリストの中身を全出力して原因を特定する
             const items = await topTemplateListContainer.locator('div.top-template-item').all();
-                        for (const item of items) {
+            for (const item of items) {
                 const id = await item.getAttribute('data-template-id');
                 const text = await item.innerText();
-                            }
+            }
             throw e;
         }
 
@@ -652,7 +654,7 @@ export class EditorHelper {
             await this.page.waitForTimeout(300);
 
             const contentAfterClear = await this.getMonacoEditorContent();
-            
+
             // 入力
             if (browserName === 'webkit') {
                 await textarea.fill(scriptContent);
@@ -821,11 +823,11 @@ export class EditorHelper {
             await this.page.waitForTimeout(300);
 
             const contentAfterClear = await this.getMonacoEditorContent();
-            
+
             if (browserName === 'webkit') {
                 await textarea.fill(scriptContent);
                 const contentAfterFill = await this.getMonacoEditorContent();
-                            } else if (browserName === 'chromium') {
+            } else if (browserName === 'chromium') {
                 await textarea.fill(scriptContent);
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
@@ -1514,35 +1516,37 @@ export class EditorHelper {
         this.page.on('dialog', dialogHandler);
 
         try {
-                        await this.page.locator('#fab-bottom-menu-box').click();
-            await this.page.locator('#platformBottomMenu').getByText('スナップショット管理').click();
+            await this.page.locator('#fab-bottom-menu-box').click();
+            const bottomMenu = this.page.locator('#platformBottomMenu');
+            await expect(bottomMenu).toBeVisible();
+            await bottomMenu.getByText('スナップショット管理').click();
 
             const snapshotManager = this.page.locator('snapshot-manager');
             await expect(snapshotManager.locator('.container')).toBeVisible();
 
             const importLabel = snapshotManager.locator('label.import-label');
 
-                        const [fileChooser] = await Promise.all([
+            const [fileChooser] = await Promise.all([
                 this.page.waitForEvent('filechooser'),
                 importLabel.click(),
             ]);
 
-                        await fileChooser.setFiles(filePath);
+            await fileChooser.setFiles(filePath);
 
             // --- 完了判定の修正 ---
             // カスタムコンポーネントを待つのではなく、標準alertが発火したかをポーリング
-                        await expect.poll(() => successAlertDetected, {
+            await expect.poll(() => successAlertDetected, {
                 message: "インポート完了の通知(window.alert)を待機中",
                 timeout: 30000,
                 intervals: [1000]
             }).toBe(true);
 
-            
+
             // window.alert は自動で閉じているので、あとは Snapshot Manager を閉じるだけ
-                        await snapshotManager.locator('.close-btn').click();
+            await snapshotManager.locator('.close-btn').click();
             await expect(snapshotManager).toBeHidden();
 
-                    } catch (error) {
+        } catch (error) {
             console.error(`[Import-Error] Process failed:`, error);
             throw error;
         } finally {

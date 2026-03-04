@@ -130,7 +130,9 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
                 await editorHelper.closeMoveingHandle();
                 const menuButton = editorPage.locator('#fab-bottom-menu-box');
                 await menuButton.click();
-                await editorPage.locator('#platformBottomMenu').getByText('スナップショット管理').click();
+                const bottomMenu = editorPage.locator('#platformBottomMenu');
+                await expect(bottomMenu).toBeVisible();
+                await bottomMenu.getByText('スナップショット管理').click();
 
                 const snapshotManager = editorPage.locator('snapshot-manager');
                 const snapshotItem = snapshotManager.locator('.snapshot-item', { hasText: uniqueSnapshotName });
@@ -252,7 +254,9 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
 
         await test.step('3. スナップショット管理画面の状態確認', async () => {
             await editorPage.locator('#fab-bottom-menu-box').click();
-            await editorPage.locator('#platformBottomMenu').getByText('スナップショット管理').click();
+            const bottomMenu = editorPage.locator('#platformBottomMenu');
+            await expect(bottomMenu).toBeVisible();
+            await bottomMenu.getByText('スナップショット管理').click();
 
             const manager = editorPage.locator('snapshot-manager');
             const managerTitle = editorPage.locator('h3', { hasText: 'スナップショット管理' });
