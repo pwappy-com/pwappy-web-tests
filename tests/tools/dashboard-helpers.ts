@@ -111,7 +111,7 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
  * @param tabName 移動先のタブ名 ('workbench', 'publish', 'archive')
  */
 export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish' | 'archive'): Promise<void> {
-    //    await page.locator(`#${tabName}`).click();
+    await page.locator(`#${tabName}`).click();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator(`dashboard-main-content > dashboard-loading-overlay`)).toBeHidden();
 }
