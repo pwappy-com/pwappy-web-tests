@@ -133,7 +133,7 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # キャッシュキー接頭辞の設定 (バイナリエンジン単位でキャッシュを共有)
       - name: Set cache key prefix
@@ -141,7 +141,7 @@ jobs:
           echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -164,7 +164,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: cache-playwright-browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: ${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}
@@ -212,7 +212,7 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-report-normal-${{ matrix.os }}-${{ matrix.browser }}-${{ github.run_id }}
           path: test-results/
@@ -243,14 +243,14 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set cache key prefix
         run: |
           echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -271,7 +271,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: cache-playwright-browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: ${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}
@@ -316,7 +316,7 @@ jobs:
 
       - name: Upload Test Results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-report-premium-${{ matrix.os }}-${{ matrix.browser }}-${{ github.run_id }}
           path: test-results/
@@ -342,14 +342,14 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
       - name: Checkout repository for cleanup
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set cache key prefix for cleanup
         run: |
           echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js for cleanup
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: 'npm'
@@ -364,7 +364,7 @@ jobs:
 
       - name: Cache Playwright browsers for cleanup
         id: cache-playwright-browsers-cleanup
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: ${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}
