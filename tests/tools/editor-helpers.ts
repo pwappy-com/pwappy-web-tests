@@ -400,6 +400,11 @@ export class EditorHelper {
             if (await alert.isVisible().catch(() => false)) {
                 await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
             }
+
+            // Monaco Editorの入力サジェストポップアップがタブを隠してしまう場合への対策
+            // （Escapeキーを送信することでカーソル位置を変えずにサジェストを強制的に閉じます）
+            await this.page.keyboard.press('Escape');
+
             await tabLocator.click({ timeout: 2000 });
         }).toPass({ timeout: 15000, intervals: [1000] });
     }

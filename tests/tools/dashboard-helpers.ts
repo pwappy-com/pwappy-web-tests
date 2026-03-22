@@ -172,7 +172,17 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
  * @param tabName 移動先のタブ名 ('workbench', 'publish', 'archive')
  */
 export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish' | 'archive'): Promise<void> {
-    await page.locator(`#${tabName}`).click();
+    const tabLocator = page.locator(`#${tabName}`);
+
+    // alert-component が被ってクリックを阻害している場合への対策としてリトライする
+    await expect(async () => {
+        const alert = page.locator('alert-component');
+        if (await alert.isVisible().catch(() => false)) {
+            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+        }
+        await tabLocator.click({ timeout: 2000 });
+    }).toPass({ timeout: 15000, intervals: [1000] });
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator(`dashboard-main-content > dashboard-loading-overlay`)).toBeHidden();
 }
