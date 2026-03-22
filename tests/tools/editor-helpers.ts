@@ -671,6 +671,7 @@ export class EditorHelper {
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
             }
+            await this.page.keyboard.press('Escape');
         }
 
         const saveButton = scriptContainer.getByTitle('スクリプトの保存');
@@ -840,6 +841,7 @@ export class EditorHelper {
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
             }
+            await this.page.keyboard.press('Escape');
         }
 
         await scriptContainer.locator('#fab-save').click();
@@ -985,6 +987,7 @@ export class EditorHelper {
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
             }
+            await this.page.keyboard.press('Escape');
         }
     }
 
