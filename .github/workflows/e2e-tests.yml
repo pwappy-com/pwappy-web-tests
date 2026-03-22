@@ -1,6 +1,8 @@
 # ワークフローの名称
 name: Multi-OS E2E Tests
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 concurrency:
   # 同じワークフロー名（Multi-OS E2E Tests）でグループ化
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -141,7 +143,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -250,7 +252,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -349,7 +351,7 @@ jobs:
       - name: Setup Node.js for cleanup
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies for cleanup
