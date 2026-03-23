@@ -204,7 +204,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
 
             // 削除後のリスト更新を待つ
             await page.waitForLoadState('networkidle');
-
+            await page.waitForTimeout(1000);
             await addVersion(page, tooLongVersion);
 
             // 重要：ここで確実に表示されるのを待つ（前の回答で修正したexpectVersionVisibilityを使用）
