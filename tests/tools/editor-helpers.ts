@@ -390,22 +390,36 @@ export class EditorHelper {
 
     /**
      * 指定されたコンテナ内のタブを切り替えます。
-     * @param containerLocator タブ要素を持つコンテナのLocator
-     * @param tabName '属性', 'スタイル', 'イベント' など
+     * メインタブの重複を避けるため、ID指定での切り替えを優先します。
      */
     async switchTabInContainer(containerLocator: Locator, tabName: string): Promise<void> {
-        const tabLocator = containerLocator.locator('.tab', { hasText: tabName });
+        const tabIdMap: Record<string, string> = {
+            'イベント': '#tab-event',
+            'スクリプト': '#tab-script',
+            'サービスワーカー': '#tab-serviceworker',
+            'コンソール': '#tab-console',
+            'テスト': '#tab-test',
+            '属性': '#tab-attributes',
+            'スタイル': '#tab-style',
+            'アプリ設定': '#tab-appsetting'
+        };
+
+        // IDマップに存在すればIDを使用、なければ厳密なテキストマッチを行う
+        const selector = tabIdMap[tabName] || `.tab:text-is("${tabName}")`;
+        const tabLocator = containerLocator.locator(selector).first();
+
         await expect(async () => {
             const alert = this.page.locator('alert-component');
             if (await alert.isVisible().catch(() => false)) {
                 await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
             }
-
-            // Monaco Editorの入力サジェストポップアップがタブを隠してしまう場合への対策
-            // （Escapeキーを送信することでカーソル位置を変えずにサジェストを強制的に閉じます）
+            // Monacoエディタのサジェストなどが被っているケースを考慮しEscapeを送信
             await this.page.keyboard.press('Escape');
+            // アニメーションや重なりを無視してクリック
+            await tabLocator.click({ force: true, timeout: 3000 });
 
-            await tabLocator.click({ timeout: 2000 });
+            // 切り替わったことを確認（activeクラスが付与されるのを待つ）
+            await expect(tabLocator).toHaveClass(/active/, { timeout: 3000 });
         }).toPass({ timeout: 15000, intervals: [1000] });
     }
 
