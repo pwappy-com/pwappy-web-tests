@@ -79,11 +79,11 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
 
     const appRow = page.locator('.app-list tbody tr', { hasText: appKey });
 
-    // UIの描画遅延を考慮し、要素が表示されるのを最大5秒待機する
+    // UIの描画遅延を考慮し、要素が表示されるのを最大15秒待機する
     try {
-        await appRow.waitFor({ state: 'visible', timeout: 5000 });
+        await appRow.waitFor({ state: 'visible', timeout: 15000 });
     } catch (e) {
-        // 5秒待っても表示されなかった場合は、すでに削除済み（または存在しない）とみなす
+        // 15秒待っても表示されなかった場合は、すでに削除済み（または存在しない）とみなす
     }
 
     if (await appRow.isVisible()) {

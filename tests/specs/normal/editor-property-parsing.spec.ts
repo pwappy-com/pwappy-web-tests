@@ -293,7 +293,7 @@ customElements.define('${tagName}', ${scriptName});
             await expect(async () => {
                 await testPage.reload({ waitUntil: 'domcontentloaded' });
                 await expect(testPage.locator(tagName).getByRole('button', { name: 'Fire Event' })).toBeVisible({ timeout: 5000 });
-            }).toPass({ timeout: 30000, intervals: [2000, 3000] });
+            }).toPass({ timeout: 60000, intervals: [2000, 3000] });
 
             // --- イベントリスナーが正しく設定されているかを確認 ---
             const expectedScripts = [

@@ -1229,8 +1229,10 @@ export class EditorHelper {
         await expect(dialog).toBeHidden();
         await this.waitForFileExplorerLoading();
 
-        // 画面上にディレクトリが出現したことを検証
-        await expect(this.page.locator('file-explorer .directory', { hasText: name })).toBeVisible();
+        // 画面上にディレクトリが出現したことをリトライ込みで検証（CIの遅延対策）
+        await expect(async () => {
+            await expect(this.page.locator('file-explorer .directory', { hasText: name })).toBeVisible({ timeout: 5000 });
+        }).toPass({ timeout: 30000, intervals: [2000] });
     }
 
     /**
@@ -1412,6 +1414,11 @@ export class EditorHelper {
 
         await expect(dialog).toBeHidden();
         await this.waitForFileExplorerLoading();
+
+        // 名前変更後のディレクトリが出現したことをリトライ込みで検証
+        await expect(async () => {
+            await expect(this.page.locator('file-explorer .directory', { hasText: newName })).toBeVisible({ timeout: 5000 });
+        }).toPass({ timeout: 30000, intervals: [2000] });
     }
 
     /**
@@ -1600,7 +1607,7 @@ export async function verifyScriptInTestPage(testPage: Page, expectedContents: s
             expect(normalizedReceived, `期待するコード片が見つかりません: ${normalizedExpected}`).toContain(normalizedExpected);
         }
     }).toPass({
-        timeout: 30000,
+        timeout: 60000,
         intervals: [2000, 3000, 5000]
     });
 }

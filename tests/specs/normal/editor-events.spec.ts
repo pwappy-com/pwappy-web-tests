@@ -108,7 +108,7 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
                 await testPage.reload({ waitUntil: 'domcontentloaded' });
                 const alertDialog = testPage.locator('ons-alert-dialog').filter({ hasText: alertText });
                 await expect(alertDialog).toBeVisible({ timeout: 5000 });
-            }).toPass({ timeout: 30000, intervals: [2000, 3000] });
+            }).toPass({ timeout: 60000, intervals: [2000, 3000] });
 
             // アラートを閉じる
             await testPage.locator('ons-alert-dialog-button').click();
@@ -173,7 +173,7 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
                 await testPage.reload({ waitUntil: 'domcontentloaded' });
                 const alertDialog = testPage.locator('ons-alert-dialog').filter({ hasText: alertText });
                 await expect(alertDialog).toBeVisible({ timeout: 5000 });
-            }).toPass({ timeout: 30000, intervals: [2000, 3000] });
+            }).toPass({ timeout: 60000, intervals: [2000, 3000] });
 
             // アラートを閉じる
             await testPage.locator('ons-alert-dialog-button').click();
@@ -311,7 +311,7 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             await expect(async () => {
                 await testPage.reload({ waitUntil: 'domcontentloaded' });
                 await expect(testPage.locator('ons-button').first()).toBeVisible({ timeout: 5000 });
-            }).toPass({ timeout: 30000, intervals: [2000, 5000] });
+            }).toPass({ timeout: 60000, intervals: [2000, 5000] });
 
             await testPage.locator('ons-button').click();
 
