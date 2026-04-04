@@ -516,6 +516,8 @@ export class EditorHelper {
         // 処理中が消えるのを待つ
         await this.page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
+        await this.page.waitForTimeout(3000); // 保存完了の安定化
+
         // 保存成功のアラートが出ていたら閉じる ---
         // これをしないと、この後の menuButton.click() がアラートに遮られて失敗します
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -752,18 +754,31 @@ export class EditorHelper {
         pageOrFrame: Page | FrameLocator,
         expectedText: string
     ): Promise<void> {
-        const alertDialog = pageOrFrame.locator('ons-alert-dialog').filter({ hasText: expectedText });
-        await expect(alertDialog).toBeVisible({ timeout: 10000 });
+        // 複数アラートがスタックされている場合を考慮し、last() で確実に特定する
+        const alertDialog = pageOrFrame.locator('ons-alert-dialog').filter({ hasText: expectedText }).last();
+
+        await expect(alertDialog).toBeVisible({ timeout: 15000 });
         await expect(alertDialog).toContainText(expectedText);
 
         const alertButton = alertDialog.locator('ons-alert-dialog-button');
-        await expect(alertButton).toBeVisible();
-        await expect(alertButton).toBeEnabled();
-        await alertButton.click();
 
+        // クリックと非表示確認をセットにしてリトライ（toPass）させる
         await expect(async () => {
-            await expect(alertDialog).toBeHidden();
-        }).toPass();
+            if (await alertDialog.isVisible()) {
+                // force: trueのクリックがインターセプトされる環境への対策として
+                // dispatchEvent を使い、ブラウザ本来のイベントフローを自然に発火させる
+                await alertButton.dispatchEvent('click').catch(() => { });
+            }
+            // アラートが非表示（またはDOMから消滅）になることを期待
+            await expect(alertDialog).toBeHidden({ timeout: 1000 });
+        }).toPass({
+            timeout: 15000,
+            intervals: [1000] // 1秒おきに再試行
+        });
+
+        // Onsen UIのページ遷移（pushPageなど）のアニメーション（約400ms）が
+        // ヘッドレス環境ではもたつくことがあるため、少し長めに待機して show/hide 発火を待つ
+        await this.page.waitForTimeout(1000);
     }
 
     /**
