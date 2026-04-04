@@ -288,7 +288,12 @@ customElements.define('${tagName}', ${scriptName});
 
         await test.step('4. 動作検証(実機テストページ): ページ遷移と生成されたJSを確認', async () => {
             const testPage = await editorHelper.saveAndOpenTestPage();
-            await testPage.waitForLoadState('domcontentloaded');
+
+            // デプロイ完了を待つ
+            await expect(async () => {
+                await testPage.reload({ waitUntil: 'domcontentloaded' });
+                await expect(testPage.locator(tagName).getByRole('button', { name: 'Fire Event' })).toBeVisible({ timeout: 5000 });
+            }).toPass({ timeout: 30000, intervals: [2000, 3000] });
 
             // --- イベントリスナーが正しく設定されているかを確認 ---
             const expectedScripts = [

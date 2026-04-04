@@ -180,7 +180,7 @@ export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish'
         if (await alert.isVisible().catch(() => false)) {
             await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
         }
-        await tabLocator.click({ timeout: 2000 });
+        await tabLocator.click({ force: true, timeout: 2000 });
     }).toPass({ timeout: 15000, intervals: [1000] });
 
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
@@ -221,6 +221,7 @@ async function selectAppInPublishTab(page: Page, appName: string): Promise<void>
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.getByRole('heading', { name: `公開設定: ${appName}` })).toBeVisible();
 }
+
 /**
  * バージョンを公開状態にします（公開準備 -> 準備完了 -> 公開）。
  * @param page ダッシュボードのPageオブジェクト
@@ -291,7 +292,6 @@ export async function startPublishPreparation(page: Page, appName: string, versi
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
 }
-
 
 /**
  * バージョンを公開準備完了から公開中にします。（公開準備完了 -> 公開中）

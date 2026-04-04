@@ -639,12 +639,9 @@ export class EditorHelper {
         const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
         await expect(monacoEditor).toBeVisible();
 
-        // 編集前の状態ログ
-        const contentBefore = await this.getMonacoEditorContent();
         const browserName = this.page.context().browser()?.browserType().name();
 
         // APIを使用して値を設定（優先実行）
-        // 戻り値を拡張し、API内部のトレース情報を含める
         const apiResult = await this.setMonacoValue(monacoEditor, scriptContent);
 
         // 値が正しく反映されたか確認
@@ -675,13 +672,9 @@ export class EditorHelper {
             // 削除後の反映待ち
             await this.page.waitForTimeout(300);
 
-            const contentAfterClear = await this.getMonacoEditorContent();
-
             // 入力
             if (browserName === 'webkit') {
                 await textarea.fill(scriptContent);
-                // fill直後の確認
-                const contentAfterFill = await this.getMonacoEditorContent();
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
             }
@@ -799,7 +792,6 @@ export class EditorHelper {
      * @param scriptContent - 新しいスクリプトのコード内容
      */
     async editScriptContent(scriptName: string, scriptContent: string): Promise<void> {
-
         const scriptContainer = this.page.locator('script-container');
         const scriptRow = scriptContainer.locator('.editor-row', { hasText: scriptName });
         await scriptRow.getByTitle('スクリプトの編集').click();
@@ -811,22 +803,15 @@ export class EditorHelper {
 
         const browserName = this.page.context().browser()?.browserType().name();
 
-        // 編集前の状態ログ
-        const contentBefore = await this.getMonacoEditorContent();
-
         // APIを使用して値を設定
-        const apiResult = await this.setMonacoValue(monacoEditor, scriptContent);
-        if (apiResult.trace) {
-        }
+        await this.setMonacoValue(monacoEditor, scriptContent);
 
         // 値が正しく反映されたか確認
         const contentAfterApi = await this.getMonacoEditorContent();
         const isMatch = contentAfterApi.trim() === scriptContent.trim();
 
         if (!isMatch) {
-            console.warn(`[Safari Debug] editScriptContent API mismatch.
-            Expected start: "${scriptContent.substring(0, 50)}..."
-            Actual start:   "${contentAfterApi.substring(0, 50)}..."`);
+            console.warn(`[Safari Debug] editScriptContent API mismatch.`);
 
             // フォールバック
             const textarea = monacoEditor.locator('textarea').first();
@@ -845,12 +830,7 @@ export class EditorHelper {
             // 削除後の反映待ち
             await this.page.waitForTimeout(300);
 
-            const contentAfterClear = await this.getMonacoEditorContent();
-
-            if (browserName === 'webkit') {
-                await textarea.fill(scriptContent);
-                const contentAfterFill = await this.getMonacoEditorContent();
-            } else if (browserName === 'chromium') {
+            if (browserName === 'webkit' || browserName === 'chromium') {
                 await textarea.fill(scriptContent);
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
@@ -976,7 +956,7 @@ export class EditorHelper {
         const browserName = this.page.context().browser()?.browserType().name();
 
         // APIを使用して値を設定（優先実行）
-        const apiResult = await this.setMonacoValue(monacoEditor, scriptContent);
+        await this.setMonacoValue(monacoEditor, scriptContent);
 
         // 値が正しく反映されたか確認
         const contentAfterApi = await this.getMonacoEditorContent();
@@ -993,10 +973,7 @@ export class EditorHelper {
             await this.page.keyboard.press('Delete');
             await this.page.keyboard.press('Backspace');
 
-            const contentAfterClear = await this.getMonacoEditorContent();
-            if (browserName === 'webkit') {
-                await textarea.fill(scriptContent);
-            } else if (browserName === 'chromium') {
+            if (browserName === 'webkit' || browserName === 'chromium') {
                 await textarea.fill(scriptContent);
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
@@ -1281,7 +1258,6 @@ export class EditorHelper {
                 }
 
                 // クリック後のロード完了を待つ
-                // (クリックが不発だった場合はローディングが出ずにここを通過し、下のexpectで失敗してリトライされる)
                 await this.waitForFileExplorerLoading();
             }
 
@@ -1317,8 +1293,7 @@ export class EditorHelper {
         // 1. ローディングを待つ
         await this.waitForFileExplorerLoading();
 
-        // 2. 【修正】パンくずリストがルートの長さ（1つ）になるまで待機する
-        // パスが "/AppKey" の状態なら、path-link は1つだけになるはずです
+        // 2. パンくずリストがルートの長さ（1つ）になるまで待機する
         await expect(async () => {
             const count = await links.count();
             expect(count).toBe(1);
@@ -1459,7 +1434,6 @@ export class EditorHelper {
         const explorer = this.page.locator('file-explorer');
 
         // 1. 割り込みアラート（「コピーしました」など）があれば閉じる
-        // これがないとサイドバーのクリックがブロックされる場合があります
         const globalAlert = this.page.locator('alert-component');
         if (await globalAlert.isVisible()) {
             await globalAlert.getByRole('button', { name: '閉じる' }).click();
@@ -1473,16 +1447,11 @@ export class EditorHelper {
         await downloadBtn.click();
 
         // 3. 確認ダイアログの「中身（.message-box-content）」が表示されるのを待つ
-        // ID指定で特定のメニュー（#download-confirm）を狙い撃ちします
         const confirmDialog = explorer.locator('file-explorer-confirm-menu#download-confirm');
         const dialogBox = confirmDialog.locator('.message-box-content');
-
-        // 前回のログで element not found だったのは、ホスト要素だけを見ていた可能性があります。
-        // コンテンツ (.message-box-content) が見えるまで最大15秒待機します。
         await expect(dialogBox).toBeVisible({ timeout: 15000 });
 
         // 4. ダイアログ内の「ダウンロード」ボタンをクリック
-        // このボタンは Light DOM (スロット) にあるため、ホストから直接 locator で指定します
         const okButton = confirmDialog.locator('button.confirm-download-button');
         await expect(okButton).toBeVisible();
         await okButton.click();
@@ -1521,23 +1490,17 @@ export class EditorHelper {
      * 指定されたパスのファイルをプロジェクトにインポートします。
      */
     async importProjectFile(filePath: string): Promise<void> {
-
         await this.closeMoveingHandle();
 
         let successAlertDetected = false;
-        let lastAlertMessage = '';
 
         // ダイアログハンドラ
         const dialogHandler = async (dialog: any) => {
             const message = dialog.message();
-            const type = dialog.type();
-
             // 成功メッセージが含まれているか確認
             if (message.includes('プロジェクトを正常にインポートしました')) {
                 successAlertDetected = true;
-                lastAlertMessage = message;
             }
-
             await dialog.accept();
         };
 
@@ -1561,14 +1524,13 @@ export class EditorHelper {
 
             await fileChooser.setFiles(filePath);
 
-            // --- 完了判定の修正 ---
-            // カスタムコンポーネントを待つのではなく、標準alertが発火したかをポーリング
+            // --- 完了判定 ---
+            // 標準alertが発火したかをポーリング
             await expect.poll(() => successAlertDetected, {
                 message: "インポート完了の通知(window.alert)を待機中",
                 timeout: 30000,
                 intervals: [1000]
             }).toBe(true);
-
 
             // window.alert は自動で閉じているので、あとは Snapshot Manager を閉じるだけ
             await snapshotManager.locator('.close-btn').click();
@@ -1585,45 +1547,47 @@ export class EditorHelper {
 
 /**
  * 実機テストページを開き、その中の main.js の内容を検証します。
- * この関数は `testPage` を受け取るため、EditorHelper クラスの外部に定義します。
+ * (更新: リロードしながら最新状態を待つ堅牢な実装)
  * @param testPage 実機テストページのPageオブジェクト
  * @param expectedContents 期待するスクリプト文字列、またはその配列
  */
 export async function verifyScriptInTestPage(testPage: Page, expectedContents: string | string[]): Promise<void> {
-    await testPage.waitForLoadState('domcontentloaded');
+    await expect(async () => {
+        // 1. リロードして最新状態を取得
+        await testPage.reload({ waitUntil: 'domcontentloaded' });
 
-    const mainJsContent = await testPage.evaluate(async () => {
-        return new Promise<string | null>((resolve) => {
-            const check = async () => {
-                const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
-                if (scriptElement) {
-                    try {
-                        const response = await fetch(scriptElement.src);
-                        if (response.ok) {
-                            resolve(await response.text());
-                            return;
-                        }
-                    } catch (e) { }
+        // 2. ブラウザ内で main.js の内容を取得（キャッシュを無視）
+        const mainJsContent = await testPage.evaluate(async () => {
+            const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
+            if (!scriptElement) return null;
+            try {
+                // キャッシュをバイパスしてフェッチ
+                const response = await fetch(scriptElement.src, { cache: 'no-store' });
+                if (response.ok) {
+                    return await response.text();
                 }
-                setTimeout(check, 500);
-            };
-            check();
-            setTimeout(() => resolve(null), 15000); // 15秒でタイムアウト
+            } catch (e) {
+                console.error("fetch main.js failed", e);
+            }
+            return null;
         });
-    });
 
-    expect(mainJsContent, '実機テストページのmain.jsが見つからないか、取得に失敗しました。').not.toBeNull();
+        expect(mainJsContent, '実機テストページのmain.jsが見つからないか、取得に失敗しました。').not.toBeNull();
 
-    const normalizedReceived = normalizeWhitespace(mainJsContent || '');
-    if (Array.isArray(expectedContents)) {
-        for (const content of expectedContents) {
-            const normalizedExpected = normalizeWhitespace(content);
-            expect(normalizedReceived).toContain(normalizedExpected);
+        const normalizedReceived = normalizeWhitespace(mainJsContent || '');
+        if (Array.isArray(expectedContents)) {
+            for (const content of expectedContents) {
+                const normalizedExpected = normalizeWhitespace(content);
+                expect(normalizedReceived, `期待するコード片が見つかりません: ${normalizedExpected}`).toContain(normalizedExpected);
+            }
+        } else {
+            const normalizedExpected = normalizeWhitespace(expectedContents as string);
+            expect(normalizedReceived, `期待するコード片が見つかりません: ${normalizedExpected}`).toContain(normalizedExpected);
         }
-    } else {
-        const normalizedExpected = normalizeWhitespace(expectedContents);
-        expect(normalizedReceived).toContain(normalizedExpected);
-    }
+    }).toPass({
+        timeout: 30000,
+        intervals: [2000, 3000, 5000]
+    });
 }
 
 /**

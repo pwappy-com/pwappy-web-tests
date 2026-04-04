@@ -102,8 +102,20 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
         await test.step('4. 実機テストページを検証する', async () => {
             // 保存してテストページを開く
             const testPage = await editorHelper.saveAndOpenTestPage();
-            // 開いたページのmain.jsの中身を検証
+
+            // デプロイが完了してアラートが出るまでリロードして待つ
+            await expect(async () => {
+                await testPage.reload({ waitUntil: 'domcontentloaded' });
+                const alertDialog = testPage.locator('ons-alert-dialog').filter({ hasText: alertText });
+                await expect(alertDialog).toBeVisible({ timeout: 5000 });
+            }).toPass({ timeout: 30000, intervals: [2000, 3000] });
+
+            // アラートを閉じる
+            await testPage.locator('ons-alert-dialog-button').click();
+
+            // その後で main.js を検証
             await verifyScriptInTestPage(testPage, testPageExpectedScripts);
+
             // テストページを閉じる
             await testPage.close();
         });
@@ -155,8 +167,20 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
         await test.step('4. 実機テストページを検証する', async () => {
             // 保存してテストページを開く
             const testPage = await editorHelper.saveAndOpenTestPage();
-            // 開いたページのmain.jsの中身を検証
+
+            // デプロイが完了してアラートが出るまでリロードして待つ
+            await expect(async () => {
+                await testPage.reload({ waitUntil: 'domcontentloaded' });
+                const alertDialog = testPage.locator('ons-alert-dialog').filter({ hasText: alertText });
+                await expect(alertDialog).toBeVisible({ timeout: 5000 });
+            }).toPass({ timeout: 30000, intervals: [2000, 3000] });
+
+            // アラートを閉じる
+            await testPage.locator('ons-alert-dialog-button').click();
+
+            // その後で main.js を検証
             await verifyScriptInTestPage(testPage, testPageExpectedScripts);
+
             // テストページを閉じる
             await testPage.close();
         });
@@ -264,8 +288,8 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             await previewFrame.locator('ons-button').click();
 
             // --- ループを使わずに、各アラートを個別に検証 ---
-            await editorHelper.verifyAndCloseAlert(previewFrame, 'page2_show');
             await editorHelper.verifyAndCloseAlert(previewFrame, 'page2_init');
+            await editorHelper.verifyAndCloseAlert(previewFrame, 'page2_show');
 
             // 戻るボタンをクリック
             const backButton = previewFrame.locator('ons-back-button');
@@ -274,27 +298,32 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             await previewFrame.locator('ons-back-button').click();
 
             // --- こちらも個別に検証 ---
-            await editorHelper.verifyAndCloseAlert(previewFrame, 'page2_destroy');
             await editorHelper.verifyAndCloseAlert(previewFrame, 'page2_hide');
+            await editorHelper.verifyAndCloseAlert(previewFrame, 'page2_destroy');
 
         });
 
         await test.step('動作検証(実機テストページ): ページ遷移と生成されたJSを確認', async () => {
             // 1. 保存して実機テストページを開く
             const testPage = await editorHelper.saveAndOpenTestPage();
-            await testPage.waitForLoadState('domcontentloaded');
+
+            // デプロイ完了を待つ（ボタンが表示されるまでリロード）
+            await expect(async () => {
+                await testPage.reload({ waitUntil: 'domcontentloaded' });
+                await expect(testPage.locator('ons-button').first()).toBeVisible({ timeout: 5000 });
+            }).toPass({ timeout: 30000, intervals: [2000, 5000] });
 
             await testPage.locator('ons-button').click();
 
             // --- ループを使わずに、各アラートを個別に検証 ---
-            await editorHelper.verifyAndCloseAlert(testPage, 'page2_show');
             await editorHelper.verifyAndCloseAlert(testPage, 'page2_init');
+            await editorHelper.verifyAndCloseAlert(testPage, 'page2_show');
 
             await testPage.locator('ons-back-button').click();
 
             // --- こちらも個別に検証 ---
-            await editorHelper.verifyAndCloseAlert(testPage, 'page2_destroy');
             await editorHelper.verifyAndCloseAlert(testPage, 'page2_hide');
+            await editorHelper.verifyAndCloseAlert(testPage, 'page2_destroy');
 
 
             // 3. main.js の内容を検証
