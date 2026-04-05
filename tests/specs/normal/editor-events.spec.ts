@@ -102,6 +102,8 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
         await test.step('4. 実機テストページを検証する', async () => {
             const testPage = await editorHelper.saveAndOpenTestPage();
 
+            await testPage.waitForTimeout(5000); // デプロイ完了待ち（必要に応じて調整）
+            
             // 【デバッグ用】ブラウザ内のエラーやログをPlaywrightのコンソールに出力する
             testPage.on('console', msg => console.log(`[TestPage Console] ${msg.type()}: ${msg.text()}`));
             testPage.on('pageerror', err => console.error(`[TestPage Error] ${err.message}`));
