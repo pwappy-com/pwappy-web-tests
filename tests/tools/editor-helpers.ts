@@ -516,10 +516,10 @@ export class EditorHelper {
         // 処理中が消えるのを待つ
         await this.page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
-        await this.page.waitForTimeout(3000); // 保存完了の安定化
+        // CDNへの反映時間を考慮し、安定化待機を 3000ms から 5000ms に延長
+        await this.page.waitForTimeout(5000);
 
         // 保存成功のアラートが出ていたら閉じる ---
-        // これをしないと、この後の menuButton.click() がアラートに遮られて失敗します
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
             await alert.getByRole('button', { name: '閉じる' }).click();
             await expect(alert).toBeHidden();
@@ -1569,34 +1569,43 @@ export class EditorHelper {
 
 /**
  * 実機テストページを開き、その中の main.js の内容を検証します。
- * (更新: リロードしながら最新状態を待つ堅牢な実装)
+ * (更新: CDNの404キャッシュ回避と、コンソールのエラースパムを防ぐためPlaywright APIでポーリングする堅牢な実装)
  * @param testPage 実機テストページのPageオブジェクト
  * @param expectedContents 期待するスクリプト文字列、またはその配列
  */
 export async function verifyScriptInTestPage(testPage: Page, expectedContents: string | string[]): Promise<void> {
-    await expect(async () => {
-        // 1. リロードして最新状態を取得
+    // 1. HTML内から main.js のパスを取得する
+    let scriptUrl = await testPage.evaluate(() => {
+        const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
+        return scriptElement ? scriptElement.src : null;
+    });
+
+    // 初期ロードで取得できなかった場合は1度だけリロードして再取得
+    if (!scriptUrl) {
         await testPage.reload({ waitUntil: 'domcontentloaded' });
-
-        // 2. ブラウザ内で main.js の内容を取得（キャッシュを無視）
-        const mainJsContent = await testPage.evaluate(async () => {
+        scriptUrl = await testPage.evaluate(() => {
             const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
-            if (!scriptElement) return null;
-            try {
-                // キャッシュをバイパスしてフェッチ
-                const response = await fetch(scriptElement.src, { cache: 'no-store' });
-                if (response.ok) {
-                    return await response.text();
-                }
-            } catch (e) {
-                console.error("fetch main.js failed", e);
-            }
-            return null;
+            return scriptElement ? scriptElement.src : null;
         });
+    }
 
-        expect(mainJsContent, '実機テストページのmain.jsが見つからないか、取得に失敗しました。').not.toBeNull();
+    expect(scriptUrl, '実機テストページの main.js への参照が見つかりません。').not.toBeNull();
 
+    // Playwright のリクエストAPIコンテキストを取得
+    const requestContext = testPage.context().request;
+
+    // 2. キャッシュバスター付きのURLで main.js をポーリング取得する
+    await expect(async () => {
+        const urlWithCb = new URL(scriptUrl!);
+        urlWithCb.searchParams.set('cb', Date.now().toString());
+
+        const response = await requestContext.get(urlWithCb.toString());
+        // 404のままであればエラーを吐いてリトライ（toPass）させる
+        expect(response.ok(), `main.js のフェッチに失敗しました (Status: ${response.status()})`).toBeTruthy();
+
+        const mainJsContent = await response.text();
         const normalizedReceived = normalizeWhitespace(mainJsContent || '');
+
         if (Array.isArray(expectedContents)) {
             for (const content of expectedContents) {
                 const normalizedExpected = normalizeWhitespace(content);
