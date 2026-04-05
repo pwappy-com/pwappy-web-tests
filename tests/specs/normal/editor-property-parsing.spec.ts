@@ -289,24 +289,28 @@ customElements.define('${tagName}', ${scriptName});
         await test.step('4. 動作検証(実機テストページ): ページ遷移と生成されたJSを確認', async () => {
             const testPage = await editorHelper.saveAndOpenTestPage();
 
-            // デプロイ完了を待つ
-            await expect(async () => {
-                await testPage.reload({ waitUntil: 'domcontentloaded' });
-                await expect(testPage.locator(tagName).getByRole('button', { name: 'Fire Event' })).toBeVisible({ timeout: 5000 });
-            }).toPass({ timeout: 60000, intervals: [2000, 3000] });
+            testPage.on('console', msg => console.log(`[TestPage Console] ${msg.type()}: ${msg.text()}`));
+            testPage.on('pageerror', err => console.error(`[TestPage Error] ${err.message}`));
 
-            // --- イベントリスナーが正しく設定されているかを確認 ---
             const expectedScripts = [
-                // スクリプト自体の定義
                 `function ${attachedScriptName}(event) {`,
                 `ons.notification.alert('${alertText}');`,
-                // イベントリスナーの登録
                 `myeventcomponent1_element.addEventListener('${eventName}', ${attachedScriptName});`
             ];
+
+            // 1. デプロイ完了待ち
             await verifyScriptInTestPage(testPage, expectedScripts);
 
-            // --- 実際の動作確認 ---
-            await testPage.locator(tagName).getByRole('button', { name: 'Fire Event' }).click();
+            // 2. キャッシュを回避してロード
+            const currentUrl = new URL(testPage.url());
+            currentUrl.searchParams.set('cb', Date.now().toString());
+            await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
+
+            // 3. 実際の動作確認
+            const fireEventButton = testPage.locator(tagName).getByRole('button', { name: 'Fire Event' });
+            await expect(fireEventButton).toBeVisible({ timeout: 15000 });
+
+            await fireEventButton.click({ force: true });
             await editorHelper.verifyAndCloseAlert(testPage, alertText);
 
             await testPage.close();

@@ -100,23 +100,27 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
         });
 
         await test.step('4. 実機テストページを検証する', async () => {
-            // 保存してテストページを開く
             const testPage = await editorHelper.saveAndOpenTestPage();
 
-            // デプロイが完了してアラートが出るまでリロードして待つ
-            await expect(async () => {
-                await testPage.reload({ waitUntil: 'domcontentloaded' });
-                const alertDialog = testPage.locator('ons-alert-dialog').filter({ hasText: alertText });
-                await expect(alertDialog).toBeVisible({ timeout: 5000 });
-            }).toPass({ timeout: 60000, intervals: [2000, 3000] });
+            // 【デバッグ用】ブラウザ内のエラーやログをPlaywrightのコンソールに出力する
+            testPage.on('console', msg => console.log(`[TestPage Console] ${msg.type()}: ${msg.text()}`));
+            testPage.on('pageerror', err => console.error(`[TestPage Error] ${err.message}`));
 
-            // アラートを閉じる
-            await testPage.locator('ons-alert-dialog-button').click();
-
-            // その後で main.js を検証
+            // 1. サーバー側の main.js が最新になるまで待機（フェッチでの検証）
             await verifyScriptInTestPage(testPage, testPageExpectedScripts);
 
-            // テストページを閉じる
+            // 2. ブラウザのキャッシュを強制的に回避するため、URLにパラメータをつけて遷移
+            const currentUrl = new URL(testPage.url());
+            currentUrl.searchParams.set('cb', Date.now().toString());
+            await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
+
+            // 3. ページロード時に発火するアラートを待機（リロードループなしで待つ）
+            const alertDialog = testPage.locator('ons-alert-dialog').filter({ hasText: alertText }).last();
+            await expect(alertDialog).toBeVisible({ timeout: 15000 });
+
+            // アラートを閉じる
+            await alertDialog.locator('ons-alert-dialog-button').click({ force: true });
+
             await testPage.close();
         });
     });
@@ -165,23 +169,22 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
         });
 
         await test.step('4. 実機テストページを検証する', async () => {
-            // 保存してテストページを開く
             const testPage = await editorHelper.saveAndOpenTestPage();
 
-            // デプロイが完了してアラートが出るまでリロードして待つ
-            await expect(async () => {
-                await testPage.reload({ waitUntil: 'domcontentloaded' });
-                const alertDialog = testPage.locator('ons-alert-dialog').filter({ hasText: alertText });
-                await expect(alertDialog).toBeVisible({ timeout: 5000 });
-            }).toPass({ timeout: 60000, intervals: [2000, 3000] });
+            testPage.on('console', msg => console.log(`[TestPage Console] ${msg.type()}: ${msg.text()}`));
+            testPage.on('pageerror', err => console.error(`[TestPage Error] ${err.message}`));
 
-            // アラートを閉じる
-            await testPage.locator('ons-alert-dialog-button').click();
-
-            // その後で main.js を検証
             await verifyScriptInTestPage(testPage, testPageExpectedScripts);
 
-            // テストページを閉じる
+            const currentUrl = new URL(testPage.url());
+            currentUrl.searchParams.set('cb', Date.now().toString());
+            await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
+
+            const alertDialog = testPage.locator('ons-alert-dialog').filter({ hasText: alertText }).last();
+            await expect(alertDialog).toBeVisible({ timeout: 15000 });
+
+            await alertDialog.locator('ons-alert-dialog-button').click({ force: true });
+
             await testPage.close();
         });
     });
@@ -304,31 +307,12 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
         });
 
         await test.step('動作検証(実機テストページ): ページ遷移と生成されたJSを確認', async () => {
-            // 1. 保存して実機テストページを開く
             const testPage = await editorHelper.saveAndOpenTestPage();
 
-            // デプロイ完了を待つ（ボタンが表示されるまでリロード）
-            await expect(async () => {
-                await testPage.reload({ waitUntil: 'domcontentloaded' });
-                await expect(testPage.locator('ons-button').first()).toBeVisible({ timeout: 5000 });
-            }).toPass({ timeout: 60000, intervals: [2000, 5000] });
+            testPage.on('console', msg => console.log(`[TestPage Console] ${msg.type()}: ${msg.text()}`));
+            testPage.on('pageerror', err => console.error(`[TestPage Error] ${err.message}`));
 
-            await testPage.locator('ons-button').click();
-
-            // --- ループを使わずに、各アラートを個別に検証 ---
-            await editorHelper.verifyAndCloseAlert(testPage, 'page2_init');
-            await editorHelper.verifyAndCloseAlert(testPage, 'page2_show');
-
-            await testPage.locator('ons-back-button').click();
-
-            // --- こちらも個別に検証 ---
-            await editorHelper.verifyAndCloseAlert(testPage, 'page2_hide');
-            await editorHelper.verifyAndCloseAlert(testPage, 'page2_destroy');
-
-
-            // 3. main.js の内容を検証
             const expectedScripts = [
-                // スクリプト関数の定義が存在することを確認
                 "function page2Init(event) {",
                 "ons.notification.alert('page2_init');",
                 "function page2Show(event) {",
@@ -339,21 +323,37 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
                 "ons.notification.alert('page2_destroy');",
                 "function pushPage2(event) {",
                 `document.querySelector('ons-navigator').pushPage('page2.html');`,
-
-                // page2 の init イベントハンドラが存在することを確認
                 "document.addEventListener('init', (event) => {",
                 `if (page.id === 'ons-page2') {`,
                 "page2Init(event);",
                 "page.addEventListener('show', page2Show);",
                 "page.addEventListener('hide', page2Hide);",
                 "page.addEventListener('destroy', page2Destroy);",
-                // クリーンアップ処理の存在も確認
                 "page.addEventListener('destroy', function(event) {",
                 "page.removeEventListener('show', page2Show);",
             ];
+
+            // 1. デプロイ完了待ち
             await verifyScriptInTestPage(testPage, expectedScripts);
 
-            // 4. テストページを閉じる
+            // 2. キャッシュを回避して最新状態をロード
+            const currentUrl = new URL(testPage.url());
+            currentUrl.searchParams.set('cb', Date.now().toString());
+            await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
+
+            // 3. UI操作と個別アラート検証
+            const firstButton = testPage.locator('ons-button').first();
+            await expect(firstButton).toBeVisible({ timeout: 15000 });
+            await firstButton.click({ force: true });
+
+            await editorHelper.verifyAndCloseAlert(testPage, 'page2_init');
+            await editorHelper.verifyAndCloseAlert(testPage, 'page2_show');
+
+            await testPage.locator('ons-back-button').click({ force: true });
+
+            await editorHelper.verifyAndCloseAlert(testPage, 'page2_hide');
+            await editorHelper.verifyAndCloseAlert(testPage, 'page2_destroy');
+
             await testPage.close();
         });
     });
