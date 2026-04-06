@@ -498,37 +498,50 @@ export class EditorHelper {
 
     /**
      * エディタの内容を保存し、QRコードから実機テストページを新しいタブで開きます。
-     * @returns 開かれた実機テストページのPageオブジェクト
      */
     async saveAndOpenTestPage(): Promise<Page> {
         const menuButton = this.page.locator('#fab-bottom-menu-box');
         const platformBottomMenu = this.page.locator('#platformBottomMenu');
-        const alert = this.page.locator('alert-component'); // アラートを定義
+        const alert = this.page.locator('alert-component');
 
         await expect(menuButton).toBeVisible();
         await expect(menuButton).toBeEnabled();
         await menuButton.click();
         await expect(platformBottomMenu).toBeVisible();
 
+        // 保存前にネットワークエラーを監視するリスナーを一時的につける
+        const failedRequests: string[] = [];
+        const responseLogger = (response: any) => {
+            if (response.status() >= 400 && response.url().includes('/api/')) {
+                failedRequests.push(`[API Error] ${response.status()} - ${response.url()}`);
+            }
+        };
+        this.page.on('response', responseLogger);
+
         // 保存をクリック
         await platformBottomMenu.getByText('保存', { exact: true }).click();
 
         // 処理中が消えるのを待つ
         await this.page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
-
-        // CDNへの反映時間を考慮し、安定化待機を 3000ms から 5000ms に延長
         await this.page.waitForTimeout(5000);
 
-        // 保存成功のアラートが出ていたら閉じる ---
+        // アラートの内容を読み取り、エラーならテストをここで強制終了させる
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
-            // エラーが含まれていれば例外を出してテストを落とす
-            const msg = await alert.evaluate((el: any) => el.alertMessage || el.innerText || '');
-            if (msg?.includes('エラー') || msg?.includes('失敗')) {
-                throw new Error(`アプリ保存処理でバックエンドエラーが発生しました: ${msg}`);
+            // アラートのテキストを取得
+            const alertText = await alert.evaluate((el: any) => el.alertMessage || el.innerText || el.textContent || '');
+            console.log(`[Dashboard Alert Detected]: ${alertText}`);
+
+            // エラーや失敗の文字が含まれていれば即座にテストを失敗させる
+            if (alertText.includes('エラー') || alertText.includes('失敗') || failedRequests.length > 0) {
+                throw new Error(`アプリの保存に失敗しました。アラート内容: "${alertText}"\nAPI通信エラー: ${failedRequests.join(', ')}`);
             }
+
             await alert.getByRole('button', { name: '閉じる' }).click();
             await expect(alert).toBeHidden();
         }
+
+        // ネットワーク監視を解除
+        this.page.off('response', responseLogger);
 
         // 保存後にメニューが閉じていたら再度開く
         if (!await platformBottomMenu.isVisible()) {
@@ -537,9 +550,11 @@ export class EditorHelper {
         }
 
         const testPagePromise = this.page.context().waitForEvent('page');
-        // QRコードをクリック（これもアラートがあると遮られます）
         await this.page.locator('#qrcode').click();
         const testPage = await testPagePromise;
+
+        // 実際に開こうとしたURLをログに出力する
+        console.log(`[TestPage URL Opened]: ${testPage.url()}`);
 
         return testPage;
     }
