@@ -521,6 +521,11 @@ export class EditorHelper {
 
         // 保存成功のアラートが出ていたら閉じる ---
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
+            // エラーが含まれていれば例外を出してテストを落とす
+            const msg = await alert.evaluate((el: any) => el.alertMessage || el.innerText || '');
+            if (msg?.includes('エラー') || msg?.includes('失敗')) {
+                throw new Error(`アプリ保存処理でバックエンドエラーが発生しました: ${msg}`);
+            }
             await alert.getByRole('button', { name: '閉じる' }).click();
             await expect(alert).toBeHidden();
         }
