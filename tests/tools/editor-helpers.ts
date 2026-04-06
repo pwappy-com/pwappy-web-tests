@@ -512,7 +512,7 @@ export class EditorHelper {
         // 保存前にネットワークエラーを監視するリスナーを一時的につける
         const failedRequests: string[] = [];
         const responseLogger = (response: any) => {
-            if (response.status() >= 400 && response.url().includes('/api/')) {
+            if (response.status() >= 400 && response.url().includes('/pwappy-api/')) {
                 failedRequests.push(`[API Error] ${response.status()} - ${response.url()}`);
             }
         };
