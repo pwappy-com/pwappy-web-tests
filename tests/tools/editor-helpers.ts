@@ -1569,43 +1569,44 @@ export class EditorHelper {
 
 /**
  * 実機テストページを開き、その中の main.js の内容を検証します。
- * (更新: CDNの404キャッシュ回避と、コンソールのエラースパムを防ぐためPlaywright APIでポーリングする堅牢な実装)
+ * (更新: CDNの404ネガティブキャッシュ回避と、HTMLロード自体のポーリングを統合した堅牢な実装)
  * @param testPage 実機テストページのPageオブジェクト
  * @param expectedContents 期待するスクリプト文字列、またはその配列
  */
 export async function verifyScriptInTestPage(testPage: Page, expectedContents: string | string[]): Promise<void> {
-    // 1. HTML内から main.js のパスを取得する
-    let scriptUrl = await testPage.evaluate(() => {
-        const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
-        return scriptElement ? scriptElement.src : null;
-    });
-
-    // 初期ロードで取得できなかった場合は1度だけリロードして再取得
-    if (!scriptUrl) {
-        await testPage.reload({ waitUntil: 'domcontentloaded' });
-        scriptUrl = await testPage.evaluate(() => {
-            const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
-            return scriptElement ? scriptElement.src : null;
-        });
-    }
-
-    expect(scriptUrl, '実機テストページの main.js への参照が見つかりません。').not.toBeNull();
-
     // Playwright のリクエストAPIコンテキストを取得
     const requestContext = testPage.context().request;
 
-    // 2. キャッシュバスター付きのURLで main.js をポーリング取得する
+    // Playwright の toPass を使って、HTMLの取得から main.js の検証までをポーリングする
     await expect(async () => {
+        // 1. キャッシュバイパスのために常にユニークなパラメータを付けてページを再読み込みする
+        // （これによりCDNの404ネガティブキャッシュを確実に回避します）
+        const currentUrl = new URL(testPage.url());
+        if (currentUrl.protocol === 'http:' || currentUrl.protocol === 'https:') {
+            currentUrl.searchParams.set('cb', Date.now().toString());
+            await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
+        }
+
+        // 2. HTML内から main.js のパスを取得する
+        const scriptUrl = await testPage.evaluate(() => {
+            const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
+            return scriptElement ? scriptElement.src : null;
+        });
+
+        // 取得できなければエラーを吐いてリトライ（toPass）させる
+        expect(scriptUrl, `実機テストページの main.js への参照が見つかりません。現在のURL: ${testPage.url()}`).not.toBeNull();
+
+        // 3. キャッシュバスター付きのURLで main.js をフェッチする
         const urlWithCb = new URL(scriptUrl!);
         urlWithCb.searchParams.set('cb', Date.now().toString());
 
         const response = await requestContext.get(urlWithCb.toString());
-        // 404のままであればエラーを吐いてリトライ（toPass）させる
         expect(response.ok(), `main.js のフェッチに失敗しました (Status: ${response.status()})`).toBeTruthy();
 
         const mainJsContent = await response.text();
         const normalizedReceived = normalizeWhitespace(mainJsContent || '');
 
+        // 4. 内容の検証
         if (Array.isArray(expectedContents)) {
             for (const content of expectedContents) {
                 const normalizedExpected = normalizeWhitespace(content);
@@ -1617,7 +1618,7 @@ export async function verifyScriptInTestPage(testPage: Page, expectedContents: s
         }
     }).toPass({
         timeout: 60000,
-        intervals: [2000, 3000, 5000]
+        intervals: [2000, 3000, 5000] // 失敗した場合、数秒間隔で最大60秒間リトライし続ける
     });
 }
 
