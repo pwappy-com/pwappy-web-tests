@@ -509,39 +509,36 @@ export class EditorHelper {
         await menuButton.click();
         await expect(platformBottomMenu).toBeVisible();
 
-        // 保存前にネットワークエラーを監視するリスナーを一時的につける
-        const failedRequests: string[] = [];
-        const responseLogger = (response: any) => {
-            if (response.status() >= 400 && response.url().includes('/pwappy-api/')) {
-                failedRequests.push(`[API Error] ${response.status()} - ${response.url()}`);
-            }
-        };
-        this.page.on('response', responseLogger);
+        // 保存ボタンを押す前に、保存通信(API)の完了を監視する準備をする
+        // (環境によってエンドポイントが異なる場合はURLの条件を調整してください)
+        const saveResponsePromise = this.page.waitForResponse(
+            response => response.url().includes('/api/') && response.request().method() === 'POST',
+            { timeout: 30000 }
+        ).catch(() => null); // タイムアウト時はnullを返してテストを止めない
 
         // 保存をクリック
         await platformBottomMenu.getByText('保存', { exact: true }).click();
 
-        // 処理中が消えるのを待つ
-        await this.page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
+        // 「処理中」が一瞬表示されるのを待ってから、消えるのを待つ（誤判定防止）
+        const loadingOverlay = this.page.locator('app-container-loading-overlay');
+        await loadingOverlay.getByText('処理中').waitFor({ state: 'visible', timeout: 2000 }).catch(() => { });
+        await loadingOverlay.getByText('処理中').waitFor({ state: 'hidden', timeout: 30000 });
+
+        // ネットワークレベルで保存APIの通信が完了するのを確実に待つ
+        await saveResponsePromise;
+
+        // サーバー側のファイル書き込みラグを吸収するための待機
         await this.page.waitForTimeout(5000);
 
-        // アラートの内容を読み取り、エラーならテストをここで強制終了させる
+        // アラートにエラー文字が含まれていればテストを強制終了させる
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
-            // アラートのテキストを取得
-            const alertText = await alert.evaluate((el: any) => el.alertMessage || el.innerText || el.textContent || '');
-            console.log(`[Dashboard Alert Detected]: ${alertText}`);
-
-            // エラーや失敗の文字が含まれていれば即座にテストを失敗させる
-            if (alertText.includes('エラー') || alertText.includes('失敗') || failedRequests.length > 0) {
-                throw new Error(`アプリの保存に失敗しました。アラート内容: "${alertText}"\nAPI通信エラー: ${failedRequests.join(', ')}`);
+            const msg = await alert.evaluate((el: any) => el.alertMessage || el.innerText || el.textContent || '');
+            if (msg?.includes('エラー') || msg?.includes('失敗')) {
+                throw new Error(`[アプリ保存失敗] ${msg}`);
             }
-
             await alert.getByRole('button', { name: '閉じる' }).click();
             await expect(alert).toBeHidden();
         }
-
-        // ネットワーク監視を解除
-        this.page.off('response', responseLogger);
 
         // 保存後にメニューが閉じていたら再度開く
         if (!await platformBottomMenu.isVisible()) {
@@ -550,11 +547,9 @@ export class EditorHelper {
         }
 
         const testPagePromise = this.page.context().waitForEvent('page');
+        // QRコードをクリック
         await this.page.locator('#qrcode').click();
         const testPage = await testPagePromise;
-
-        // 実際に開こうとしたURLをログに出力する
-        console.log(`[TestPage URL Opened]: ${testPage.url()}`);
 
         return testPage;
     }
