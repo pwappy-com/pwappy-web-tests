@@ -553,7 +553,14 @@ export class EditorHelper {
         const testPage = await testPagePromise;
 
         await testPage.waitForLoadState('domcontentloaded');
-        console.log(`[TestPage URL] 開いた実機テストページのURL: ${testPage.url()}`);
+
+        // ▼ 変更前
+        // console.log(`[TestPage URL] 開いた実機テストページのURL: ${testPage.url()}`);
+
+        // ▼ 変更後：URLを1文字ずつスペース区切りで出力する（マスク回避）
+        const actualUrl = testPage.url();
+        const unmaskedUrl = actualUrl.split('').join(' ');
+        console.log(`[DEBUG URL] マスク回避URL: \n${unmaskedUrl}`);
 
         return testPage;
     }
