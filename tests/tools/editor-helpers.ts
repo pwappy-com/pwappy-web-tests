@@ -1599,28 +1599,44 @@ export class EditorHelper {
  * @param expectedContents 期待するスクリプト文字列、またはその配列
  */
 export async function verifyScriptInTestPage(testPage: Page, expectedContents: string | string[]): Promise<void> {
-    const requestContext = testPage.context().request;
-
     await expect(async () => {
-        // 404の原因となるURL改変(クエリストリング付与)を行わず、単純にリロードする
-        await testPage.reload({ waitUntil: 'domcontentloaded' });
+        // 1. キャッシュバイパスのために常にユニークなパラメータを付けてページを再読み込みする
+        const currentUrl = new URL(testPage.url());
+        if (currentUrl.protocol === 'http:' || currentUrl.protocol === 'https:') {
+            currentUrl.searchParams.set('cb', Date.now().toString());
+            await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
+        }
 
-        // HTML内から main.js のパスを取得する
-        const scriptUrl = await testPage.evaluate(() => {
+        // 2. ブラウザのコンテキスト内部で main.js をフェッチして内容を取得する
+        // ※ブラウザ内部からのフェッチであれば、認証Cookieが確実に送信され、サーバー(PHP)の404隠蔽を回避できる
+        const mainJsContent = await testPage.evaluate(async () => {
             const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
-            return scriptElement ? scriptElement.src : null;
+            if (!scriptElement || !scriptElement.src) {
+                return null;
+            }
+
+            try {
+                // キャッシュバスターを付与して最新を取得
+                const fetchUrl = new URL(scriptElement.src);
+                fetchUrl.searchParams.set('cb', Date.now().toString());
+
+                // Fetch APIでスクリプトのテキスト内容を取得
+                const response = await fetch(fetchUrl.toString(), { cache: 'no-store' });
+                if (!response.ok) {
+                    return null; // 404などの場合はリトライさせるためにnullを返す
+                }
+                return await response.text();
+            } catch (e) {
+                return null;
+            }
         });
 
-        expect(scriptUrl, `実機テストページの main.js への参照が見つかりません。`).not.toBeNull();
+        // 取得できなければ例外を投げて toPass でリトライ（ビルド遅延待ち）させる
+        expect(mainJsContent, `main.js が見つからない、またはフェッチに失敗(404等)しました。URL: ${testPage.url()}`).not.toBeNull();
 
-        // 取得したURLそのまま（クエリストリング等を追加せず）でフェッチする
-        const response = await requestContext.get(scriptUrl!);
-        expect(response.ok(), `main.js のフェッチに失敗しました (Status: ${response.status()}) URL: ${scriptUrl}`).toBeTruthy();
-
-        const mainJsContent = await response.text();
+        // 3. 内容の検証
         const normalizedReceived = normalizeWhitespace(mainJsContent || '');
 
-        // 期待するコードが含まれているか検証
         if (Array.isArray(expectedContents)) {
             for (const content of expectedContents) {
                 const normalizedExpected = normalizeWhitespace(content);
