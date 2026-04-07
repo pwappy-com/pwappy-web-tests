@@ -512,7 +512,7 @@ export class EditorHelper {
         // 保存ボタンを押す前に、保存通信(API)の完了を監視する準備をする
         // (環境によってエンドポイントが異なる場合はURLの条件を調整してください)
         const saveResponsePromise = this.page.waitForResponse(
-            response => response.url().includes('/pwappy-api/') && response.request().method() === 'POST',
+            response => response.request().method() === 'PUT' && response.url().includes('editor'),
             { timeout: 30000 }
         ).catch(() => null); // タイムアウト時はnullを返してテストを止めない
 
