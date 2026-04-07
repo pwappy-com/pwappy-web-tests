@@ -549,6 +549,8 @@ export class EditorHelper {
         const testPagePromise = this.page.context().waitForEvent('page');
         // QRコードをクリック
         await this.page.locator('#qrcode').click();
+
+        await this.page.waitForTimeout(5000); // QRコードのクリックが確実に処理されるように少し待つ
         const testPage = await testPagePromise;
 
         return testPage;
