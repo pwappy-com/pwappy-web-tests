@@ -125,7 +125,7 @@ jobs:
     strategy:
       fail-fast: false
       # 最大並列数をPC(Linux,Windows,Mac),Mobile(Android,iOS)の５つ
-      max-parallel: 1
+      max-parallel: 5
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
