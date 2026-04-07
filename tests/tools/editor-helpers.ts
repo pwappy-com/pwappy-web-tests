@@ -1602,6 +1602,10 @@ export async function verifyScriptInTestPage(testPage: Page, expectedContents: s
         // （これによりCDNの404ネガティブキャッシュを確実に回避します）
         const currentUrl = new URL(testPage.url());
         if (currentUrl.protocol === 'http:' || currentUrl.protocol === 'https:') {
+            // サーバーの404ルーティングエラーを回避するため、明示的に index.html を付与する
+            if (currentUrl.pathname.endsWith('/')) {
+                currentUrl.pathname += 'index.html';
+            }
             currentUrl.searchParams.set('cb', Date.now().toString());
             await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
         }
