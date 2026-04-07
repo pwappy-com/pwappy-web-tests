@@ -77,7 +77,9 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
 
     await navigateToTab(page, 'workbench');
 
-    const appRow = page.locator('.app-list tbody tr', { hasText: appKey });
+    const appRow = page.locator('.app-list tbody tr', {
+        has: page.locator('td:nth-child(2)', { hasText: new RegExp(`^${appKey}$`) })
+    }).first();
 
     // UIの描画遅延を考慮し、要素が表示されるのを最大15秒待機する
     try {
