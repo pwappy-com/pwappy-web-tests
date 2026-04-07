@@ -509,12 +509,12 @@ export class EditorHelper {
         await menuButton.click();
         await expect(platformBottomMenu).toBeVisible();
 
-        // // 保存ボタンを押す前に、保存通信(API)の完了を監視する準備をする
-        // // (環境によってエンドポイントが異なる場合はURLの条件を調整してください)
-        // const saveResponsePromise = this.page.waitForResponse(
-        //     response => response.url().includes('/pwappy-api/') && response.request().method() === 'POST',
-        //     { timeout: 30000 }
-        // ).catch(() => null); // タイムアウト時はnullを返してテストを止めない
+        // 保存ボタンを押す前に、保存通信(API)の完了を監視する準備をする
+        // (環境によってエンドポイントが異なる場合はURLの条件を調整してください)
+        const saveResponsePromise = this.page.waitForResponse(
+            response => response.url().includes('/pwappy-api/') && response.request().method() === 'POST',
+            { timeout: 30000 }
+        ).catch(() => null); // タイムアウト時はnullを返してテストを止めない
 
         // 保存をクリック
         await platformBottomMenu.getByText('保存', { exact: true }).click();
@@ -524,8 +524,8 @@ export class EditorHelper {
         await loadingOverlay.getByText('処理中').waitFor({ state: 'visible', timeout: 2000 }).catch(() => { });
         await loadingOverlay.getByText('処理中').waitFor({ state: 'hidden', timeout: 30000 });
 
-        // // ネットワークレベルで保存APIの通信が完了するのを確実に待つ
-        // await saveResponsePromise;
+        // ネットワークレベルで保存APIの通信が完了するのを確実に待つ
+        await saveResponsePromise;
 
         // サーバー側のファイル書き込みラグを吸収するための待機
         await this.page.waitForTimeout(5000);
@@ -549,7 +549,11 @@ export class EditorHelper {
         const testPagePromise = this.page.context().waitForEvent('page');
         // QRコードをクリック
         await this.page.locator('#qrcode').click();
+
         const testPage = await testPagePromise;
+
+        await testPage.waitForLoadState('domcontentloaded');
+        console.log(`[TestPage URL] 開いた実機テストページのURL: ${testPage.url()}`);
 
         return testPage;
     }
