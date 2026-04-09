@@ -92,6 +92,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
         await test.step('1. 設定変更：AI機能を有効化しAPIキーを登録', async () => {
             await setAiCoding(page, true);
             await setGeminiApiKey(page, apiKey!);
+            await page.reload({ waitUntil: 'domcontentloaded' });
         });
 
         await test.step('2. アプリ作成とエディタ起動', async () => {
@@ -145,6 +146,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
         await test.step('1. 設定変更：AI機能を有効化しAPIキーを削除', async () => {
             await setAiCoding(page, true);
             await deleteGeminiApiKey(page);
+            await page.reload({ waitUntil: 'domcontentloaded' });
         });
 
         await test.step('2. アプリ作成とエディタ起動', async () => {
@@ -182,6 +184,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
         await test.step('1. 設定変更：AI機能を明示的に無効化', async () => {
             await setAiCoding(page, false);
+            await page.reload({ waitUntil: 'domcontentloaded' });
         });
 
         await test.step('2. アプリ作成とエディタ起動', async () => {
@@ -215,6 +218,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
         await test.step('1. 設定変更：AI機能を有効化', async () => {
             await setAiCoding(page, true);
+            await page.reload({ waitUntil: 'domcontentloaded' });
         });
 
         await test.step('2. アプリ作成とエディタ起動', async () => {

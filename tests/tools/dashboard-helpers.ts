@@ -172,12 +172,40 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
 
-    const editorPagePromise = context.waitForEvent('page');
-    const editorBtn = page.locator('.version-list tbody tr', { hasText: version }).getByRole('button', { name: 'エディタ' });
-    await editorBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
-        return editorBtn.click({ force: true });
-    });
-    const editorPage = await editorPagePromise;
+    const versionRow = page.locator('.version-list tbody tr', { hasText: version }).first();
+    await expect(versionRow).toBeVisible({ timeout: 10000 });
+
+    const editorBtn = versionRow.getByRole('button', { name: 'エディタ' });
+    await expect(editorBtn).toBeVisible({ timeout: 5000 });
+
+    // モバイルでの要素重なりやスクロール問題を回避するため画面内に収める
+    await editorBtn.scrollIntoViewIfNeeded().catch(() => { });
+
+    // ポップアップブロック回避のため、Playwrightの正規クリックを試み、新しいタブが開くのを待つ。
+    // 開かなければリトライ(toPass)する。
+    let editorPage: Page | undefined;
+    await expect(async () => {
+        const editorPagePromise = context.waitForEvent('page', { timeout: 5000 }).catch(() => null);
+
+        // Playwrightのclickを使用してポップアップブロックを回避。
+        // モバイルでクリックが傍受される場合に備えて force: true を指定。
+        await editorBtn.click({ force: true }).catch(async () => {
+            // フォールバック
+            await editorBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
+        });
+
+        const newPage = await editorPagePromise;
+        if (!newPage) {
+            throw new Error('エディタの新しいタブが開かれませんでした。');
+        }
+        editorPage = newPage;
+    }).toPass({ timeout: 30000, intervals: [2000] });
+
+    if (!editorPage) {
+        throw new Error('エディタのオープンに失敗しました。');
+    }
+
+    await editorPage.waitForLoadState('domcontentloaded');
 
     await editorPage.waitForLoadState('domcontentloaded');
 
