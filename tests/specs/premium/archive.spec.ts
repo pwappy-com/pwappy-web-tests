@@ -72,13 +72,13 @@ test.describe('アーカイブ E2Eシナリオ', () => {
             await expect(alertDialog).toBeVisible();
             await expect(alertDialog).toContainText(`アプリ「${appKey}」をアーカイブしました`);
             await alertDialog.getByRole('button', { name: '閉じる' }).click();
+            await expect(alertDialog).toBeHidden();
 
             await expectAppVisibility(page, appKey, false);
         });
 
         await test.step('テスト: アーカイブタブで表示されることを確認', async () => {
-            // UIの同期遅延対策としてリロードを追加
-            await page.reload({ waitUntil: 'networkidle' });
+            // SPAの自然な遷移に任せ、不要なリロードは行わない
             await navigateToTab(page, 'archive');
             await expectAppVisibility(page, appKey, true);
         });
@@ -112,14 +112,18 @@ test.describe('アーカイブ E2Eシナリオ', () => {
             await expect(alertDialog).toBeVisible();
             await expect(alertDialog).toContainText(`アプリ「${appKey}」をアーカイブからワークベンチに復元しました`);
             await alertDialog.getByRole('button', { name: '閉じる' }).click();
+            await expect(alertDialog).toBeHidden();
 
-            // アーカイブタブの一覧から消えることを確認します。
-            await navigateToTab(page, 'archive');
+            // 復元直後はまだアーカイブタブを開いているため、そのままリストから消えたことを確認します。
             await expectAppVisibility(page, appKey, false);
         });
 
         await test.step('クリーンアップ: 復元後、ワークベンチで削除する', async () => {
-            await navigateToTab(page, 'workbench');
+            // モバイル環境特有のタブ遷移不具合や、URLハッシュの残存を完全に防ぐため、
+            // トップページ（Workbench）へ直接gotoしてクリーンな初期状態にリセットします。
+            await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+            await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 30000 });
+
             await expectAppVisibility(page, appKey, true);
             await deleteApp(page, appKey);
             await expectAppVisibility(page, appKey, false);

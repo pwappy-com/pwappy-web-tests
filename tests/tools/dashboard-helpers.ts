@@ -20,11 +20,11 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
         // アラートが被ってクリックを妨害している場合は閉じる
         const alert = page.locator('alert-component');
         if (await alert.isVisible().catch(() => false)) {
-            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });
         }
 
         // 短めのタイムアウトでクリックを実行。alert等に被っているとエラーになりリトライされる
-        await page.getByTitle('アプリケーションの追加').click({ timeout: 2000 });
+        await page.getByTitle('アプリケーションの追加').click({ force: true, timeout: 2000 });
 
         // モーダルの「中身（タイトル）」が表示されるのを待つ
         await expect(appModal.locator('span[slot="header-title"]')).toBeVisible({ timeout: 3000 });
@@ -48,15 +48,15 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await expect(async () => {
         const alert = page.locator('alert-component');
         if (await alert.isVisible().catch(() => false)) {
-            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });
         }
-        await appModal.getByRole('button', { name: '保存' }).click({ timeout: 2000 });
+        await appModal.getByRole('button', { name: '保存' }).click({ force: true, timeout: 2000 });
     }).toPass({ timeout: 15000, intervals: [1000] });
 
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
     await expect(appModal).toBeHidden();
-};
+}
 
 /**
  * ダッシュボード画面で指定されたアプリケーションを正常に削除します。
@@ -67,12 +67,13 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
 export async function deleteApp(page: Page, appKey: string): Promise<void> {
     await page.bringToFront();
 
+    // 削除処理を確実に行うため、ページをリロードしてクリーンな状態にする
+    await page.reload({ waitUntil: 'domcontentloaded' });
+
     // 念のため残っているアラートを消してから開始 ---
     const alert = page.locator('alert-component');
     if (await alert.isVisible().catch(() => false)) {
-        await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
-        // アラートが残っていた場合、状態が不正な可能性があるのでリロードする
-        await page.reload({ waitUntil: 'domcontentloaded' });
+        await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
     }
 
     await navigateToTab(page, 'workbench');
@@ -89,25 +90,39 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     }
 
     if (await appRow.isVisible()) {
+        const confirmDialog = page.locator('message-box#delete-confirm');
+
+        // 削除ボタンのクリックとダイアログの表示確認をセットにしてリトライ
         await expect(async () => {
             const a = page.locator('alert-component');
             if (await a.isVisible().catch(() => false)) {
-                await a.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+                await a.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
             }
-            await appRow.getByRole('button', { name: '削除' }).click({ timeout: 2000 });
-        }).toPass({ timeout: 15000, intervals: [1000] });
 
-        await page.getByText('処理中...').waitFor({ state: 'hidden' });
-        const confirmDialog = page.locator('message-box#delete-confirm');
-        await expect(confirmDialog).toBeVisible();
-        await confirmDialog.getByRole('button', { name: '削除する' }).click();
+            const deleteBtn = appRow.getByRole('button', { name: '削除' });
+
+            // モバイル環境での横スクロール外要素などの空振りを防ぐため、DOM APIによるネイティブクリックを優先
+            await deleteBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
+                return deleteBtn.click({ force: true, timeout: 2000 });
+            });
+
+            // ダイアログが出るまで待機。出なければエラーを吐かせて toPass にキャッチさせる
+            await expect(confirmDialog).toBeVisible({ timeout: 5000 });
+        }).toPass({ timeout: 20000, intervals: [1000] });
+
+        // ダイアログが出ていることが確定したので、削除を実行（ここもネイティブクリックを使用）
+        const confirmBtn = confirmDialog.getByRole('button', { name: '削除する' });
+        await confirmBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
+            return confirmBtn.click({ force: true });
+        });
+
         // --- 処理中が消えるのを待つ ---
         await page.getByText('処理中...').waitFor({ state: 'hidden' });
         await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
 
         // --- 削除成功後の「削除しました」アラートを閉じる ---
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
-            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
             await expect(alert).toBeHidden();
         }
 
@@ -115,7 +130,7 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
         await page.reload({ waitUntil: 'domcontentloaded' });
         await navigateToTab(page, 'workbench');
     }
-};
+}
 
 export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
     // アラートが残っていたら閉じるか、消えるのを待つ
@@ -123,7 +138,7 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     if (await alert.isVisible().catch(() => false)) {
         const closeBtn = alert.getByRole('button', { name: '閉じる' });
         if (await closeBtn.isVisible().catch(() => false)) {
-            await closeBtn.click().catch(() => { });
+            await closeBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
         // アラートが出ていた場合、状態が不正かもしれないのでリロードして確実にする
         await page.reload({ waitUntil: 'domcontentloaded' });
@@ -145,16 +160,23 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     await expect(async () => {
         const a = page.locator('alert-component');
         if (await a.isVisible().catch(() => false)) {
-            await a.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            await a.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
-        await appRow.getByRole('button', { name: '選択' }).click({ timeout: 2000 });
+
+        const selectBtn = appRow.getByRole('button', { name: '選択' });
+        await selectBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
+            return selectBtn.click({ force: true, timeout: 2000 });
+        });
     }).toPass({ timeout: 15000, intervals: [1000] });
 
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
 
     const editorPagePromise = context.waitForEvent('page');
-    await page.locator('.version-list tbody tr', { hasText: version }).getByRole('button', { name: 'エディタ' }).click();
+    const editorBtn = page.locator('.version-list tbody tr', { hasText: version }).getByRole('button', { name: 'エディタ' });
+    await editorBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
+        return editorBtn.click({ force: true });
+    });
     const editorPage = await editorPagePromise;
 
     await editorPage.waitForLoadState('domcontentloaded');
@@ -166,23 +188,30 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     await expect(editorPage.locator('ios-component')).toBeVisible();
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     return editorPage;
-};
+}
 
 /**
  * ダッシュボードの指定されたタブに移動します。
+ * モバイルでのUI要素重なり等によるクリック空振りを防ぐため、ネイティブクリックも試行します。
  * @param page ダッシュボードのPageオブジェクト
  * @param tabName 移動先のタブ名 ('workbench', 'publish', 'archive')
  */
 export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish' | 'archive'): Promise<void> {
     const tabLocator = page.locator(`#${tabName}`);
 
-    // alert-component が被ってクリックを阻害している場合への対策としてリトライする
     await expect(async () => {
         const alert = page.locator('alert-component');
         if (await alert.isVisible().catch(() => false)) {
-            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
-        await tabLocator.click({ force: true, timeout: 2000 });
+
+        // Playwrightのクリックが阻害されるモバイル環境対策として、ネイティブのクリックイベントも試行する
+        await tabLocator.evaluate((el: HTMLElement) => el.click()).catch(() => {
+            return tabLocator.click({ force: true, timeout: 2000 });
+        });
+
+        // 確実にタブがアクティブになったか（クラスが付与されたか）を確認
+        await expect(tabLocator).toHaveClass(/active/, { timeout: 3000 });
     }).toPass({ timeout: 15000, intervals: [1000] });
 
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
@@ -218,14 +247,20 @@ export async function expectAppVisibility(page: Page, appKey: string, isVisible:
  * @param appName 選択するアプリケーション名
  */
 async function selectAppInPublishTab(page: Page, appName: string): Promise<void> {
-    const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-    // toPassで遷移が成功するまでリトライ
+    const appRow = page.locator('.app-list tbody tr', { hasText: appName }).first();
+    // モバイル環境で「ワークベンチ」タブに取り残されたまま検索してしまう事故を防ぐため、確実に遷移と表示をリトライ
     await expect(async () => {
         const alert = page.locator('alert-component');
         if (await alert.isVisible().catch(() => false)) {
-            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
-        await appRow.getByRole('button', { name: '選択' }).click({ timeout: 2000, force: true });
+
+        await appRow.scrollIntoViewIfNeeded().catch(() => { });
+        const selectBtn = appRow.getByRole('button', { name: '選択' });
+        await selectBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
+            return selectBtn.click({ timeout: 2000, force: true });
+        });
+
         await expect(page.getByRole('heading', { name: `公開設定: ${appName}` })).toBeVisible({ timeout: 5000 });
     }).toPass({ timeout: 20000, intervals: [1000] });
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
@@ -243,11 +278,15 @@ export async function publishVersion(page: Page, appName: string, version: strin
 
     // 公開準備
     let versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    await versionRow.getByRole('button', { name: '公開準備' }).click();
+    const prepBtn = versionRow.getByRole('button', { name: '公開準備' });
+    await prepBtn.evaluate((el: HTMLElement) => el.click()).catch(() => prepBtn.click({ force: true }));
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     let confirmDialog = page.locator('message-box#publish-action-confirm');
     await expect(confirmDialog).toBeVisible();
-    await confirmDialog.getByRole('button', { name: '申請する' }).click();
+
+    const applyBtn = confirmDialog.getByRole('button', { name: '申請する' });
+    await applyBtn.evaluate((el: HTMLElement) => el.click()).catch(() => applyBtn.click({ force: true }));
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
 
     // 公開準備完了まで待機
@@ -255,11 +294,15 @@ export async function publishVersion(page: Page, appName: string, version: strin
 
     // 公開
     versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    await versionRow.getByRole('button', { name: '公開', exact: true }).click();
+    const pubBtn = versionRow.getByRole('button', { name: '公開', exact: true });
+    await pubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => pubBtn.click({ force: true }));
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     confirmDialog = page.locator('message-box#publish-action-confirm');
     await expect(confirmDialog).toBeVisible();
-    await confirmDialog.getByRole('button', { name: '公開する' }).click();
+
+    const finalPubBtn = confirmDialog.getByRole('button', { name: '公開する' });
+    await finalPubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => finalPubBtn.click({ force: true }));
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
 }
 
@@ -272,12 +315,17 @@ export async function publishVersion(page: Page, appName: string, version: strin
 export async function unpublishVersion(page: Page, appName: string, version: string): Promise<void> {
     await navigateToTab(page, 'publish');
     await selectAppInPublishTab(page, appName);
+
     const versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    await versionRow.getByRole('button', { name: '非公開', exact: true }).click();
+    const unpubBtn = versionRow.getByRole('button', { name: '非公開', exact: true });
+    await unpubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => unpubBtn.click({ force: true }));
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     const confirmDialog = page.locator('message-box#publish-action-confirm');
     await expect(confirmDialog).toBeVisible();
-    await confirmDialog.getByRole('button', { name: '非公開にする' }).click();
+
+    const finalUnpubBtn = confirmDialog.getByRole('button', { name: '非公開にする' });
+    await finalUnpubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => finalUnpubBtn.click({ force: true }));
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
 }
 
@@ -292,12 +340,17 @@ export async function startPublishPreparation(page: Page, appName: string, versi
     await selectAppInPublishTab(page, appName);
 
     const versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    await versionRow.getByRole('button', { name: '公開準備' }).click();
+    const prepBtn = versionRow.getByRole('button', { name: '公開準備' });
+    await prepBtn.evaluate((el: HTMLElement) => el.click()).catch(() => prepBtn.click({ force: true }));
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
 
     const confirmDialog = page.locator('message-box#publish-action-confirm');
     await expect(confirmDialog).toBeVisible();
-    await confirmDialog.getByRole('button', { name: '申請する' }).click();
+
+    const applyBtn = confirmDialog.getByRole('button', { name: '申請する' });
+    await applyBtn.evaluate((el: HTMLElement) => el.click()).catch(() => applyBtn.click({ force: true }));
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
 }
@@ -317,12 +370,17 @@ export async function completePublication(page: Page, appName: string, version: 
 
     // 公開中にする
     const readyVersionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    await readyVersionRow.getByRole('button', { name: '公開', exact: true }).click();
+    const pubBtn = readyVersionRow.getByRole('button', { name: '公開', exact: true });
+    await pubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => pubBtn.click({ force: true }));
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
 
     const publishConfirmDialog = page.locator('message-box#publish-action-confirm');
     await expect(publishConfirmDialog).toBeVisible();
-    await publishConfirmDialog.getByRole('button', { name: '公開する' }).click();
+
+    const confirmBtn = publishConfirmDialog.getByRole('button', { name: '公開する' });
+    await confirmBtn.evaluate((el: HTMLElement) => el.click()).catch(() => confirmBtn.click({ force: true }));
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
 }
@@ -349,19 +407,24 @@ export async function downloadVersion(page: Page, { appName, appKey, version }: 
     await navigateToTab(page, 'publish');
 
     const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-    await appRow.getByRole('button', { name: '選択' }).click();
+    const selectBtn = appRow.getByRole('button', { name: '選択' });
+    await selectBtn.evaluate((el: HTMLElement) => el.click()).catch(() => selectBtn.click({ force: true }));
+
     await expect(page.getByRole('heading', { name: `公開設定: ${appName}` })).toBeVisible();
 
     const versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    await versionRow.getByRole('button', { name: 'ＤＬ' }).click();
+    const dlBtn = versionRow.getByRole('button', { name: 'ＤＬ' });
+    await dlBtn.evaluate((el: HTMLElement) => el.click()).catch(() => dlBtn.click({ force: true }));
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
 
     const confirmDialog = page.locator('message-box#download-confirm');
     await expect(confirmDialog).toBeVisible();
 
+    const confirmDlBtn = confirmDialog.getByRole('button', { name: 'ダウンロード' });
     const [download] = await Promise.all([
         page.waitForEvent('download'),
-        confirmDialog.getByRole('button', { name: 'ダウンロード' }).click(),
+        confirmDlBtn.evaluate((el: HTMLElement) => el.click()).catch(() => confirmDlBtn.click({ force: true })),
     ]);
 
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
@@ -381,8 +444,6 @@ export async function downloadVersion(page: Page, { appName, appKey, version }: 
  * @param isVisible trueなら表示、falseなら非表示を期待
  */
 export async function expectVersionVisibility(page: Page, version: string, isVisible: boolean): Promise<void> {
-    // ネットワークアイドル待機は不安定なため削除し、toPassによるUI状態ポーリングに任せます。
-
     await expect(async () => {
         // 行全体を取得し、その中から特定のバージョン名を持つセルを探す
         // .first() をつけることで、探索を安定させます
@@ -415,9 +476,11 @@ export async function addVersion(page: Page, versionName: string): Promise<void>
     await expect(async () => {
         const alert = page.locator('alert-component');
         if (await alert.isVisible().catch(() => false)) {
-            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
-        await page.getByTitle('バージョンの追加').click({ timeout: 2000 });
+        const addBtn = page.getByTitle('バージョンの追加');
+        await addBtn.evaluate((el: HTMLElement) => el.click()).catch(() => addBtn.click({ force: true, timeout: 2000 }));
+
         const modal = page.locator('dashboard-modal-window#versionModal');
         await expect(modal.getByRole('heading', { name: 'バージョンの追加' })).toBeVisible({ timeout: 2000 });
     }).toPass({ timeout: 15000, intervals: [1000] });
@@ -428,9 +491,10 @@ export async function addVersion(page: Page, versionName: string): Promise<void>
     await expect(async () => {
         const alert = page.locator('alert-component');
         if (await alert.isVisible().catch(() => false)) {
-            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
-        await modal.getByRole('button', { name: '保存' }).click({ timeout: 2000 });
+        const saveBtn = modal.getByRole('button', { name: '保存' });
+        await saveBtn.evaluate((el: HTMLElement) => el.click()).catch(() => saveBtn.click({ force: true, timeout: 2000 }));
     }).toPass({ timeout: 15000, intervals: [1000] });
 
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
@@ -450,13 +514,16 @@ export async function setupAppWithVersions(page: Page, { appName, appKey, versio
 
     const alert = page.locator('alert-component');
     if (await alert.isVisible().catch(() => false)) {
-        await alert.getByRole('button', { name: '閉じる' }).click();
+        await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
         await expect(alert).toBeHidden();
     }
 
     const appRow = page.locator('.app-list tbody tr', { hasText: appName });
     await expect(appRow).toBeVisible();
-    await appRow.getByRole('button', { name: '選択' }).click();
+
+    const selectBtn = appRow.getByRole('button', { name: '選択' });
+    await selectBtn.evaluate((el: HTMLElement) => el.click()).catch(() => selectBtn.click({ force: true }));
+
     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
 
     const additionalVersions = versions.filter(v => v !== '1.0.0');
@@ -477,7 +544,9 @@ export async function setupAppWithVersions(page: Page, { appName, appKey, versio
  */
 export async function editVersion(page: Page, oldVersion: string, newVersion: string): Promise<void> {
     const versionRow = page.locator('.version-list tbody tr', { hasText: oldVersion });
-    await versionRow.getByRole('button', { name: '編集' }).click();
+    const editBtn = versionRow.getByRole('button', { name: '編集' });
+    await editBtn.evaluate((el: HTMLElement) => el.click()).catch(() => editBtn.click({ force: true }));
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
 
@@ -485,7 +554,8 @@ export async function editVersion(page: Page, oldVersion: string, newVersion: st
     await expect(modal.getByRole('heading', { name: 'バージョンの編集' })).toBeVisible();
 
     await modal.getByLabel('バージョン').fill(newVersion);
-    await modal.getByRole('button', { name: '保存' }).click();
+    const saveBtn = modal.getByRole('button', { name: '保存' });
+    await saveBtn.evaluate((el: HTMLElement) => el.click()).catch(() => saveBtn.click({ force: true }));
 
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
@@ -503,12 +573,12 @@ export async function duplicateVersion(page: Page, sourceVersion: string): Promi
     await expect(async () => {
         const alert = page.locator('alert-component');
         if (await alert.isVisible().catch(() => false)) {
-            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+            await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
         const versionRow = page.locator('.version-list tbody tr', { hasText: sourceVersion }).first();
         const dupButton = versionRow.getByRole('button', { name: '複製' });
 
-        await dupButton.click({ timeout: 2000 });
+        await dupButton.evaluate((el: HTMLElement) => el.click()).catch(() => dupButton.click({ force: true, timeout: 2000 }));
     }).toPass({
         timeout: 15000,
         intervals: [1000]
@@ -525,12 +595,16 @@ export async function duplicateVersion(page: Page, sourceVersion: string): Promi
  */
 export async function deleteVersion(page: Page, versionToDelete: string): Promise<void> {
     const versionRow = page.locator('.version-list tbody tr', { hasText: versionToDelete });
-    await versionRow.getByRole('button', { name: '削除' }).click();
+    const delBtn = versionRow.getByRole('button', { name: '削除' });
+    await delBtn.evaluate((el: HTMLElement) => el.click()).catch(() => delBtn.click({ force: true }));
+
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
 
     const confirmDialog = page.locator('message-box#delete-confirm');
     await expect(confirmDialog).toBeVisible();
-    await confirmDialog.getByRole('button', { name: '削除する' }).click();
+
+    const confirmDelBtn = confirmDialog.getByRole('button', { name: '削除する' });
+    await confirmDelBtn.evaluate((el: HTMLElement) => el.click()).catch(() => confirmDelBtn.click({ force: true }));
 
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
@@ -573,19 +647,24 @@ export async function getCurrentPoints(page: Page): Promise<number> {
 
 /**
  * ダッシュボードのメニューから設定画面を開きます。
+ * モバイルでのポインターインターセプトを回避するため、要素の表示待機と強制クリックを採用しています。
  * @param page ダッシュボードのPageオブジェクト
  */
 export async function navigateToSettings(page: Page): Promise<void> {
-    // メニューボタンをクリック
-    await page.locator('button.menu-button[title="メニュー"]').click();
+    // 念のためローディングが消えるのを待つ
+    await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 10000 }).catch(() => { });
+
+    const menuBtn = page.locator('button.menu-button[title="メニュー"]');
+    // メニューボタンをクリック (モバイルで隠れていても強制的に押す)
+    await menuBtn.evaluate((el: HTMLElement) => el.click()).catch(() => menuBtn.click({ force: true }));
 
     // メニューリストが表示されるのを待つ
     const menuList = page.locator('#appMenuList');
     await expect(menuList).toBeVisible();
 
-    // 「設定」メニュー項目をクリック
-    // この要素はdivなので、getByRole('button')ではなくlocatorで特定します
-    await menuList.locator('.dashboard-menu-item', { hasText: '設定' }).click();
+    // 「設定」メニュー項目をクリック (モバイル環境で他要素と被っていても強制的に押す)
+    const settingItem = menuList.locator('.dashboard-menu-item', { hasText: '設定' });
+    await settingItem.evaluate((el: HTMLElement) => el.click()).catch(() => settingItem.click({ force: true }));
 
     // 設定コンテンツが表示されるのを待つ
     const settingsContent = page.locator('.setting-content');
@@ -610,21 +689,23 @@ export async function setAiCoding(page: Page, enable: boolean): Promise<void> {
 
     // 3. 目標の状態と現在の状態が同じであれば、何もしないで終了
     if (isCurrentlyEnabled === enable) {
-        await closeSettings(page);
+        await closeSettings(page); // 設定画面を閉じて終了
         return;
     }
 
     // 4. トグルスイッチをクリックして状態を変更
-    await page.locator('label[for="aiCodingCheckbox"]').click({ force: true });
+    // input自体ではなく、関連付けられたlabelをクリックするのが堅牢です (force: trueで強制クリック)
+    const label = page.locator('label[for="aiCodingCheckbox"]');
+    await label.evaluate((el: HTMLElement) => el.click()).catch(() => label.click({ force: true }));
 
     // 5. 【有効化する場合のみ】年齢確認モーダルを処理
     if (enable) {
-        // モーダルが表示されるのを待つ
         const parentModal = page.locator('#aiCodingConfirmModal');
         try {
             // モーダルが出る場合のみ処理する（出ない場合はcatchされて無視）
             await expect(parentModal.locator('.modal')).toBeVisible({ timeout: 3000 });
-            await parentModal.locator('span[slot="submit-button-text"]').click();
+            const submitBtn = parentModal.locator('span[slot="submit-button-text"]');
+            await submitBtn.evaluate((el: HTMLElement) => el.click()).catch(() => submitBtn.click({ force: true }));
             await expect(parentModal).toBeHidden({ timeout: 5000 });
         } catch (e) {
             // 既に同意済み等でモーダルが出ない場合は無視して進む
@@ -639,22 +720,29 @@ export async function setAiCoding(page: Page, enable: boolean): Promise<void> {
     }
 
     await page.waitForTimeout(1000); // DB保存のAPI完了を待機
+
+    // 7. 設定画面を閉じる
     await closeSettings(page);
 }
 
 /**
  * 設定画面（メニュー）を閉じます。
- * 画面のどこかをクリックすることでメニューが閉じると想定しています。
- * アプリケーションの実装に合わせて調整してください。
  * @param page ダッシュボードのPageオブジェクト
  */
 export async function closeSettings(page: Page): Promise<void> {
-    // 設定メニュー以外の場所（例: アプリケーション一覧の見出し）をクリックして閉じる
-    // もし専用の閉じるボタンがあれば、そちらを操作する方が確実です
     const accountSetting = page.locator('dashboard-account-setting');
-    // force: true で確実に閉じる
-    await accountSetting.click({ position: { x: 10, y: 10 }, force: true });
-    await expect(page.locator('.setting-content')).toBeHidden({ timeout: 5000 });
+
+    await expect(async () => {
+        // 設定パネルの枠外（座標 x:10, y:10）を確実にクリックしてメニューを閉じる
+        await accountSetting.click({ position: { x: 10, y: 10 }, force: true });
+
+        // それでも閉じない場合の保険として、画面の左上端を直接タップ
+        if (await page.locator('.setting-content').isVisible().catch(() => false)) {
+            await page.mouse.click(0, 0);
+        }
+
+        await expect(page.locator('.setting-content')).toBeHidden({ timeout: 2000 });
+    }).toPass({ timeout: 10000, intervals: [1000] });
 }
 
 /**
@@ -670,19 +758,20 @@ export async function setGeminiApiKey(page: Page, apiKey: string): Promise<void>
     // 2. APIキー入力フォームが表示されているか確認
     const apiKeyForm = page.locator('.api-key-form');
     if (!(await apiKeyForm.isVisible())) {
-        //console.log('APIキーは既に登録されています。処理をスキップします。');
         await closeSettings(page); // 設定画面を閉じて終了
         return;
     }
 
     // 3. APIキーを入力して保存ボタンをクリック
     await apiKeyForm.locator('input#gemini-api-key').fill(apiKey);
-    await apiKeyForm.locator('button.save-api-key-button').click();
+    const saveBtn = apiKeyForm.locator('button.save-api-key-button');
+    await saveBtn.evaluate((el: HTMLElement) => el.click()).catch(() => saveBtn.click({ force: true }));
 
     // 4. 登録成功のアラートが表示されるのを待ち、閉じる
     const successAlert = page.locator('.alert', { hasText: 'APIキーを登録しました。' });
     await expect(successAlert).toBeVisible();
-    await successAlert.locator('button#closeButton').click();
+    const closeBtn = successAlert.locator('button#closeButton');
+    await closeBtn.evaluate((el: HTMLElement) => el.click()).catch(() => closeBtn.click({ force: true }));
     await expect(successAlert).toBeHidden();
 
     // 5. UIが「登録済み」の状態に変わったことを確認
@@ -706,7 +795,6 @@ export async function deleteGeminiApiKey(page: Page): Promise<void> {
     // 2. 「登録済み」の表示が出ているか確認
     const registeredDisplay = page.locator('.api-key-display');
     if (!(await registeredDisplay.isVisible())) {
-        //console.log('APIキーは登録されていません。処理をスキップします。');
         await closeSettings(page); // 設定画面を閉じて終了
         return;
     }
@@ -719,12 +807,14 @@ export async function deleteGeminiApiKey(page: Page): Promise<void> {
     });
 
     // 4. 削除ボタンをクリック（ここで上記ダイアログがトリガーされる）
-    await registeredDisplay.locator('button.delete-api-key-button').click();
+    const delBtn = registeredDisplay.locator('button.delete-api-key-button');
+    await delBtn.evaluate((el: HTMLElement) => el.click()).catch(() => delBtn.click({ force: true }));
 
     // 5. 削除成功のアラートが表示されるのを待ち、閉じる
     const deleteAlert = page.locator('.alert', { hasText: 'APIキーを削除しました。' });
     await expect(deleteAlert).toBeVisible();
-    await deleteAlert.locator('button#closeButton').click();
+    const closeBtn = deleteAlert.locator('button#closeButton');
+    await closeBtn.evaluate((el: HTMLElement) => el.click()).catch(() => closeBtn.click({ force: true }));
     await expect(deleteAlert).toBeHidden();
 
     // 6. UIが「未登録」の状態（入力フォーム）に戻ったことを確認

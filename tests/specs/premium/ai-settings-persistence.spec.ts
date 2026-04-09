@@ -91,7 +91,14 @@ test.describe('AI設定の永続化テスト', () => {
             console.log(`[AI Coder Test] UIから取得したランダムモデル: ${targetModel}`);
 
             await select.selectOption({ value: targetModel });
-            await settingWindow.locator('input[type="range"]').fill(targetTemp);
+
+            // input[type="range"] は fill できないブラウザがあるため、evaluate で直接 value をセットし、イベントを発火させる
+            const rangeInput = settingWindow.locator('input[type="range"]');
+            await rangeInput.evaluate((el: HTMLInputElement, val) => {
+                el.value = val;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }, targetTemp);
 
             // スイッチ部分をクリック
             const checkbox = settingWindow.locator('#use-onsenui-check');
