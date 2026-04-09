@@ -272,17 +272,29 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
             await test.step('5. スナップショット管理画面から復元を実行', async () => {
                 await editorHelper.closeMoveingHandle();
-                await editorPage.locator('#fab-bottom-menu-box').click();
+                await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
+
                 const bottomMenu = editorPage.locator('#platformBottomMenu');
-                await expect(bottomMenu).toBeVisible()
-                await bottomMenu.getByText('スナップショット管理').click();
+                await expect(bottomMenu).toBeVisible();
+                await bottomMenu.getByText('スナップショット管理').click({ force: true });
 
                 const manager = editorPage.locator('snapshot-manager');
                 const item = manager.locator('.snapshot-item', { hasText: snapshotName });
                 await expect(item).toBeVisible();
 
-                editorPage.once('dialog', dialog => dialog.accept());
-                await item.getByRole('button', { name: '復元' }).click();
+                // 【修正】確認ダイアログ(confirm)と完了アラート(alert)の両方を処理する
+                editorPage.once('dialog', async confirmDialog => {
+                    // 確認ダイアログに「OK」を押す前に、次に来るアラートのリスナーをセット
+                    editorPage.once('dialog', async alertDialog => {
+                        await alertDialog.dismiss(); // アラートを閉じる
+                    });
+                    await confirmDialog.accept();
+                });
+
+                await item.getByRole('button', { name: '復元' }).click({ force: true });
+
+                // 復元処理が完了し、マネージャー画面が閉じるのを待つ
+                await expect(manager).toBeHidden({ timeout: 15000 });
             });
 
             await test.step('6. 削除した要素が復活していることを確認', async () => {
