@@ -156,6 +156,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
+            // ダウンロードダイアログの残存や通信ラグを防ぐため、networkidleまでリロードして状態を完全にリセット
+            await page.reload({ waitUntil: 'networkidle' });
             await deleteApp(page, appKey);
             await expectAppVisibility(page, appKey, false);
         });
@@ -195,6 +197,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ: APIキー削除とアプリ削除', async () => {
+            // 状態をクリーンにして削除ボタンが確実に押せるようにする
+            await page.reload({ waitUntil: 'networkidle' });
             await deleteGeminiApiKey(page);
             await deleteApp(page, appKey);
         });
@@ -239,6 +243,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ', async () => {
+            // 状態をクリーンにして削除ボタンが確実に押せるようにする
+            await page.reload({ waitUntil: 'networkidle' });
             await deleteGeminiApiKey(page);
             await deleteApp(page, appKey);
         });
@@ -407,6 +413,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ', async () => {
+            // 状態をクリーンにして削除ボタンが確実に押せるようにする
+            await page.reload({ waitUntil: 'networkidle' });
             await deleteApp(page, appKey);
         });
     });

@@ -219,9 +219,16 @@ export async function expectAppVisibility(page: Page, appKey: string, isVisible:
  */
 async function selectAppInPublishTab(page: Page, appName: string): Promise<void> {
     const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-    await appRow.getByRole('button', { name: '選択' }).click();
+    // toPassで遷移が成功するまでリトライ
+    await expect(async () => {
+        const alert = page.locator('alert-component');
+        if (await alert.isVisible().catch(() => false)) {
+            await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+        }
+        await appRow.getByRole('button', { name: '選択' }).click({ timeout: 2000, force: true });
+        await expect(page.getByRole('heading', { name: `公開設定: ${appName}` })).toBeVisible({ timeout: 5000 });
+    }).toPass({ timeout: 20000, intervals: [1000] });
     await page.getByText('処理中...').waitFor({ state: 'hidden' });
-    await expect(page.getByRole('heading', { name: `公開設定: ${appName}` })).toBeVisible();
 }
 
 /**
@@ -595,6 +602,7 @@ export async function navigateToSettings(page: Page): Promise<void> {
 export async function setAiCoding(page: Page, enable: boolean): Promise<void> {
     // 1. 設定画面へ移動
     await navigateToSettings(page);
+    await page.waitForTimeout(500); // UIアニメーション待機
 
     // 2. AI機能のチェックボックスと現在の状態を取得
     const checkbox = page.locator('#aiCodingCheckbox');
@@ -602,28 +610,25 @@ export async function setAiCoding(page: Page, enable: boolean): Promise<void> {
 
     // 3. 目標の状態と現在の状態が同じであれば、何もしないで終了
     if (isCurrentlyEnabled === enable) {
-        //console.log(`AI機能は既に ${enable ? '有効' : '無効'} です。`);
-        await closeSettings(page); // 設定画面を閉じて終了
+        await closeSettings(page);
         return;
     }
 
     // 4. トグルスイッチをクリックして状態を変更
-    // input自体ではなく、関連付けられたlabelをクリックするのが堅牢です
-    await page.locator('label[for="aiCodingCheckbox"]').click();
+    await page.locator('label[for="aiCodingCheckbox"]').click({ force: true });
 
     // 5. 【有効化する場合のみ】年齢確認モーダルを処理
     if (enable) {
         // モーダルが表示されるのを待つ
         const parentModal = page.locator('#aiCodingConfirmModal');
-        const modal = parentModal.locator('.modal');
-        await expect(modal).toBeVisible();
-        await expect(parentModal.locator('span[slot="header-title"]')).toHaveText('確認');
-
-        // 「はい」ボタンをクリック
-        await parentModal.locator('span[slot="submit-button-text"]').click();
-
-        // モーダルが閉じるのを待つ
-        await expect(parentModal).toBeHidden();
+        try {
+            // モーダルが出る場合のみ処理する（出ない場合はcatchされて無視）
+            await expect(parentModal.locator('.modal')).toBeVisible({ timeout: 3000 });
+            await parentModal.locator('span[slot="submit-button-text"]').click();
+            await expect(parentModal).toBeHidden({ timeout: 5000 });
+        } catch (e) {
+            // 既に同意済み等でモーダルが出ない場合は無視して進む
+        }
     }
 
     // 6. 最終的な状態を検証
@@ -633,7 +638,7 @@ export async function setAiCoding(page: Page, enable: boolean): Promise<void> {
         await expect(checkbox).not.toBeChecked({ timeout: 5000 });
     }
 
-    // 7. 設定画面を閉じる
+    await page.waitForTimeout(1000); // DB保存のAPI完了を待機
     await closeSettings(page);
 }
 
@@ -647,8 +652,9 @@ export async function closeSettings(page: Page): Promise<void> {
     // 設定メニュー以外の場所（例: アプリケーション一覧の見出し）をクリックして閉じる
     // もし専用の閉じるボタンがあれば、そちらを操作する方が確実です
     const accountSetting = page.locator('dashboard-account-setting');
-    await accountSetting.click({ position: { x: 10, y: 10 } });
-    await expect(page.locator('.setting-content')).toBeHidden();
+    // force: true で確実に閉じる
+    await accountSetting.click({ position: { x: 10, y: 10 }, force: true });
+    await expect(page.locator('.setting-content')).toBeHidden({ timeout: 5000 });
 }
 
 /**

@@ -9,7 +9,8 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,   // JSONファイルのインポートを許可
     "noUnusedLocals": false,     // Playwrightでは未使用の変数が発生しやすいためfalseに
-    "noUnusedParameters": false  // 同上
+    "noUnusedParameters": false,  // 同上
+    "types": ["node"]           // Node.jsの型定義を含める
   },
   "include": [
     "tests/**/*.ts",             // testsディレクトリ以下のtsファイルを対象にする
