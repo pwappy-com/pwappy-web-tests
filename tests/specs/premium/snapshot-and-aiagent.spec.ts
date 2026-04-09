@@ -303,8 +303,15 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await expect(domTree.locator('.node[data-node-type="ons-button"]')).toBeVisible();
             });
         } finally {
-            await editorPage.close();
-            await page.bringToFront();
+            console.log('[DEBUG] snapshot-and-aiagent: finally block started. Closing editorPage...');
+            try {
+                await editorPage.close();
+                console.log('[DEBUG] snapshot-and-aiagent: editorPage closed successfully. Bringing dashboard page to front...');
+                await page.bringToFront();
+                console.log('[DEBUG] snapshot-and-aiagent: bringToFront completed.');
+            } catch (e) {
+                console.error('[DEBUG ERROR] snapshot-and-aiagent: Error in finally block:', e);
+            }
         }
     });
 });

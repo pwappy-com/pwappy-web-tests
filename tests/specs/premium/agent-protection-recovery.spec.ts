@@ -89,8 +89,14 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
 
         await test.step('1. AIにリクエストを送信', async () => {
             await editorHelper.closeMoveingHandle();
+            console.log('[DEBUG] agent-protection: Opening bottom menu...');
             await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
-            await editorPage.locator('#platformBottomMenu').getByText('AIエージェント').click({ force: true });
+
+            const bottomMenu = editorPage.locator('#platformBottomMenu');
+            await expect(bottomMenu).toBeVisible({ timeout: 10000 });
+
+            console.log('[DEBUG] agent-protection: Clicking AI Agent button...');
+            await bottomMenu.getByText('AIエージェント').click({ force: true });
             await editorPage.locator('agent-chat-window textarea.user-input').fill('テスト');
             await editorPage.locator('agent-chat-window #send-button').click({ force: true });
         });
@@ -195,8 +201,14 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
 
         await test.step('1. バグ入りスクリプトをAIに生成させる', async () => {
             await editorHelper.closeMoveingHandle();
+            console.log('[DEBUG] agent-protection: Opening bottom menu...');
             await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
-            await editorPage.locator('#platformBottomMenu').getByText('AIエージェント').click({ force: true });
+
+            const bottomMenu = editorPage.locator('#platformBottomMenu');
+            await expect(bottomMenu).toBeVisible({ timeout: 10000 });
+
+            console.log('[DEBUG] agent-protection: Clicking AI Agent button...');
+            await bottomMenu.getByText('AIエージェント').click({ force: true });
             await editorPage.locator('agent-chat-window textarea.user-input').fill('バグを作って');
             await editorPage.locator('agent-chat-window #send-button').click({ force: true });
         });
@@ -294,8 +306,14 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
             });
 
             await editorHelper.closeMoveingHandle();
+            console.log('[DEBUG] agent-protection: Opening bottom menu...');
             await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
-            await editorPage.locator('#platformBottomMenu').getByText('AIエージェント').click({ force: true });
+
+            const bottomMenu = editorPage.locator('#platformBottomMenu');
+            await expect(bottomMenu).toBeVisible({ timeout: 10000 }); // 【追加】メニューが開くのを確実に待つ
+
+            console.log('[DEBUG] agent-protection: Clicking AI Agent button...');
+            await bottomMenu.getByText('AIエージェント').click({ force: true });
             await editorPage.locator('agent-chat-window textarea.user-input').fill('命令');
             await editorPage.locator('agent-chat-window #send-button').click({ force: true });
 

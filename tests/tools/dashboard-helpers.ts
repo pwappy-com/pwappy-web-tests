@@ -65,10 +65,20 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
  * @param appKey 削除するアプリケーションキー
  */
 export async function deleteApp(page: Page, appKey: string): Promise<void> {
+    console.log(`[DEBUG] deleteApp開始: ${appKey}`);
     await page.bringToFront();
 
     // 削除処理を確実に行うため、ページをリロードしてクリーンな状態にする
     await page.reload({ waitUntil: 'domcontentloaded' });
+
+    // 一時的なエラー監視リスナーを登録 (400以上のエラーをコンソールに出力)
+    const errorListener = async (response: any) => {
+        if (response.status() >= 400 && response.request().resourceType() === 'fetch') {
+            console.error(`[API ERROR in deleteApp] ${response.request().method()} ${response.url()} - Status: ${response.status()}`);
+            try { console.error(`[API ERROR BODY] ${await response.text()}`); } catch (e) { }
+        }
+    };
+    page.on('response', errorListener);
 
     // 念のため残っているアラートを消してから開始 ---
     const alert = page.locator('alert-component');
@@ -82,17 +92,15 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
         has: page.locator('td:nth-child(2)', { hasText: new RegExp(`^${appKey}$`) })
     }).first();
 
-    // UIの描画遅延を考慮し、要素が表示されるのを最大15秒待機する
     try {
         await appRow.waitFor({ state: 'visible', timeout: 15000 });
     } catch (e) {
-        // 15秒待っても表示されなかった場合は、すでに削除済み（または存在しない）とみなす
+        console.log(`[DEBUG] deleteApp: アプリ行が見つかりません。既に削除済みの可能性があります。`);
     }
 
     if (await appRow.isVisible()) {
         const confirmDialog = page.locator('message-box#delete-confirm');
 
-        // 削除ボタンのクリックとダイアログの表示確認をセットにしてリトライ
         await expect(async () => {
             const a = page.locator('alert-component');
             if (await a.isVisible().catch(() => false)) {
@@ -100,36 +108,37 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
             }
 
             const deleteBtn = appRow.getByRole('button', { name: '削除' });
-
-            // モバイル環境での横スクロール外要素などの空振りを防ぐため、DOM APIによるネイティブクリックを優先
             await deleteBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
                 return deleteBtn.click({ force: true, timeout: 2000 });
             });
 
-            // ダイアログが出るまで待機。出なければエラーを吐かせて toPass にキャッチさせる
             await expect(confirmDialog).toBeVisible({ timeout: 5000 });
         }).toPass({ timeout: 20000, intervals: [1000] });
 
-        // ダイアログが出ていることが確定したので、削除を実行（ここもネイティブクリックを使用）
         const confirmBtn = confirmDialog.getByRole('button', { name: '削除する' });
+
+        console.log(`[DEBUG] deleteApp: 削除確認ダイアログの「削除する」をクリック`);
         await confirmBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
             return confirmBtn.click({ force: true });
         });
 
-        // --- 処理中が消えるのを待つ ---
         await page.getByText('処理中...').waitFor({ state: 'hidden' });
         await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
 
-        // --- 削除成功後の「削除しました」アラートを閉じる ---
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
+            const alertText = await alert.innerText().catch(() => 'unknown');
+            console.log(`[DEBUG] deleteApp: アラート表示内容 -> ${alertText}`);
             await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
             await expect(alert).toBeHidden();
         }
 
-        // 削除後にDOMの反映が遅れるケースがあるため、強制的にリロードして状態を同期する
+        console.log(`[DEBUG] deleteApp: リロードして状態同期`);
         await page.reload({ waitUntil: 'domcontentloaded' });
         await navigateToTab(page, 'workbench');
     }
+
+    page.off('response', errorListener); // リスナー解除
+    console.log(`[DEBUG] deleteApp完了: ${appKey}`);
 }
 
 export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
