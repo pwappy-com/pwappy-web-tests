@@ -53,11 +53,14 @@ test.describe('AI設定の永続化テスト', () => {
 
     test.beforeEach(async ({ page, context }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
-        const domain = testUrl.hostname;
+        var domain: string = testUrl.hostname;
+        if (domain !== 'localhost') {
+            domain = '.' + domain;
+        }
         await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
-            { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
+            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
+            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
+            { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
         ]);
         await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });

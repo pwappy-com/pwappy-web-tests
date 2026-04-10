@@ -20,12 +20,14 @@ const test = base.extend<EditorFixtures>({
     editorPage: async ({ page, context, appName }, use) => {
         // --- ここでログインと遷移を行う ---
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
-        const domain = testUrl.hostname;
-
+        var domain: string = testUrl.hostname;
+        if (domain !== 'localhost') {
+            domain = '.' + domain;
+        }
         await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
-            { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
+            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
+            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
+            { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
         ]);
 
         // ダッシュボードへ移動
@@ -59,11 +61,14 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
         }
 
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
-        const domain = testUrl.hostname;
+        var domain: string = testUrl.hostname;
+        if (domain !== 'localhost') {
+            domain = '.' + domain;
+        }
         await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
-            { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
+            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
+            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
+            { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
         ]);
 
         // 右側のサブウィンドウを開く

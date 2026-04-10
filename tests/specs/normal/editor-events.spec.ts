@@ -42,11 +42,14 @@ const test = base.extend<EditorFixtures>({
 test.describe('エディタ内イベント＆スクリプト機能のテスト', () => {
     test.beforeEach(async ({ page, context, isMobile }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
-        const domain = testUrl.hostname;
+        var domain: string = testUrl.hostname;
+        if (domain !== 'localhost') {
+            domain = '.' + domain;
+        }
         await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
-            { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
+            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
+            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
+            { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
         ]);
         await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
@@ -103,7 +106,7 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             const testPage = await editorHelper.saveAndOpenTestPage();
 
             await testPage.waitForTimeout(5000); // デプロイ完了待ち（必要に応じて調整）
-            
+
             // 【デバッグ用】ブラウザ内のエラーやログをPlaywrightのコンソールに出力する
             testPage.on('console', msg => console.log(`[TestPage Console] ${msg.type()}: ${msg.text()}`));
             testPage.on('pageerror', err => console.error(`[TestPage Error] ${err.message}`));

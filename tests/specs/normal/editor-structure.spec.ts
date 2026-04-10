@@ -42,11 +42,14 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 
     test.beforeEach(async ({ page, context }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
-        const domain = testUrl.hostname;
+        var domain: string = testUrl.hostname;
+        if (domain !== 'localhost') {
+            domain = '.' + domain;
+        }
         await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/' },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/' },
-            { name: 'pwappy_login', value: '1', domain: domain, path: '/' },
+            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
+            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
+            { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
         ]);
         await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
@@ -248,7 +251,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 
         const pointerAction = {
             down: async (x: number, y: number) => {
-                                await drawDebugPoint(x, y, 'red');
+                await drawDebugPoint(x, y, 'red');
                 if (isMobile && cdpSession) {
                     await cdpSession.send('Input.dispatchTouchEvent', {
                         type: 'touchStart',
@@ -260,7 +263,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 }
             },
             move: async (fromX: number, fromY: number, toX: number, toY: number, steps: number = 10) => {
-                                const stepX = (toX - fromX) / steps;
+                const stepX = (toX - fromX) / steps;
                 const stepY = (toY - fromY) / steps;
 
                 for (let i = 1; i <= steps; i++) {
@@ -278,7 +281,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 }
             },
             up: async (x?: number, y?: number) => {
-                                if (x !== undefined && y !== undefined) {
+                if (x !== undefined && y !== undefined) {
                     await drawDebugPoint(x, y, 'blue');
                 }
                 if (isMobile && cdpSession) {
@@ -318,11 +321,11 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                         const isInView = (itemCenterY >= containerTop + 5) && (itemCenterY <= containerBottom - 5);
 
                         if (isInView) {
-                                                        break;
+                            break;
                         }
                     }
 
-                                        await toolboxContainer.evaluate(el => el.scrollTop += 80);
+                    await toolboxContainer.evaluate(el => el.scrollTop += 80);
                     await editorPage.waitForTimeout(300);
 
                     if (i === maxScrollAttempts - 1) {
