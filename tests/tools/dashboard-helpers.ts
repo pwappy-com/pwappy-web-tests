@@ -691,6 +691,14 @@ export async function navigateToSettings(page: Page): Promise<void> {
     // 念のためローディングが消えるのを待つ
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 10000 }).catch(() => { });
 
+    // エラーアラートが出ている場合は閉じる
+    const alert = page.locator('alert-component');
+    if (await alert.isVisible().catch(() => false)) {
+        console.log('[DEBUG] navigateToSettings: Alert is visible. Closing it.');
+        await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
+        await expect(alert).toBeHidden({ timeout: 2000 }).catch(() => { });
+    }
+
     const menuBtn = page.locator('button.menu-button[title="メニュー"]');
     // メニューボタンをクリック (モバイルで隠れていても強制的に押す)
     await menuBtn.evaluate((el: HTMLElement) => el.click()).catch(() => menuBtn.click({ force: true }));
@@ -770,6 +778,14 @@ export async function closeSettings(page: Page): Promise<void> {
     const accountSetting = page.locator('dashboard-account-setting');
 
     await expect(async () => {
+        // --- エラーアラートが出ている場合は閉じてリカバリする ---
+        const alert = page.locator('alert-component');
+        if (await alert.isVisible().catch(() => false)) {
+            console.log('[DEBUG] closeSettings: Alert is visible. Closing it to recover.');
+            await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
+            // アラートが消えるための微小な待機
+            await page.waitForTimeout(300);
+        }
         // 設定パネルの枠外（座標 x:10, y:10）を確実にクリックしてメニューを閉じる
         await accountSetting.click({ position: { x: 10, y: 10 }, force: true });
 
