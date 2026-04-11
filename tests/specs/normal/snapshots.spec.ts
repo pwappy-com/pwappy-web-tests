@@ -1,6 +1,6 @@
 import { test as base, expect, Page, Locator } from '@playwright/test';
 import 'dotenv/config';
-import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
+import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
 /**
@@ -70,7 +70,7 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
         ]);
 
         // ダッシュボードページへ移動
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+        await gotoDashboard(page);
 
         // ログイン成功を確認
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();

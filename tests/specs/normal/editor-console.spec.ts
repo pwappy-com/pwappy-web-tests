@@ -1,6 +1,6 @@
 import { test as base, expect, Page, Locator } from '@playwright/test';
 import 'dotenv/config';
-import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
+import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
@@ -33,7 +33,7 @@ const test = base.extend<EditorFixtures>({
         ]);
 
         // ダッシュボードへ移動
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL));
+        await gotoDashboard(page);
 
         // アプリ作成とエディタ起動
         const uniqueId = Date.now().toString().slice(-6);

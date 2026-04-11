@@ -6,7 +6,8 @@ import {
     openEditor,
     setGeminiApiKey,
     deleteGeminiApiKey,
-    setAiCoding
+    setAiCoding,
+    gotoDashboard
 } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
@@ -59,7 +60,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
         ]);
 
         // ダッシュボードページへ移動
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+        await gotoDashboard(page);
 
         // ログイン成功（ダッシュボード表示）を確認
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();

@@ -1,6 +1,6 @@
 import { test as base, expect, Page } from '@playwright/test';
 import 'dotenv/config';
-import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
+import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
@@ -31,7 +31,7 @@ const test = base.extend<EditorFixtures>({
             { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
         ]);
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+        await gotoDashboard(page);
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
         const appKey = `test-comp-key-${Date.now().toString().slice(-6)}`;

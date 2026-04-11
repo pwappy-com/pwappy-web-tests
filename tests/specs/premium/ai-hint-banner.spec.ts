@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import 'dotenv/config';
-import { setAiCoding, navigateToSettings } from '../../tools/dashboard-helpers';
+import { setAiCoding, navigateToSettings, gotoDashboard } from '../../tools/dashboard-helpers';
 
 /**
  * AIヒントバナーの挙動に関するテスト
@@ -23,7 +23,7 @@ test.describe('AIヒントバナーの検証', () => {
         ]);
 
         // 1. テストの前提条件として、アカウントのAI機能を「無効」に設定する
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL));
+        await gotoDashboard(page);
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
 
         try {

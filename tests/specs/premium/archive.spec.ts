@@ -9,7 +9,8 @@ import {
     createApp,
     deleteApp,
     navigateToTab,
-    expectAppVisibility
+    expectAppVisibility,
+    gotoDashboard
 } from '../../tools/dashboard-helpers';
 
 test.describe.configure({ mode: 'serial' });
@@ -32,7 +33,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
             { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
         ]);
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+        await gotoDashboard(page);
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
@@ -126,7 +127,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         await test.step('クリーンアップ: 復元後、ワークベンチで削除する', async () => {
             // モバイル環境特有のタブ遷移不具合や、URLハッシュの残存を完全に防ぐため、
             // トップページ（Workbench）へ直接gotoしてクリーンな初期状態にリセットします。
-            await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+            await gotoDashboard(page);
             await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 30000 });
 
             await expectAppVisibility(page, appKey, true);

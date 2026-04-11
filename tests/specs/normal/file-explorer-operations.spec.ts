@@ -2,7 +2,7 @@
 
 import { test as base, expect, Page } from '@playwright/test';
 import 'dotenv/config';
-import { createApp, deleteApp, openEditor } from '../../tools/dashboard-helpers';
+import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
@@ -59,10 +59,10 @@ test.describe('ファイルエクスプローラー操作テスト', () => {
             { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
         ]);
 
-        // 2. 【重要】サイトへ移動
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+        // 2. サイトへ移動
+        await gotoDashboard(page);
 
-        // 3. 【重要】ダッシュボードの初期ローディング（「処理中」）が消えるのを待つ
+        // 3. ダッシュボードの初期ローディング（「処理中」）が消えるのを待つ
         // これをしないと、createApp 内の「アプリケーションの追加」ボタンがクリックできません
         const loadingOverlay = page.locator('dashboard-main-content > dashboard-loading-overlay');
         await expect(loadingOverlay).toBeHidden({ timeout: 30000 });

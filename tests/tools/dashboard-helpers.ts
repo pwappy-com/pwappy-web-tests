@@ -68,8 +68,8 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     console.log(`[DEBUG] deleteApp開始: ${appKey}`);
     await page.bringToFront();
 
-    // 削除処理を確実に行うため、ページをリロードしてクリーンな状態にする
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    // ダッシュボードをリロード
+    await reloadDashboard(page);
 
     // 一時的なエラー監視リスナーを登録 (400以上のエラーをコンソールに出力)
     const errorListener = async (response: any) => {
@@ -133,7 +133,8 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
         }
 
         console.log(`[DEBUG] deleteApp: リロードして状態同期`);
-        await page.reload({ waitUntil: 'domcontentloaded' });
+        // ダッシュボードをリロード
+        await reloadDashboard(page);
         await navigateToTab(page, 'workbench');
     }
 
@@ -149,8 +150,8 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
         if (await closeBtn.isVisible().catch(() => false)) {
             await closeBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
-        // アラートが出ていた場合、状態が不正かもしれないのでリロードして確実にする
-        await page.reload({ waitUntil: 'domcontentloaded' });
+        // ダッシュボードをリロード
+        await reloadDashboard(page);
     }
 
     await navigateToTab(page, 'workbench');
@@ -160,7 +161,8 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     // アプリが見えるまで待機（見えない場合はリロードも試行）
     await expect(async () => {
         if (!(await appRow.isVisible().catch(() => false))) {
-            await page.reload({ waitUntil: 'domcontentloaded' });
+            // ダッシュボードをリロード
+            await reloadDashboard(page);
             await navigateToTab(page, 'workbench');
         }
         await expect(appRow).toBeVisible({ timeout: 5000 });
@@ -900,7 +902,8 @@ export async function waitForVersionStatus(
 
     await expect(async () => {
         // 1. ページの再読み込みで最新の状態を取得
-        await page.reload({ waitUntil: 'networkidle' });
+        // ダッシュボードをリロード
+        await reloadDashboard(page);
 
         // 2. 公開タブに移動
         await navigateToTab(page, 'publish');
@@ -919,4 +922,33 @@ export async function waitForVersionStatus(
         timeout: timeout, // 全体のタイムアウト
         intervals: intervals, // リトライ間隔
     });
+}
+
+/**
+ * ダッシュボードを開き、初期化API(dashboard-init)の完了を待機します。
+ */
+export async function gotoDashboard(page: Page): Promise<void> {
+    // 通信完了を待つPromiseをアクション(goto)の前に作成しておく
+    const dashboardInitPromise = page.waitForResponse(response =>
+        response.url().includes('dashboard-init') && response.status() === 200,
+        { timeout: 10000 }
+    ).catch(() => { }); // タイムアウト時は無視して進行
+
+    await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+
+    await page.waitForTimeout(5000); // 初期のUIが安定するまで少し待つ
+    await dashboardInitPromise;
+}
+
+/**
+ * ダッシュボードをリロードし、初期化API(dashboard-init)の完了を待機します。
+ */
+export async function reloadDashboard(page: Page): Promise<void> {
+    const dashboardInitPromise = page.waitForResponse(response =>
+        response.url().includes('dashboard-init') && response.status() === 200,
+        { timeout: 10000 }
+    ).catch(() => { });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await dashboardInitPromise;
 }

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import 'dotenv/config';
+import { gotoDashboard } from '../../tools/dashboard-helpers';
 
 test.describe('クーポン機能 E2Eシナリオ', () => {
 
@@ -25,7 +26,7 @@ test.describe('クーポン機能 E2Eシナリオ', () => {
             { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
         ]);
-        await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+        await gotoDashboard(page);
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
