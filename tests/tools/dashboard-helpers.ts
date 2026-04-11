@@ -562,7 +562,8 @@ export async function setupAppWithVersions(page: Page, { appName, appKey, versio
     await selectBtn.evaluate((el: HTMLElement) => el.click()).catch(() => selectBtn.click({ force: true }));
 
     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
-
+    await page.waitForTimeout(1000); // バージョンの表示が安定するまで少し待つ
+    
     const additionalVersions = versions.filter(v => v !== '1.0.0');
     for (const version of additionalVersions) {
         await addVersion(page, version);
