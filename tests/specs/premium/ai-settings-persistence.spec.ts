@@ -58,8 +58,8 @@ test.describe('AI設定の永続化テスト', () => {
             domain = '.' + domain;
         }
         // 先にクッキーを削除
-      await context.clearCookies();
-      await context.addCookies([
+        await context.clearCookies();
+        await context.addCookies([
             { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
@@ -144,6 +144,10 @@ test.describe('AI設定の永続化テスト', () => {
             } else {
                 await expect(settingWindow.locator('#use-onsenui-check')).not.toBeChecked();
             }
+
+            // モーダルを閉じてクリーンアップを安定させる
+            await settingWindow.locator('button', { hasText: '設定を適用して戻る' }).click();
+            await expect(settingWindow).toBeHidden();
         });
     });
 
@@ -171,7 +175,7 @@ test.describe('AI設定の永続化テスト', () => {
             await select.selectOption({ value: targetModel });
             await modal.locator('#max-history-input').fill(targetHistory);
             await modal.locator('#max-recovery-input').fill(targetRecovery);
-            await modal.getByRole('button', { name: '設定を保存' }).click();
+            await modal.locator('button', { hasText: '設定を保存' }).click();
 
             const modeBtn = agentWindow.locator('.mode-btn').filter({ hasText: targetMode });
             await modeBtn.click();
@@ -199,6 +203,10 @@ test.describe('AI設定の永続化テスト', () => {
             await expect(modal.locator('#agent-model-select')).toHaveValue(targetModel);
             await expect(modal.locator('#max-history-input')).toHaveValue(targetHistory);
             await expect(modal.locator('#max-recovery-input')).toHaveValue(targetRecovery);
+
+            // モーダルを閉じてクリーンアップを安定させる
+            await modal.locator('button', { hasText: 'キャンセル' }).click();
+            await expect(modal).toBeHidden();
         });
     });
 });

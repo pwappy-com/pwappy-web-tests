@@ -132,7 +132,8 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await expect(settingsModal.locator('#max-history-input')).toHaveValue('20');
                 await expect(settingsModal.locator('#max-recovery-input')).toHaveValue('3');
 
-                await settingsModal.getByRole('button', { name: 'キャンセル' }).evaluate((el: HTMLElement) => el.click());
+                // getByRoleでのタイムアウトを防ぐため、ロケータを簡素化して確実なクリックを行う
+                await settingsModal.locator('button', { hasText: 'キャンセル' }).evaluate((el: HTMLElement) => el.click());
             });
         } finally {
             await editorPage!.close();
@@ -277,7 +278,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
                 console.log('[DEBUG] snapshot: Clicking create button in modal...');
                 await editorPage.waitForTimeout(500);
-                await modal.getByRole('button', { name: '作成' }).evaluate((el: HTMLElement) => el.click());
+                await modal.locator('button', { hasText: '作成' }).evaluate((el: HTMLElement) => el.click());
 
                 const snapshotItem = agentWindow.locator(`.snapshot-body:has-text("${snapshotName}")`);
                 await expect(snapshotItem).toBeVisible({ timeout: 30000 });
