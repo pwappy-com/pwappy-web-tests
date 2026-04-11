@@ -46,7 +46,9 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
         if (domain !== 'localhost') {
             domain = '.' + domain;
         }
-        await context.addCookies([
+        // 先にクッキーを削除
+      await context.clearCookies();
+      await context.addCookies([
             { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
