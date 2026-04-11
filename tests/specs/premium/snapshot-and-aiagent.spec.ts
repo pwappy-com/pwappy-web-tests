@@ -47,13 +47,13 @@ test.describe('AIエージェントとスナップショット機能の統合テ
      */
     test.beforeEach(async ({ page, context }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
-        var domain: string = testUrl.hostname;
+        var domain = testUrl.hostname;
         if (domain !== 'localhost') {
             domain = '.' + domain;
         }
         // 先にクッキーを削除
-      await context.clearCookies();
-      await context.addCookies([
+        await context.clearCookies();
+        await context.addCookies([
             { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
@@ -108,13 +108,13 @@ test.describe('AIエージェントとスナップショット機能の統合テ
             await test.step('3. AIエージェントボタンが表示され、ウィンドウが開くことを確認', async () => {
                 console.log('[DEBUG] Case 1: Opening AI Agent window...');
                 await expect(async () => {
-                    await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
+                    await editorPage.locator('#fab-bottom-menu-box').evaluate((el: HTMLElement) => el.click());
                     const bottomMenu = editorPage.locator('#platformBottomMenu');
                     await expect(bottomMenu).toBeVisible({ timeout: 2000 });
 
                     const agentButton = bottomMenu.getByText('AIエージェント');
                     await expect(agentButton).toBeVisible({ timeout: 2000 });
-                    await agentButton.click({ force: true });
+                    await agentButton.evaluate((el: HTMLElement) => el.click());
 
                     const agentWindow = editorPage.locator('agent-chat-window');
                     await expect(agentWindow).toBeVisible({ timeout: 2000 });
@@ -123,7 +123,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
             await test.step('4. モデル設定モーダル内のデフォルト値を確認', async () => {
                 const agentWindow = editorPage.locator('agent-chat-window');
-                await agentWindow.locator('.settings-btn').click();
+                await agentWindow.locator('.settings-btn').evaluate((el: HTMLElement) => el.click());
 
                 const settingsModal = agentWindow.locator('.modal-dialog');
                 await expect(settingsModal).toBeVisible();
@@ -132,7 +132,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await expect(settingsModal.locator('#max-history-input')).toHaveValue('20');
                 await expect(settingsModal.locator('#max-recovery-input')).toHaveValue('3');
 
-                await settingsModal.getByRole('button', { name: 'キャンセル' }).click();
+                await settingsModal.getByRole('button', { name: 'キャンセル' }).evaluate((el: HTMLElement) => el.click());
             });
         } finally {
             await editorPage!.close();
@@ -163,13 +163,13 @@ test.describe('AIエージェントとスナップショット機能の統合テ
             await test.step('3. メニューを開き、AIエージェントボタンが表示されることを確認', async () => {
                 console.log('[DEBUG] Case 2: Opening AI Agent window...');
                 await expect(async () => {
-                    await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
+                    await editorPage.locator('#fab-bottom-menu-box').evaluate((el: HTMLElement) => el.click());
                     const bottomMenu = editorPage.locator('#platformBottomMenu');
                     await expect(bottomMenu).toBeVisible({ timeout: 2000 });
 
                     const agentButton = bottomMenu.getByText('AIエージェント');
                     await expect(agentButton).toBeVisible({ timeout: 2000 });
-                    await agentButton.click({ force: true });
+                    await agentButton.evaluate((el: HTMLElement) => el.click());
 
                     const agentWindow = editorPage.locator('agent-chat-window');
                     await expect(agentWindow).toBeVisible({ timeout: 2000 });
@@ -202,7 +202,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
             await test.step('3. メニューを開き、AIエージェントボタンが非表示であることを確認', async () => {
                 console.log('[DEBUG] Case 3: Checking AI Agent button is hidden...');
                 await expect(async () => {
-                    await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
+                    await editorPage.locator('#fab-bottom-menu-box').evaluate((el: HTMLElement) => el.click());
                     const bottomMenu = editorPage.locator('#platformBottomMenu');
                     await expect(bottomMenu).toBeVisible({ timeout: 2000 });
 
@@ -258,32 +258,32 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                     const bottomMenu = editorPage.locator('#platformBottomMenu');
                     // メニューが開いていなければ開く
                     if (!(await bottomMenu.isVisible().catch(() => false))) {
-                        await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
+                        await editorPage.locator('#fab-bottom-menu-box').evaluate((el: HTMLElement) => el.click());
                         await expect(bottomMenu).toBeVisible({ timeout: 2000 });
                     }
 
-                    await bottomMenu.getByText('AIエージェント').click({ force: true });
+                    await bottomMenu.getByText('AIエージェント').evaluate((el: HTMLElement) => el.click());
                     await expect(agentWindow).toBeVisible({ timeout: 2000 });
                 }).toPass({ timeout: 15000, intervals: [1000] });
 
                 const agentWindow = editorPage.locator('agent-chat-window');
 
-                await agentWindow.locator('button[title="添付"]').click({ force: true });
-                await agentWindow.locator('.attachment-menu button', { hasText: 'スナップショット保存' }).click({ force: true });
+                await agentWindow.locator('button[title="添付"]').evaluate((el: HTMLElement) => el.click());
+                await agentWindow.locator('.attachment-menu button', { hasText: 'スナップショット保存' }).evaluate((el: HTMLElement) => el.click());
 
                 const modal = agentWindow.locator('.modal-dialog');
                 await expect(modal).toBeVisible();
                 await modal.locator('#snapshot-name').fill(snapshotName);
 
-                // 安定するまで少し待ち、force: true でクリック（アニメーション対策）
                 console.log('[DEBUG] snapshot: Clicking create button in modal...');
                 await editorPage.waitForTimeout(500);
-                await modal.getByRole('button', { name: '作成' }).click({ force: true });
+                await modal.getByRole('button', { name: '作成' }).evaluate((el: HTMLElement) => el.click());
 
                 const snapshotItem = agentWindow.locator(`.snapshot-body:has-text("${snapshotName}")`);
                 await expect(snapshotItem).toBeVisible({ timeout: 30000 });
 
-                await agentWindow.locator('.close-btn').click({ force: true });
+                await agentWindow.locator('.close-btn').evaluate((el: HTMLElement) => el.click());
+                await expect(agentWindow).toBeHidden({ timeout: 5000 });
             });
 
             await test.step('4. 破壊的な変更を加える（要素の削除）', async () => {
@@ -313,29 +313,48 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
                     const bottomMenu = editorPage.locator('#platformBottomMenu');
                     if (!(await bottomMenu.isVisible().catch(() => false))) {
-                        await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
+                        await editorPage.locator('#fab-bottom-menu-box').evaluate((el: HTMLElement) => el.click());
                         await expect(bottomMenu).toBeVisible({ timeout: 2000 });
                     }
 
-                    await bottomMenu.getByText('スナップショット管理').click({ force: true });
+                    await bottomMenu.getByText('スナップショット管理').evaluate((el: HTMLElement) => el.click());
                     await expect(managerContainer).toBeVisible({ timeout: 2000 });
                 }).toPass({ timeout: 15000, intervals: [1000] });
 
                 const manager = editorPage.locator('snapshot-manager');
                 const item = manager.locator('.snapshot-item', { hasText: snapshotName });
-                await expect(item).toBeVisible();
+                await expect(item).toBeVisible({ timeout: 10000 });
 
-                editorPage.once('dialog', async confirmDialog => {
-                    editorPage.once('dialog', async alertDialog => {
-                        await alertDialog.dismiss();
-                    });
-                    await confirmDialog.accept();
-                });
+                let alertDismissed = false;
+                const dialogHandler = async (dialog: any) => {
+                    const msg = dialog.message();
+                    console.log(`[DEBUG] dialog event: ${dialog.type()} - ${msg}`);
+                    if (msg.includes('現在の編集内容は破棄され')) {
+                        await dialog.accept(); // confirm を承認
+                    } else if (msg.includes('復元しました')) {
+                        alertDismissed = true;
+                        await dialog.accept(); // alert を閉じる
+                    } else {
+                        await dialog.accept();
+                    }
+                };
 
-                console.log('[DEBUG] snapshot: Clicking restore button...');
-                await item.getByRole('button', { name: '復元' }).click({ force: true });
+                editorPage.on('dialog', dialogHandler);
 
-                await expect(manager).toBeHidden({ timeout: 15000 });
+                try {
+                    console.log('[DEBUG] snapshot: Clicking restore button...');
+                    const restoreBtn = item.getByRole('button', { name: '復元' });
+                    // インターセプトを防ぐために evaluate を使用
+                    await restoreBtn.evaluate((node: HTMLElement) => node.click());
+
+                    await expect(manager.locator('.container')).toBeHidden({ timeout: 15000 });
+
+                    // アラートが表示・処理されたことを確認
+                    await expect.poll(() => alertDismissed, { timeout: 10000 }).toBeTruthy();
+
+                } finally {
+                    editorPage.off('dialog', dialogHandler);
+                }
             });
 
             await test.step('6. 削除した要素が復活していることを確認', async () => {
