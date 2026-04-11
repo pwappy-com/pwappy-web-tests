@@ -53,7 +53,7 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
         await appModal.getByRole('button', { name: '保存' }).click({ force: true, timeout: 2000 });
     }).toPass({ timeout: 15000, intervals: [1000] });
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
     await expect(appModal).toBeHidden();
 }
@@ -122,7 +122,7 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
             return confirmBtn.click({ force: true });
         });
 
-        await page.getByText('処理中...').waitFor({ state: 'hidden' });
+        await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
         await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
 
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -178,7 +178,7 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
         });
     }).toPass({ timeout: 15000, intervals: [1000] });
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
 
     const versionRow = page.locator('.version-list tbody tr', { hasText: version }).first();
@@ -223,7 +223,7 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     await tempHelper.handleSnapshotRestoreDialog();
 
     await expect(editorPage.locator('ios-component')).toBeVisible();
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     return editorPage;
 }
 
@@ -251,7 +251,7 @@ export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish'
         await expect(tabLocator).toHaveClass(/active/, { timeout: 3000 });
     }).toPass({ timeout: 15000, intervals: [1000] });
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.locator(`dashboard-main-content > dashboard-loading-overlay`)).toBeHidden();
 }
 
@@ -300,7 +300,7 @@ async function selectAppInPublishTab(page: Page, appName: string): Promise<void>
 
         await expect(page.getByRole('heading', { name: `公開設定: ${appName}` })).toBeVisible({ timeout: 5000 });
     }).toPass({ timeout: 20000, intervals: [1000] });
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 }
 
 /**
@@ -318,13 +318,13 @@ export async function publishVersion(page: Page, appName: string, version: strin
     const prepBtn = versionRow.getByRole('button', { name: '公開準備' });
     await prepBtn.evaluate((el: HTMLElement) => el.click()).catch(() => prepBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     let confirmDialog = page.locator('message-box#publish-action-confirm');
     await expect(confirmDialog).toBeVisible();
 
     const applyBtn = confirmDialog.getByRole('button', { name: '申請する' });
     await applyBtn.evaluate((el: HTMLElement) => el.click()).catch(() => applyBtn.click({ force: true }));
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
     // 公開準備完了まで待機
     await waitForVersionStatus(page, appName, version, '公開準備完了');
@@ -334,13 +334,13 @@ export async function publishVersion(page: Page, appName: string, version: strin
     const pubBtn = versionRow.getByRole('button', { name: '公開', exact: true });
     await pubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => pubBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     confirmDialog = page.locator('message-box#publish-action-confirm');
     await expect(confirmDialog).toBeVisible();
 
     const finalPubBtn = confirmDialog.getByRole('button', { name: '公開する' });
     await finalPubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => finalPubBtn.click({ force: true }));
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 }
 
 /**
@@ -357,13 +357,13 @@ export async function unpublishVersion(page: Page, appName: string, version: str
     const unpubBtn = versionRow.getByRole('button', { name: '非公開', exact: true });
     await unpubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => unpubBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     const confirmDialog = page.locator('message-box#publish-action-confirm');
     await expect(confirmDialog).toBeVisible();
 
     const finalUnpubBtn = confirmDialog.getByRole('button', { name: '非公開にする' });
     await finalUnpubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => finalUnpubBtn.click({ force: true }));
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 }
 
 /**
@@ -380,7 +380,7 @@ export async function startPublishPreparation(page: Page, appName: string, versi
     const prepBtn = versionRow.getByRole('button', { name: '公開準備' });
     await prepBtn.evaluate((el: HTMLElement) => el.click()).catch(() => prepBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
     const confirmDialog = page.locator('message-box#publish-action-confirm');
     await expect(confirmDialog).toBeVisible();
@@ -388,7 +388,7 @@ export async function startPublishPreparation(page: Page, appName: string, versi
     const applyBtn = confirmDialog.getByRole('button', { name: '申請する' });
     await applyBtn.evaluate((el: HTMLElement) => el.click()).catch(() => applyBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
 }
 
@@ -410,7 +410,7 @@ export async function completePublication(page: Page, appName: string, version: 
     const pubBtn = readyVersionRow.getByRole('button', { name: '公開', exact: true });
     await pubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => pubBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
     const publishConfirmDialog = page.locator('message-box#publish-action-confirm');
     await expect(publishConfirmDialog).toBeVisible();
@@ -418,7 +418,7 @@ export async function completePublication(page: Page, appName: string, version: 
     const confirmBtn = publishConfirmDialog.getByRole('button', { name: '公開する' });
     await confirmBtn.evaluate((el: HTMLElement) => el.click()).catch(() => confirmBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
 }
 
@@ -453,7 +453,7 @@ export async function downloadVersion(page: Page, { appName, appKey, version }: 
     const dlBtn = versionRow.getByRole('button', { name: 'ＤＬ' });
     await dlBtn.evaluate((el: HTMLElement) => el.click()).catch(() => dlBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
     const confirmDialog = page.locator('message-box#download-confirm');
     await expect(confirmDialog).toBeVisible();
@@ -464,7 +464,7 @@ export async function downloadVersion(page: Page, { appName, appKey, version }: 
         confirmDlBtn.evaluate((el: HTMLElement) => el.click()).catch(() => confirmDlBtn.click({ force: true })),
     ]);
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
     // ダウンロードされたファイル名を検証
     const expectedVersionInFilename = version.replace(/\./g, '_');
@@ -534,7 +534,7 @@ export async function addVersion(page: Page, versionName: string): Promise<void>
         await saveBtn.evaluate((el: HTMLElement) => el.click()).catch(() => saveBtn.click({ force: true, timeout: 2000 }));
     }).toPass({ timeout: 15000, intervals: [1000] });
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
     await expect(modal).toBeHidden();
 }
@@ -563,7 +563,7 @@ export async function setupAppWithVersions(page: Page, { appName, appKey, versio
 
     await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
     await page.waitForTimeout(1000); // バージョンの表示が安定するまで少し待つ
-    
+
     const additionalVersions = versions.filter(v => v !== '1.0.0');
     for (const version of additionalVersions) {
         await addVersion(page, version);
@@ -585,7 +585,7 @@ export async function editVersion(page: Page, oldVersion: string, newVersion: st
     const editBtn = versionRow.getByRole('button', { name: '編集' });
     await editBtn.evaluate((el: HTMLElement) => el.click()).catch(() => editBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
 
     const modal = page.locator('dashboard-modal-window#versionModal');
@@ -595,7 +595,7 @@ export async function editVersion(page: Page, oldVersion: string, newVersion: st
     const saveBtn = modal.getByRole('button', { name: '保存' });
     await saveBtn.evaluate((el: HTMLElement) => el.click()).catch(() => saveBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
 }
 
@@ -605,7 +605,7 @@ export async function editVersion(page: Page, oldVersion: string, newVersion: st
  * @param sourceVersion 複製元のバージョン名
  */
 export async function duplicateVersion(page: Page, sourceVersion: string): Promise<void> {
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
 
     await expect(async () => {
@@ -622,7 +622,7 @@ export async function duplicateVersion(page: Page, sourceVersion: string): Promi
         intervals: [1000]
     });
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
 }
 
@@ -636,7 +636,7 @@ export async function deleteVersion(page: Page, versionToDelete: string): Promis
     const delBtn = versionRow.getByRole('button', { name: '削除' });
     await delBtn.evaluate((el: HTMLElement) => el.click()).catch(() => delBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
     const confirmDialog = page.locator('message-box#delete-confirm');
     await expect(confirmDialog).toBeVisible();
@@ -644,7 +644,7 @@ export async function deleteVersion(page: Page, versionToDelete: string): Promis
     const confirmDelBtn = confirmDialog.getByRole('button', { name: '削除する' });
     await confirmDelBtn.evaluate((el: HTMLElement) => el.click()).catch(() => confirmDelBtn.click({ force: true }));
 
-    await page.getByText('処理中...').waitFor({ state: 'hidden' });
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
 }
 

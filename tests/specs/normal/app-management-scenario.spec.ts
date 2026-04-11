@@ -119,7 +119,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await modal.getByRole('button', { name: '保存' }).click();
 
             // 編集が反映され、一覧の表示が更新されることを確認します。
-            await page.getByText('処理中...').waitFor({ state: 'hidden' });
+            await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
             await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
 
             // App Keyで可視性を確認 (アプリが存在すること)
