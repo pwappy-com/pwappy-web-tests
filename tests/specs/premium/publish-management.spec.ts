@@ -23,72 +23,6 @@ test.describe.configure({ mode: 'serial' });
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
-/**
- * AIコーディングを実行し、指定されたPPが消費されることを検証するヘルパー関数
- * @param page - ダッシュボードのPageオブジェクト
- * @param context - BrowserContextオブジェクト
- * @param isMobile - モバイルフラグ
- * @param appName - 対象のアプリ名
- * @param version - 対象のバージョン
- * @param options - テストオプション
- * @param options.prompt - AIに送るプロンプト
- * @param options.model - 使用するAIモデル
- * @param options.expectedPpConsumption - 期待するPP消費量（数値、または比較関数）
- * @param options.assertionType - 'exact' (完全一致) または 'greaterThan' (より大きい)
- */
-async function testAiCodingPpConsumption(
-    { page, context, isMobile, appName, version }: { page: any, context: any, isMobile: boolean, appName: string, version: string },
-    options: {
-        prompt: string;
-        model: string;
-        expectedPpConsumption: number;
-        assertionType: 'exact' | 'greaterThan';
-    }
-) {
-    // 1. AI実行前のPPを取得
-    const initialPoints = await getCurrentPoints(page);
-    console.log(`[${options.model}] 初期PP: ${initialPoints}`);
-
-    // 2. エディタを開いてヘルパーを準備
-    const editorPage = await openEditor(page, context, appName, version);
-    const editorHelper = new EditorHelper(editorPage, isMobile);
-
-    // 3. スクリプトタブに移動
-    await editorHelper.openMoveingHandle("right");
-    const scriptContainer = editorPage.locator('script-container');
-    await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
-    await editorHelper.addNewScript('aiTestScript');
-    await editorHelper.openScriptForEditing('aiTestScript');
-
-    // 4. AIでコードを生成・置換
-    await editorHelper.generateCodeWithAi(options.prompt, { model: options.model });
-
-    // 5. エディタページを「メニュー > 保存せずに閉じる」で正常終了させる
-    // これにより自動保存との競合を防ぎ、テストを安定させます
-    await editorPage.locator('platform-bottom-menu').click();
-    const saveAndCloseButton = editorPage.locator('.menu-item', { hasText: '保存せずに閉じる' });
-
-    // クリックと同時にページが閉じるのを待機
-    await Promise.all([
-        editorPage.waitForEvent('close'),
-        saveAndCloseButton.click()
-    ]);
-
-    // 6. ダッシュボードに戻り、PPの消費を確認
-    await page.reload({ waitUntil: 'networkidle' });
-    const finalPoints = await getCurrentPoints(page);
-    console.log(`[${options.model}] 最終PP: ${finalPoints}`);
-    const consumedPoints = initialPoints - finalPoints;
-    console.log(`[${options.model}] 消費PP: ${consumedPoints}`);
-
-    // 7. 検証
-    if (options.assertionType === 'exact') {
-        expect(consumedPoints).toBe(options.expectedPpConsumption);
-    } else if (options.assertionType === 'greaterThan') {
-        expect(consumedPoints).toBeGreaterThan(options.expectedPpConsumption);
-    }
-}
-
 // --- テストシナリオ ---
 test.describe('公開管理 E2Eシナリオ', () => {
 
@@ -99,8 +33,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
             domain = '.' + domain;
         }
         // 先にクッキーを削除
-      await context.clearCookies();
-      await context.addCookies([
+        await context.clearCookies();
+        await context.addCookies([
             { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
@@ -143,7 +77,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
             const currentPoints = await getCurrentPoints(page);
             console.log(`公開審査を開始したあとに取得したポイント: ${currentPoints}`);
 
-            // 【重要】仕様変更：OpenAI Moderation切り替えにより、APIキー有無に関わらず一律20PP消費
             const pointsDiff = initialPoints - currentPoints;
             expect(pointsDiff).toBe(20);
 
@@ -256,55 +189,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
     });
 
-    // test('AIコーディングの使用ポイントをテストする', async ({ page, context, isMobile }) => {
-    //     const workerIndex = test.info().workerIndex;
-    //     const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-    //     const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-    //     const appName = (`AIコードテスト-${uniqueId}`).slice(0, 30);
-    //     const appKey = (`ai-code-test-${uniqueId}`).slice(0, 30);
-    //     const version = '1.0.0';
-    //     const apiKey = process.env.TEST_GEMINI_API_KEY;
-    //     if (!apiKey) {
-    //         throw new Error('環境変数 TEST_GEMINI_API_KEY が設定されていません。');
-    //     }
-
-    //     await test.step('セットアップ: アプリ作成とAI有効化', async () => {
-    //         await createApp(page, appName, appKey);
-    //         await setAiCoding(page, true);
-    //     });
-
-    //     const testContext = { page, context, isMobile, appName, version };
-
-    //     // --- シナリオ1: APIキーなし ---
-    //     await test.step('テスト: APIキーなしでPPが多く消費されることを確認', async () => {
-    //         await deleteGeminiApiKey(page);
-    //         await testAiCodingPpConsumption(testContext, {
-    //             prompt: '// canvasを作って、ひらがな、カタカナ、英数字をランダムで上下左右から文字が現れるアニメーションを表示するコードを実装してください。文字は残像を残してアニメーションをします。また、10秒毎に文字の大きさがランダムで切り替わり、豪華なパーティクルもつけてください。',
-    //             model: 'gemini-2.5-flash-lite',
-    //             expectedPpConsumption: 1, // 1より大きいことを確認
-    //             assertionType: 'greaterThan'
-    //         });
-    //         // ページ終了処理はヘルパー関数内の「保存して閉じる」で行われます
-    //     });
-
-    //     // --- シナリオ2: APIキーあり ---
-    //     await test.step('テスト: APIキーありでPPが1消費されることを確認', async () => {
-    //         await setGeminiApiKey(page, apiKey);
-    //         await testAiCodingPpConsumption(testContext, {
-    //             prompt: '// canvasを作って、ひらがな、カタカナ、英数字をランダムで上下左右から文字が現れるアニメーションを表示するコードを実装してください。文字は残像を残してアニメーションをします。また、10秒毎に文字の大きさがランダムで切り替わり、豪華なパーティクルもつけてください。',
-    //             model: 'gemini-2.5-flash-lite',
-    //             expectedPpConsumption: 1, // 1と完全一致することを確認
-    //             assertionType: 'exact'
-    //         });
-    //     });
-
-    //     await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
-    //         await deleteApp(page, appKey);
-    //         await expectAppVisibility(page, appKey, false);
-    //     });
-    // });
-
-    // Geminiを使わないモック版のテスト
     test('AIコーディングをテストする（モック実行）', async ({ page, context, isMobile }) => {
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
@@ -409,13 +293,11 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await editorHelper.closeMoveingHandle();
 
             // エディタを閉じる
-            await editorPage.locator('platform-bottom-menu').click();
+            await editorPage.locator('platform-bottom-menu').evaluate((el: HTMLElement) => el.click());
             await Promise.all([
                 editorPage.waitForEvent('close'),
-                editorPage.locator('.menu-item', { hasText: '保存せずに閉じる' }).click()
+                editorPage.locator('.menu-item', { hasText: '保存せずに閉じる' }).evaluate((el: HTMLElement) => el.click())
             ]);
-
-            //モックなのでPP消費はなし
         });
 
         await test.step('クリーンアップ', async () => {
