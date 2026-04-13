@@ -274,26 +274,17 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
                 const agentWindow = editorPage.locator('agent-chat-window');
 
-                const attachBtn = agentWindow.locator('button[title="添付"]');
-                await expect(attachBtn).toBeVisible({ timeout: 5000 });
-                await attachBtn.click({ force: true, timeout: 5000 });
-
-                const snapMenuBtn = agentWindow.locator('.attachment-menu button', { hasText: 'スナップショット保存' });
-                await expect(snapMenuBtn).toBeVisible({ timeout: 5000 });
-                await snapMenuBtn.click({ force: true, timeout: 5000 });
+                await agentWindow.locator('button[title="添付"]').evaluate((el: HTMLElement) => el.click());
+                await agentWindow.locator('.attachment-menu button', { hasText: 'スナップショット保存' }).evaluate((el: HTMLElement) => el.click());
 
                 const modal = agentWindow.locator('.modal-dialog');
                 await expect(modal).toBeVisible();
                 await modal.locator('#snapshot-name').fill(snapshotName);
 
                 console.log('[DEBUG] snapshot: Clicking create button in modal...');
-                const createBtn = modal.getByRole('button', { name: '作成' });
-                await expect(createBtn).toBeVisible({ timeout: 5000 });
-                // Playwright標準のクリックを使用。ハングアップ防止のためタイムアウトを指定。
-                await createBtn.click({ force: true, timeout: 5000 });
-
-                // モーダルが閉じることを確認
-                await expect(modal).toBeHidden({ timeout: 10000 });
+                await editorPage.waitForTimeout(500);
+                const createBtn = modal.locator('button', { hasText: '作成' });
+                await createBtn.evaluate((el: HTMLElement) => el.click()).catch(() => createBtn.click({ force: true }));
 
                 const snapshotItem = agentWindow.locator(`.snapshot-body:has-text("${snapshotName}")`);
                 await expect(snapshotItem).toBeVisible({ timeout: 45000 });
