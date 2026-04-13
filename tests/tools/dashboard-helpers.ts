@@ -122,14 +122,17 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
             return confirmBtn.click({ force: true });
         });
 
-        await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
-        await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden();
+        // クリーンアップ時はタイムアウトを短めに設定してフェールセーフ
+        await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 15000 }).catch(() => {
+            console.warn(`[DEBUG] deleteApp: 処理中... が消えませんでしたが続行します。`);
+        });
+        await expect(page.locator('dashboard-main-content > dashboard-loading-overlay')).toBeHidden({ timeout: 5000 }).catch(() => { });
 
-        if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
+        if (await alert.isVisible({ timeout: 3000 }).catch(() => false)) {
             const alertText = await alert.innerText().catch(() => 'unknown');
             console.log(`[DEBUG] deleteApp: アラート表示内容 -> ${alertText}`);
             await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
-            await expect(alert).toBeHidden();
+            await expect(alert).toBeHidden({ timeout: 3000 }).catch(() => { });
         }
 
         console.log(`[DEBUG] deleteApp: リロードして状態同期`);

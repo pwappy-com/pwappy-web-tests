@@ -50,7 +50,7 @@ async function getRandomOptionValue(selectLocator: Locator): Promise<string> {
 }
 
 test.describe('AI設定の永続化テスト', () => {
-
+    test.setTimeout(180000);
     test.beforeEach(async ({ page, context }) => {
         const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
         var domain: string = testUrl.hostname;

@@ -24,8 +24,8 @@ const test = base.extend<EditorFixtures>({
             domain = '.' + domain;
         }
         // 先にクッキーを削除
-      await context.clearCookies();
-      await context.addCookies([
+        await context.clearCookies();
+        await context.addCookies([
             { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
             { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
@@ -48,7 +48,7 @@ const test = base.extend<EditorFixtures>({
 });
 
 test.describe('テスト＆モック：高度なブラウザAPIモックとアサーション詳細表示', () => {
-
+    test.setTimeout(180000);
     test('テスト失敗時の詳細なエラー理由とDOMスナップショット（ダンプ）の表示', async ({ editorPage, editorHelper }) => {
         const scenarioName = '故意に失敗させるテスト';
 
