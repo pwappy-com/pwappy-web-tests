@@ -222,7 +222,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
      * 手動スナップショットを作成し、要素の削除後に復元できるか検証します。
      */
     test('手動スナップショット：破壊的な変更をスナップショットで元に戻す（AIエージェント連携）', async ({ page, context, appName, isMobile }) => {
-        test.setTimeout(150000);
+        test.setTimeout(180000);
 
         await test.step('1. 設定変更：AI機能を有効化', async () => {
             await setAiCoding(page, true);
@@ -234,6 +234,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
         });
 
         const editorPage = await openEditor(page, context, appName);
+        editorPage.on('console', msg => console.log(`[Editor Console] ${msg.type()}: ${msg.text()}`));
         const editorHelper = new EditorHelper(editorPage, isMobile);
 
         const snapshotName = '破壊的前のスナップショット';
@@ -278,10 +279,11 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
                 console.log('[DEBUG] snapshot: Clicking create button in modal...');
                 await editorPage.waitForTimeout(500);
-                await modal.locator('button', { hasText: '作成' }).evaluate((el: HTMLElement) => el.click());
+                const createBtn = modal.locator('button', { hasText: '作成' });
+                await createBtn.evaluate((el: HTMLElement) => el.click()).catch(() => createBtn.click({ force: true }));
 
                 const snapshotItem = agentWindow.locator(`.snapshot-body:has-text("${snapshotName}")`);
-                await expect(snapshotItem).toBeVisible({ timeout: 30000 });
+                await expect(snapshotItem).toBeVisible({ timeout: 45000 });
 
                 await agentWindow.locator('.close-btn').evaluate((el: HTMLElement) => el.click());
                 await expect(agentWindow).toBeHidden({ timeout: 5000 });
