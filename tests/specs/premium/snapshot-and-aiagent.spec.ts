@@ -235,6 +235,10 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
         const editorPage = await openEditor(page, context, appName);
         editorPage.on('console', msg => console.log(`[Editor Console] ${msg.type()}: ${msg.text()}`));
+
+        // CI環境等での画像生成フリーズを防ぐため、アプリ側にフラグを立てる
+        await editorPage.evaluate(() => { (window as any).__DISABLE_SCREENSHOT__ = true; });
+
         const editorHelper = new EditorHelper(editorPage, isMobile);
 
         const snapshotName = '破壊的前のスナップショット';
