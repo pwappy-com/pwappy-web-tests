@@ -272,9 +272,12 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                     await expect(agentWindow).toBeVisible({ timeout: 2000 });
                 }).toPass({ timeout: 15000, intervals: [1000] });
 
+                await editorPage.waitForTimeout(1000); // ウィンドウが安定するのを待つ
+                
                 const agentWindow = editorPage.locator('agent-chat-window');
 
                 await agentWindow.locator('button[title="添付"]').evaluate((el: HTMLElement) => el.click());
+                await editorPage.waitForTimeout(500); // メニューが開くのを待つ
                 await agentWindow.locator('.attachment-menu button', { hasText: 'スナップショット保存' }).evaluate((el: HTMLElement) => el.click());
 
                 await editorPage.waitForTimeout(1000); // モーダルが開くのを待つ
