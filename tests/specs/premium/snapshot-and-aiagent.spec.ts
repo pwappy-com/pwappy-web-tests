@@ -273,7 +273,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 }).toPass({ timeout: 15000, intervals: [1000] });
 
                 await editorPage.waitForTimeout(1000); // ウィンドウが安定するのを待つ
-                
+
                 const agentWindow = editorPage.locator('agent-chat-window');
 
                 await agentWindow.locator('button[title="添付"]').evaluate((el: HTMLElement) => el.click());
@@ -382,6 +382,73 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 console.log('[DEBUG] snapshot-and-aiagent: bringToFront completed.');
             } catch (e) {
                 console.error('[DEBUG ERROR] snapshot-and-aiagent: Error in finally block:', e);
+            }
+        }
+    });
+
+
+    /**
+     * ケース5: スナップショット保存ダイアログのキャンセルテスト
+     * スナップショット保存ダイアログを開き、キャンセルボタンで閉じられるか検証します。
+     */
+    test('AIエージェント画面からのスナップショット保存をキャンセルできることを確認する', async ({ page, context, appName, isMobile }) => {
+        test.setTimeout(120000);
+
+        await test.step('1. 設定変更：AI機能を有効化', async () => {
+            await setAiCoding(page, true);
+            await page.reload({ waitUntil: 'domcontentloaded' });
+        });
+
+        await test.step('2. アプリ作成とエディタ起動', async () => {
+            await createApp(page, appName, appKey);
+        });
+
+        const editorPage = await openEditor(page, context, appName);
+        editorPage.on('console', msg => console.log(`[Editor Console] ${msg.type()}: ${msg.text()}`));
+
+        try {
+            await test.step('3. AIエージェントウィンドウを開く', async () => {
+                console.log('[DEBUG] snapshot-cancel: Opening AI Agent window...');
+                await expect(async () => {
+                    const agentWindow = editorPage.locator('agent-chat-window');
+                    if (await agentWindow.isVisible().catch(() => false)) return;
+
+                    const bottomMenu = editorPage.locator('#platformBottomMenu');
+                    if (!(await bottomMenu.isVisible().catch(() => false))) {
+                        await editorPage.locator('#fab-bottom-menu-box').evaluate((el: HTMLElement) => el.click());
+                        await expect(bottomMenu).toBeVisible({ timeout: 2000 });
+                    }
+
+                    await bottomMenu.getByText('AIエージェント').evaluate((el: HTMLElement) => el.click());
+                    await expect(agentWindow).toBeVisible({ timeout: 2000 });
+                }).toPass({ timeout: 15000, intervals: [1000] });
+            });
+
+            await test.step('4. スナップショット保存ダイアログを開き、キャンセルする', async () => {
+                const agentWindow = editorPage.locator('agent-chat-window');
+
+                await agentWindow.locator('button[title="添付"]').evaluate((el: HTMLElement) => el.click());
+                await editorPage.waitForTimeout(500); // メニューが開くのを待つ
+                await agentWindow.locator('.attachment-menu button', { hasText: 'スナップショット保存' }).evaluate((el: HTMLElement) => el.click());
+
+                await editorPage.waitForTimeout(1000); // モーダルが開くのを待つ
+                const modal = agentWindow.locator('.modal-dialog');
+                await expect(modal).toBeVisible();
+
+                console.log('[DEBUG] snapshot-cancel: Clicking cancel button in modal...');
+                const cancelBtn = modal.locator('button', { hasText: 'キャンセル' });
+                await cancelBtn.evaluate((el: HTMLElement) => el.click()).catch(() => cancelBtn.click({ force: true }));
+
+                // モーダルが閉じたことを確認
+                await expect(modal).toBeHidden({ timeout: 5000 });
+            });
+        } finally {
+            console.log('[DEBUG] snapshot-cancel: finally block started. Closing editorPage...');
+            try {
+                await editorPage.close();
+                await page.bringToFront();
+            } catch (e) {
+                console.error('[DEBUG ERROR] snapshot-cancel: Error in finally block:', e);
             }
         }
     });
