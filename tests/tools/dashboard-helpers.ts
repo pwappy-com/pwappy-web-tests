@@ -115,6 +115,8 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
             await expect(confirmDialog).toBeVisible({ timeout: 5000 });
         }).toPass({ timeout: 20000, intervals: [1000] });
 
+        await page.waitForTimeout(1000); // 確認ダイアログが安定してから次の操作へ
+
         const confirmBtn = confirmDialog.getByRole('button', { name: '削除する' });
 
         console.log(`[DEBUG] deleteApp: 削除確認ダイアログの「削除する」をクリック`);
