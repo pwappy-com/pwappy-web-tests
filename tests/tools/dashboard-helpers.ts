@@ -98,6 +98,8 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
         console.log(`[DEBUG] deleteApp: アプリ行が見つかりません。既に削除済みの可能性があります。`);
     }
 
+    await page.waitForTimeout(1000); // UIが安定してから次の操作へ
+
     if (await appRow.isVisible()) {
         const confirmDialog = page.locator('message-box#delete-confirm');
 
@@ -106,6 +108,8 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
             if (await a.isVisible().catch(() => false)) {
                 await a.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
             }
+
+            await page.waitForTimeout(1000); // 確認ダイアログが安定してから次の操作へ
 
             const deleteBtn = appRow.getByRole('button', { name: '削除' });
             await deleteBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
