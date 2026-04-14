@@ -277,6 +277,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await agentWindow.locator('button[title="添付"]').evaluate((el: HTMLElement) => el.click());
                 await agentWindow.locator('.attachment-menu button', { hasText: 'スナップショット保存' }).evaluate((el: HTMLElement) => el.click());
 
+                await editorPage.waitForTimeout(1000); // モーダルが開くのを待つ
                 const modal = agentWindow.locator('.modal-dialog');
                 await expect(modal).toBeVisible();
                 await modal.locator('#snapshot-name').fill(snapshotName);
