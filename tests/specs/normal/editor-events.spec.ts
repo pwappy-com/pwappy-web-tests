@@ -41,18 +41,6 @@ const test = base.extend<EditorFixtures>({
 // --- テストスイート ---
 test.describe('エディタ内イベント＆スクリプト機能のテスト', () => {
     test.beforeEach(async ({ page, context, isMobile }) => {
-        const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
-        var domain: string = testUrl.hostname;
-        if (domain !== 'localhost') {
-            domain = '.' + domain;
-        }
-        // 先にクッキーを削除
-      await context.clearCookies();
-      await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
-            { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
-        ]);
         await gotoDashboard(page);
         await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });

@@ -18,20 +18,6 @@ const test = base.extend<EditorFixtures>({
         await use(`console-test-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
-        // --- ここでログインと遷移を行う ---
-        const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
-        var domain: string = testUrl.hostname;
-        if (domain !== 'localhost') {
-            domain = '.' + domain;
-        }
-        // 先にクッキーを削除
-      await context.clearCookies();
-      await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
-            { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
-        ]);
-
         // ダッシュボードへ移動
         await gotoDashboard(page);
 
@@ -61,20 +47,6 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
         if (browserName === 'chromium') {
             await context.grantPermissions(['clipboard-read', 'clipboard-write']);
         }
-
-        const testUrl = new URL(String(process.env.PWAPPY_TEST_BASE_URL));
-        var domain: string = testUrl.hostname;
-        if (domain !== 'localhost') {
-            domain = '.' + domain;
-        }
-        // 先にクッキーを削除
-      await context.clearCookies();
-      await context.addCookies([
-            { name: 'pwappy_auth', value: process.env.PWAPPY_TEST_AUTH!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
-            { name: 'pwappy_ident_key', value: process.env.PWAPPY_TEST_IDENT_KEY!, domain: domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
-            { name: 'pwappy_login', value: process.env.PWAPPY_LOGIN!, domain: domain, path: '/', secure: true, sameSite: 'Lax', expires: Math.floor(Date.now() / 1000) + 3600 },
-        ]);
-
         // 右側のサブウィンドウを開く
         await editorHelper.openMoveingHandle('right');
 
