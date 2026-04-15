@@ -351,8 +351,9 @@ export class EditorHelper {
 
         if (!await targetContainer.isVisible()) {
             await expect(async () => {
-                await handle.tap();
-                await handle.tap();
+                await handle.tap({ noWaitAfter: true });
+                await handle.tap({ noWaitAfter: true });
+                await this.page.waitForTimeout(500);
                 await expect(targetContainer).toBeVisible({ timeout: 1000 });
             }).toPass({
                 timeout: 10000
@@ -372,8 +373,9 @@ export class EditorHelper {
         if (await scriptContainer.isVisible()) {
             const handle = this.page.locator(`#rightMovingHandle`);
             await expect(async () => {
-                await handle.tap();
-                await handle.tap();
+                await handle.tap({ noWaitAfter: true });
+                await handle.tap({ noWaitAfter: true });
+                await this.page.waitForTimeout(500);
                 await expect(scriptContainer).toBeHidden({ timeout: 1000 });
             }).toPass({ timeout: 10000 });
         }
@@ -381,8 +383,9 @@ export class EditorHelper {
         if (await templateContainer.isVisible()) {
             const handle = this.page.locator(`#leftMovingHandle`);
             await expect(async () => {
-                await handle.tap();
-                await handle.tap();
+                await handle.tap({ noWaitAfter: true });
+                await handle.tap({ noWaitAfter: true });
+                await this.page.waitForTimeout(500);
                 await expect(templateContainer).toBeHidden({ timeout: 1000 });
             }).toPass({ timeout: 10000 });
         }
@@ -1516,10 +1519,14 @@ export class EditorHelper {
         // ハンドルが開いているとメニューボタンが隠れるため確実に閉じる
         await this.closeMoveingHandle();
 
+        await this.page.waitForTimeout(500);
+
         await this.page.locator('#fab-bottom-menu-box').click({ force: true });
         const platformBottomMenu = this.page.locator('#platformBottomMenu');
         await expect(platformBottomMenu).toBeVisible();
         await platformBottomMenu.getByText('スナップショット管理').click();
+
+        await this.page.waitForTimeout(500);
 
         const snapshotManager = this.page.locator('snapshot-manager');
         await expect(snapshotManager.locator('.container')).toBeVisible();
