@@ -55,7 +55,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
             console.log(`取得した初期ポイント: ${initialPoints}`);
             expect(initialPoints).toBeGreaterThanOrEqual(20); // 審査に必要な最低20PPがあること
 
-            // 公開準備を開始（ここで審査が走りPPが消費される）
+            // 公開準備を開始
             await startPublishPreparation(page, appName, version);
             await expectVersionStatus(page, version, '公開準備中');
 
@@ -66,7 +66,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
             console.log(`公開審査を開始したあとに取得したポイント: ${currentPoints}`);
 
             const pointsDiff = initialPoints - currentPoints;
-            expect(pointsDiff).toBe(20);
+            expect(pointsDiff).toBe(0);
 
             // 公開準備完了を経て公開中にする
             await completePublication(page, appName, version);
@@ -90,7 +90,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
     });
 
-    test('GeminiAPIキーを登録した状態でも公開審査が20PPであることをテストする', async ({ page }) => {
+    test('GeminiAPIキーを登録した状態でも無料で審査できること（0PP消費）をテストする', async ({ page }) => {
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
@@ -118,9 +118,9 @@ test.describe('公開管理 E2Eシナリオ', () => {
             const currentPoints = await getCurrentPoints(page);
             console.log(`公開審査後のポイント: ${currentPoints}`);
 
-            // APIキーがあっても10PPではなく20PP消費される
+            // 無料で審査できるため0PP消費される
             const pointsDiff = initialPoints - currentPoints;
-            expect(pointsDiff).toBe(20);
+            expect(pointsDiff).toBe(0);
         });
 
         await test.step('クリーンアップ: APIキー削除とアプリ削除', async () => {
@@ -131,7 +131,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
     });
 
-    test('GeminiAPIキーが無効な状態でも公開審査（20PP消費）が正常に完了することをテストする', async ({ page }) => {
+    test('GeminiAPIキーが無効な状態でも公開審査（0PP消費）が正常に完了することをテストする', async ({ page }) => {
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
@@ -159,10 +159,10 @@ test.describe('公開管理 E2Eシナリオ', () => {
             // 公開準備を開始（OpenAI Moderationによる審査が走る）
             await startPublishPreparation(page, appName, version);
 
-            // 1. 消費ポイントの検証: 審査開始時点で一律20PP消費されることを確認
+            // 1. 消費ポイントの検証: 無料で審査できるため0PP消費されることを確認
             await page.waitForTimeout(3000);
             const currentPoints = await getCurrentPoints(page);
-            expect(initialPoints - currentPoints).toBe(20);
+            expect(initialPoints - currentPoints).toBe(0);
 
             // OpenAI Moderation審査なので、ユーザーのGeminiキーが無効でも「公開準備完了」になる
             await waitForVersionStatus(page, appName, version, '公開準備完了', { timeout: 150000, intervals: [10000, 20000] });
