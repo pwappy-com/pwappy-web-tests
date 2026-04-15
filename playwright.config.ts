@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import 'dotenv/config';
+import { STORAGE_STATE } from './tests/constants';
 
 /**
  * Read environment variables from file.
@@ -66,29 +67,54 @@ export default defineConfig({
 
   /* Configure projects for major browsers */
   projects: [
+    // 認証用のセットアッププロジェクト
+    {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: STORAGE_STATE,
+      },
+      dependencies: ['setup'],
     },
 
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: {
+        ...devices['Desktop Firefox'],
+        storageState: STORAGE_STATE,
+      },
+      dependencies: ['setup'],
     },
 
     {
       name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
+      use: {
+        ...devices['Desktop Safari'],
+        storageState: STORAGE_STATE,
+      },
+      dependencies: ['setup'],
     },
 
     {
       name: 'mobile-chrome',
-      use: { ...devices['Pixel 5'] },
+      use: {
+        ...devices['Pixel 5'],
+        storageState: STORAGE_STATE,
+      },
+      dependencies: ['setup'],
     },
 
     {
       name: 'mobile-safari',
-      use: { ...devices['iPhone 12'] },
+      use: {
+        ...devices['iPhone 12'],
+        storageState: STORAGE_STATE,
+      },
+      dependencies: ['setup'],
     },
 
     /* Test against branded browsers. */

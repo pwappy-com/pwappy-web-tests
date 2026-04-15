@@ -19,3 +19,6 @@ Thumbs.db
 # IDE/エディタの設定ファイル
 .vscode/
 .idea/
+
+# 認証情報ファイル
+.auth
