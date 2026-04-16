@@ -48,6 +48,8 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(appModal).toBeHidden();
 
+    await  page.waitForTimeout(500);
+    
     // 新規作成後は自動的に選択状態になるはずなので、バージョンセクションを待機
     await expect(page.locator('dashboard-app-detail')).toBeVisible({ timeout: 15000 });
 }
@@ -355,7 +357,7 @@ export async function deleteVersion(page: Page, versionToDelete: string): Promis
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
     await page.waitForTimeout(500);
-    
+
     const confirmDialog = page.locator('message-box#delete-confirm-general');
     await expect(confirmDialog).toBeVisible();
 
