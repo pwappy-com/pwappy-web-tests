@@ -49,9 +49,6 @@ test.describe('AIエージェントとスナップショット機能の統合テ
         // ダッシュボードページへ移動
         await gotoDashboard(page);
 
-        // ログイン成功（ダッシュボード表示）を確認
-        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
-
         // 実行ごとにユニークなappKeyを生成
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');

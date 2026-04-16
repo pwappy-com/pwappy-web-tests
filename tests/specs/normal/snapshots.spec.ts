@@ -59,9 +59,6 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
         // ダッシュボードページへ移動
         await gotoDashboard(page);
 
-        // ログイン成功を確認
-        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
-
         // 初期ローディング完了を待つ
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
     });

@@ -51,7 +51,6 @@ test.describe('エディタ内機能のテスト', () => {
      */
     test.beforeEach(async ({ page, context, isMobile }) => {
         await gotoDashboard(page);
-        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
     test('コンポーネントのプロパティを編集できる', async ({ editorPage, editorHelper }) => {

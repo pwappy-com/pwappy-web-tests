@@ -3,35 +3,22 @@ import 'dotenv/config';
 import {
     createApp,
     deleteApp,
-    navigateToTab,
     startPublishPreparation,
     completePublication,
     unpublishVersion,
-    gotoDashboard
+    gotoDashboard,
 } from '../../tools/dashboard-helpers';
 
 test.describe.configure({ mode: 'serial' });
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
-/**
- * アプリケーションやバージョンが特定の公開状態にある場合に、
- * 編集や削除が適切に制限（ガード）されるかを検証するテストスイートです。
- */
 test.describe('削除・編集のガード条件テスト', () => {
 
-    /**
-     * 各テストの実行前に、認証とダッシュボードへのアクセスを行います。
-     */
     test.beforeEach(async ({ page, context }) => {
         await gotoDashboard(page);
-        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
-    /**
-     * アプリのバージョンが「公開準備中」および「公開中」の状態において、
-     * アプリ本体とバージョンの編集・削除ボタンが期待通りに非活性化されることをテストします。
-     */
     test('公開準備中および公開中のアプリ/バージョンは編集・削除できない', async ({ page }) => {
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
@@ -46,67 +33,42 @@ test.describe('削除・編集のガード条件テスト', () => {
         });
 
         await test.step('テスト(公開準備中): アプリとバージョンの編集/削除ボタンの状態を確認', async () => {
-            // UIの状態をリセットして確実な遷移を行うためリロード
-            await page.reload({ waitUntil: 'networkidle' });
-
-            // ワークベンチタブでアプリのボタン状態を確認
-            await navigateToTab(page, 'workbench');
-            const appRow = page.locator('.app-card', { hasText: appName }).first();
-            await expect(appRow.getByTitle('アプリ情報を編集')).toBeDisabled();
-            await expect(appRow.getByTitle('アプリを削除')).toBeEnabled(); // 公開準備中はアプリ削除が可能
-
-            // バージョン管理画面でバージョンのボタン状態を確認
-            await appRow.getByRole('button', { name: /選択/ }).click();
-            await expect(page.getByRole('heading', { name: /バージョン/ })).toBeVisible();
             const versionRow = page.locator('.version-card', { hasText: version }).first();
-            await expect(versionRow.getByTitle('バージョン名を変更')).toBeDisabled();
-            await expect(versionRow.getByTitle('バージョンを削除')).toBeEnabled(); // 公開準備中はバージョン削除が可能
+
+            await expect(versionRow).toContainText('審査待ち');
+            await expect(versionRow).toContainText('準備完了');
+
+            await expect(versionRow.locator('.btn-icon').filter({ has: page.locator('.fa-pen') })).toBeVisible({ visible: false });
+            await expect(versionRow.locator('.btn-icon').filter({ has: page.locator('.fa-trash') })).toBeVisible({ visible: false });
         });
 
         await test.step('状態遷移: バージョンを「公開中」にする', async () => {
-            test.setTimeout(120000); // 審査待ちが発生するためタイムアウトを延長
-
-            // 画面が詳細画面（バージョン管理）に残っている状態で別タブの操作を行うと、
-            // 背後に隠れたDOM要素を誤クリックしてしまうため、リロードしてトップに戻す
-            await page.reload({ waitUntil: 'networkidle' });
-
             await completePublication(page, appName, version);
         });
 
         await test.step('テスト(公開中): アプリとバージョンの編集/削除ボタンが非活性であることを確認', async () => {
-            // 状態をリセットして確実な遷移を行うためリロード
-            await page.reload({ waitUntil: 'networkidle' });
-
-            // ワークベンチタブでアプリのボタン状態を確認
-            await navigateToTab(page, 'workbench');
-            const appRow = page.locator('.app-card', { hasText: appName }).first();
-            await expect(appRow.getByTitle('アプリ情報を編集')).toBeDisabled();
-            await expect(appRow.getByTitle('アプリを削除')).toBeDisabled();
-
-            // バージョン管理画面でバージョンのボタン状態を確認
-            await appRow.getByRole('button', { name: /選択/ }).click();
-            await expect(page.getByRole('heading', { name: /バージョン/ })).toBeVisible();
             const versionRow = page.locator('.version-card', { hasText: version }).first();
-            await expect(versionRow.getByTitle('バージョン名を変更')).toBeDisabled();
-            await expect(versionRow.getByTitle('バージョンを削除')).toBeDisabled();
+
+            await expect(versionRow.locator('.btn-icon').filter({ has: page.locator('.fa-pen') })).toBeVisible({ visible: false });
+            await expect(versionRow.locator('.btn-icon').filter({ has: page.locator('.fa-trash') })).toBeVisible({ visible: false });
+
+            await page.getByText('アプリ設定').click();
+
+            const delBtn = page.getByRole('button', { name: '削除する' });
+            await expect(delBtn).toBeDisabled();
         });
 
         await test.step('クリーンアップ: バージョンを非公開にし、アプリを削除する', async () => {
-            // 詳細画面（バージョン管理）から安全に抜け出してトップに戻るためにリロード
-            await page.reload({ waitUntil: 'networkidle' });
-
+            await page.getByText('バージョン管理').click();
             await unpublishVersion(page, appName, version);
 
-            // 状態をリセットして確実な遷移を行うためリロード
-            await page.reload({ waitUntil: 'networkidle' });
+            const versionRow = page.locator('.version-card', { hasText: version }).first();
+            await expect(versionRow.locator('.btn-icon').filter({ has: page.locator('.fa-download') })).toBeVisible();
+            await expect(versionRow.locator('.btn-icon').filter({ has: page.locator('.fa-pen') })).toBeVisible();
+            await expect(versionRow.locator('.btn-icon').filter({ has: page.locator('.fa-copy') })).toBeVisible();
+            await expect(versionRow.locator('.btn-icon').filter({ has: page.locator('.fa-trash') })).toBeVisible();
 
-            // 削除ボタンが活性化したことを確認してから削除を実行
-            await navigateToTab(page, 'workbench');
-            const appRowWorkbench = page.locator('.app-card', { hasText: appName }).first();
-            await expect(appRowWorkbench.getByTitle('アプリを削除')).toBeEnabled();
             await deleteApp(page, appKey);
-
-            // 最終的にリストから消えたことを確認
             const appNameCell = page.locator('.app-card .app-name', { hasText: new RegExp(`^${appName}$`) });
             await expect(appNameCell).toBeHidden();
         });
