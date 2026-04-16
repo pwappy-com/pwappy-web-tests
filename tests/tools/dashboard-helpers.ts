@@ -88,14 +88,14 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
 
     await navigateToTab(page, 'workbench');
 
-    const appRow = page.locator('.app-list tbody tr', {
-        has: page.locator('td:nth-child(2)', { hasText: new RegExp(`^${appKey}$`) })
+    const appRow = page.locator('.app-card', {
+        has: page.locator('.app-key', { hasText: appKey })
     }).first();
 
     try {
         await appRow.waitFor({ state: 'visible', timeout: 15000 });
     } catch (e) {
-        console.log(`[DEBUG] deleteApp: アプリ行が見つかりません。既に削除済みの可能性があります。`);
+        console.log(`[DEBUG] deleteApp: アプリカードが見つかりません。既に削除済みの可能性があります。`);
     }
 
     await page.waitForTimeout(1000); // UIが安定してから次の操作へ
@@ -111,7 +111,7 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
 
             await page.waitForTimeout(1000); // 確認ダイアログが安定してから次の操作へ
 
-            const deleteBtn = appRow.getByRole('button', { name: '削除' });
+            const deleteBtn = appRow.getByTitle('アプリを削除');
             await deleteBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
                 return deleteBtn.click({ force: true, timeout: 2000 });
             });
@@ -165,7 +165,7 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
 
     await navigateToTab(page, 'workbench');
 
-    const appRow = page.locator('.app-list tbody tr', { hasText: appName }).first();
+    const appRow = page.locator('.app-card', { hasText: appName }).first();
 
     // アプリが見えるまで待機（見えない場合はリロードも試行）
     await expect(async () => {
@@ -183,19 +183,19 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
             await a.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
 
-        const selectBtn = appRow.getByRole('button', { name: '選択' });
+        const selectBtn = appRow.getByRole('button', { name: /選択/ });
         await selectBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
             return selectBtn.click({ force: true, timeout: 2000 });
         });
     }).toPass({ timeout: 15000, intervals: [1000] });
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
-    await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /バージョン/, level: 1 })).toBeVisible();;
 
-    const versionRow = page.locator('.version-list tbody tr', { hasText: version }).first();
+    const versionRow = page.locator('.version-card', { hasText: version }).first();
     await expect(versionRow).toBeVisible({ timeout: 10000 });
 
-    const editorBtn = versionRow.getByRole('button', { name: 'エディタ' });
+    const editorBtn = versionRow.getByRole('button', { name: /エディタ/ });
     await expect(editorBtn).toBeVisible({ timeout: 5000 });
 
     // モバイルでの要素重なりやスクロール問題を回避するため画面内に収める
@@ -224,8 +224,6 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     if (!editorPage) {
         throw new Error('エディタのオープンに失敗しました。');
     }
-
-    await editorPage.waitForLoadState('domcontentloaded');
 
     await editorPage.waitForLoadState('domcontentloaded');
 
@@ -275,7 +273,7 @@ export async function navigateToTab(page: Page, tabName: 'workbench' | 'publish'
 export async function expectAppVisibility(page: Page, appKey: string, isVisible: boolean): Promise<void> {
     await expect(async () => {
         const appKeyCell = page
-            .locator('.app-list tbody tr td:nth-child(2)', { hasText: new RegExp(`^${appKey}$`) })
+            .locator('.app-card .app-key', { hasText: appKey })
             .first();
 
         if (isVisible) {
@@ -295,7 +293,7 @@ export async function expectAppVisibility(page: Page, appKey: string, isVisible:
  * @param appName 選択するアプリケーション名
  */
 async function selectAppInPublishTab(page: Page, appName: string): Promise<void> {
-    const appRow = page.locator('.app-list tbody tr', { hasText: appName }).first();
+    const appRow = page.locator('.app-card', { hasText: appName }).first();
     // モバイル環境で「ワークベンチ」タブに取り残されたまま検索してしまう事故を防ぐため、確実に遷移と表示をリトライ
     await expect(async () => {
         const alert = page.locator('alert-component');
@@ -304,12 +302,12 @@ async function selectAppInPublishTab(page: Page, appName: string): Promise<void>
         }
 
         await appRow.scrollIntoViewIfNeeded().catch(() => { });
-        const selectBtn = appRow.getByRole('button', { name: '選択' });
+        const selectBtn = appRow.getByRole('button', { name: /選択/ });
         await selectBtn.evaluate((el: HTMLElement) => el.click()).catch(() => {
             return selectBtn.click({ timeout: 2000, force: true });
         });
 
-        await expect(page.getByRole('heading', { name: `公開設定: ${appName}` })).toBeVisible({ timeout: 5000 });
+        await expect(page.getByRole('heading', { name: new RegExp(`公開設定:.*${appName}`) })).toBeVisible({ timeout: 5000 });
     }).toPass({ timeout: 20000, intervals: [1000] });
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 }
@@ -325,8 +323,8 @@ export async function publishVersion(page: Page, appName: string, version: strin
     await selectAppInPublishTab(page, appName);
 
     // 公開準備
-    let versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    const prepBtn = versionRow.getByRole('button', { name: '公開準備' });
+    let versionRow = page.locator('.version-card', { hasText: version });
+    const prepBtn = versionRow.getByRole('button', { name: '審査に提出' });
     await prepBtn.evaluate((el: HTMLElement) => el.click()).catch(() => prepBtn.click({ force: true }));
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
@@ -338,11 +336,11 @@ export async function publishVersion(page: Page, appName: string, version: strin
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
     // 公開準備完了まで待機
-    await waitForVersionStatus(page, appName, version, '公開準備完了');
+    await waitForVersionStatus(page, appName, version, '準備完了');
 
     // 公開
-    versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    const pubBtn = versionRow.getByRole('button', { name: '公開', exact: true });
+    versionRow = page.locator('.version-card', { hasText: version });
+    const pubBtn = versionRow.getByRole('button', { name: '公開する' });
     await pubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => pubBtn.click({ force: true }));
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
@@ -364,8 +362,8 @@ export async function unpublishVersion(page: Page, appName: string, version: str
     await navigateToTab(page, 'publish');
     await selectAppInPublishTab(page, appName);
 
-    const versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    const unpubBtn = versionRow.getByRole('button', { name: '非公開', exact: true });
+    const versionRow = page.locator('.version-card', { hasText: version });
+    const unpubBtn = versionRow.getByRole('button', { name: /非公開/ });
     await unpubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => unpubBtn.click({ force: true }));
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
@@ -387,8 +385,8 @@ export async function startPublishPreparation(page: Page, appName: string, versi
     await navigateToTab(page, 'publish');
     await selectAppInPublishTab(page, appName);
 
-    const versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    const prepBtn = versionRow.getByRole('button', { name: '公開準備' });
+    const versionRow = page.locator('.version-card', { hasText: version });
+    const prepBtn = versionRow.getByRole('button', { name: '審査に提出' });
     await prepBtn.evaluate((el: HTMLElement) => el.click()).catch(() => prepBtn.click({ force: true }));
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
@@ -414,11 +412,11 @@ export async function completePublication(page: Page, appName: string, version: 
     await selectAppInPublishTab(page, appName);
 
     // 公開準備完了まで待機
-    await waitForVersionStatus(page, appName, version, '公開準備完了');
+    await waitForVersionStatus(page, appName, version, '準備完了');
 
     // 公開中にする
-    const readyVersionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    const pubBtn = readyVersionRow.getByRole('button', { name: '公開', exact: true });
+    const readyVersionRow = page.locator('.version-card', { hasText: version });
+    const pubBtn = readyVersionRow.getByRole('button', { name: '公開する' });
     await pubBtn.evaluate((el: HTMLElement) => el.click()).catch(() => pubBtn.click({ force: true }));
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
@@ -440,8 +438,8 @@ export async function completePublication(page: Page, appName: string, version: 
  * @param statusText 期待するステータス文字列 (例: '非公開', '公開準備中', '公開中')
  */
 export async function expectVersionStatus(page: Page, version: string, statusText: string): Promise<void> {
-    const versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    await expect(versionRow.locator('td').nth(1)).toContainText(statusText);
+    const versionRow = page.locator('.version-card', { hasText: version });
+    await expect(versionRow.locator('.badge')).toContainText(statusText);
 }
 
 /**
@@ -454,14 +452,14 @@ export async function expectVersionStatus(page: Page, version: string, statusTex
 export async function downloadVersion(page: Page, { appName, appKey, version }: { appName: string, appKey: string, version: string }): Promise<void> {
     await navigateToTab(page, 'publish');
 
-    const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-    const selectBtn = appRow.getByRole('button', { name: '選択' });
+    const appRow = page.locator('.app-card', { hasText: appName });
+    const selectBtn = appRow.getByRole('button', { name: /選択/ });
     await selectBtn.evaluate((el: HTMLElement) => el.click()).catch(() => selectBtn.click({ force: true }));
 
-    await expect(page.getByRole('heading', { name: `公開設定: ${appName}` })).toBeVisible();
+    await expect(page.getByRole('heading', { name: new RegExp(`公開設定:.*${appName}`) })).toBeVisible();
 
-    const versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-    const dlBtn = versionRow.getByRole('button', { name: 'ＤＬ' });
+    const versionRow = page.locator('.version-card', { hasText: version });
+    const dlBtn = versionRow.getByRole('button', { name: 'DL' });
     await dlBtn.evaluate((el: HTMLElement) => el.click()).catch(() => dlBtn.click({ force: true }));
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
@@ -496,7 +494,7 @@ export async function expectVersionVisibility(page: Page, version: string, isVis
         // 行全体を取得し、その中から特定のバージョン名を持つセルを探す
         // .first() をつけることで、探索を安定させます
         const versionCell = page
-            .locator('.version-list tbody tr td:first-child')
+            .locator('.version-card .v-version')
             .filter({ hasText: version })
             .first();
 
@@ -566,13 +564,13 @@ export async function setupAppWithVersions(page: Page, { appName, appKey, versio
         await expect(alert).toBeHidden();
     }
 
-    const appRow = page.locator('.app-list tbody tr', { hasText: appName });
+    const appRow = page.locator('.app-card', { hasText: appName });
     await expect(appRow).toBeVisible();
 
-    const selectBtn = appRow.getByRole('button', { name: '選択' });
+    const selectBtn = appRow.getByRole('button', { name: /選択/ });
     await selectBtn.evaluate((el: HTMLElement) => el.click()).catch(() => selectBtn.click({ force: true }));
 
-    await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /バージョン/, level: 1 })).toBeVisible();
     await page.waitForTimeout(1000); // バージョンの表示が安定するまで少し待つ
 
     const additionalVersions = versions.filter(v => v !== '1.0.0');
@@ -592,8 +590,8 @@ export async function setupAppWithVersions(page: Page, { appName, appKey, versio
  * @param newVersion 編集後のバージョン名
  */
 export async function editVersion(page: Page, oldVersion: string, newVersion: string): Promise<void> {
-    const versionRow = page.locator('.version-list tbody tr', { hasText: oldVersion });
-    const editBtn = versionRow.getByRole('button', { name: '編集' });
+    const versionRow = page.locator('.version-card', { hasText: oldVersion });
+    const editBtn = versionRow.getByTitle('バージョン名を変更');
     await editBtn.evaluate((el: HTMLElement) => el.click()).catch(() => editBtn.click({ force: true }));
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
@@ -624,8 +622,8 @@ export async function duplicateVersion(page: Page, sourceVersion: string): Promi
         if (await alert.isVisible().catch(() => false)) {
             await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
-        const versionRow = page.locator('.version-list tbody tr', { hasText: sourceVersion }).first();
-        const dupButton = versionRow.getByRole('button', { name: '複製' });
+        const versionRow = page.locator('.version-card', { hasText: sourceVersion }).first();
+        const dupButton = versionRow.getByTitle('このバージョンを複製');
 
         await dupButton.evaluate((el: HTMLElement) => el.click()).catch(() => dupButton.click({ force: true, timeout: 2000 }));
     }).toPass({
@@ -643,8 +641,8 @@ export async function duplicateVersion(page: Page, sourceVersion: string): Promi
  * @param versionToDelete 削除するバージョン名
  */
 export async function deleteVersion(page: Page, versionToDelete: string): Promise<void> {
-    const versionRow = page.locator('.version-list tbody tr', { hasText: versionToDelete });
-    const delBtn = versionRow.getByRole('button', { name: '削除' });
+    const versionRow = page.locator('.version-card', { hasText: versionToDelete });
+    const delBtn = versionRow.getByTitle('バージョンを削除');
     await delBtn.evaluate((el: HTMLElement) => el.click()).catch(() => delBtn.click({ force: true }));
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
@@ -896,7 +894,7 @@ export async function deleteGeminiApiKey(page: Page): Promise<void> {
  * @param page ダッシュボードのPageオブジェクト
  * @param appName 対象のアプリケーション名
  * @param version 対象のバージョン
- * @param expectedStatus 期待するステータス文字列 (例: '公開準備完了', '非公開'など)
+ * @param expectedStatus 期待するステータス文字列 (例: '準備完了', '非公開'など)
  * @param options ポーリングのタイムアウト(ms)と確認間隔(ms)を指定するオブジェクト
  */
 export async function waitForVersionStatus(
@@ -921,8 +919,8 @@ export async function waitForVersionStatus(
         await selectAppInPublishTab(page, appName);
 
         // 4. 指定されたバージョンのステータスを検証
-        const versionRow = page.locator('.publish-list tbody tr', { hasText: version });
-        const statusCell = versionRow.locator('td').nth(1);
+        const versionRow = page.locator('.version-card', { hasText: version });
+        const statusCell = versionRow.locator('.badge');
 
         // 個々の試行におけるタイムアウトは短めに設定
         await expect(statusCell).toContainText(expectedStatus, { timeout: 5000 });

@@ -47,9 +47,9 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('事前確認: 公開タブで初期状態が「非公開」であることを確認', async () => {
             await navigateToTab(page, 'publish');
-            const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-            await appRow.getByRole('button', { name: '選択' }).click();
-            await expect(page.getByRole('heading', { name: `公開設定: ${appName}` })).toBeVisible();
+            const appRow = page.locator('.app-card', { hasText: appName });
+            await appRow.getByRole('button', { name: /選択/ }).click();
+            await expect(page.getByRole('heading', { name: new RegExp(`公開設定:.*${appName}`) })).toBeVisible();
             await expectVersionStatus(page, version, '非公開');
         });
 
@@ -58,7 +58,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
             // 状態遷移後のUIを検証
             await expectVersionStatus(page, version, '公開準備中');
-            const versionRowAfter = page.locator('.publish-list tbody tr', { hasText: version });
+            const versionRowAfter = page.locator('.version-card', { hasText: version });
             await expect(versionRowAfter.locator('.progress-circle-small')).toBeVisible(); // 進行中インジケータ
         });
 
@@ -77,7 +77,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
             await deleteApp(page, appKey);
             await navigateToTab(page, 'workbench');
-            await expect(page.locator('.app-list tbody tr', { hasText: appName })).toBeHidden();
+            await expect(page.locator('.app-card', { hasText: appName })).toBeHidden();
         });
     });
 });

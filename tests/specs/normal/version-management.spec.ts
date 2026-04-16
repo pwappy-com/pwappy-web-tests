@@ -34,12 +34,12 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
 
         await test.step('セットアップ: アプリを作成し、バージョン管理画面を開く', async () => {
             await createApp(page, appName, appKey);
-            const appRow = page.locator('.app-list tbody tr').filter({
-                has: page.locator('td:nth-child(2)', { hasText: new RegExp(`^${appKey}$`) })
+            const appRow = page.locator('.app-card').filter({
+                has: page.locator('.app-key', { hasText: appKey })
             }).first();
             await expect(appRow).toBeVisible();
-            await appRow.getByRole('button', { name: '選択' }).click();
-            await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
+            await appRow.getByRole('button', { name: /選択/ }).click();
+            await expect(page.getByRole('heading', { name: /バージョン/, level: 1 })).toBeVisible();
             await expectVersionVisibility(page, autoCreatedVersion, true);
         });
 
@@ -124,8 +124,8 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('テスト: 1.0.0を1.1.0に編集しようとするとエラーになる', async () => {
-            const versionRow = page.locator('.version-list tbody tr', { hasText: '1.0.0' });
-            await versionRow.getByRole('button', { name: '編集' }).click();
+            const versionRow = page.locator('.version-card', { hasText: '1.0.0' });
+            await versionRow.getByTitle('バージョン名を変更').click();
 
             const modal = page.locator('dashboard-modal-window#versionModal');
             await expect(modal.getByRole('heading', { name: 'バージョンの編集' })).toBeVisible();
@@ -158,8 +158,8 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('テスト: 編集ダイアログで各種バリデーションエラーを確認', async () => {
-            const versionRow = page.locator('.version-list tbody tr', { hasText: initialVersion });
-            await versionRow.getByRole('button', { name: '編集' }).click();
+            const versionRow = page.locator('.version-card', { hasText: initialVersion });
+            await versionRow.getByTitle('バージョン名を変更').click();
 
             const modal = page.locator('dashboard-modal-window#versionModal');
             await expect(modal.getByRole('heading', { name: 'バージョンの編集' })).toBeVisible();

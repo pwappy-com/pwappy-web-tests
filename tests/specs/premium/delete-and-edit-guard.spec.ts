@@ -51,16 +51,16 @@ test.describe('削除・編集のガード条件テスト', () => {
 
             // ワークベンチタブでアプリのボタン状態を確認
             await navigateToTab(page, 'workbench');
-            const appRow = page.locator('.app-list tbody tr', { hasText: appName }).first();
-            await expect(appRow.getByRole('button', { name: '編集' })).toBeDisabled();
-            await expect(appRow.getByRole('button', { name: '削除' })).toBeEnabled(); // 公開準備中はアプリ削除が可能
+            const appRow = page.locator('.app-card', { hasText: appName }).first();
+            await expect(appRow.getByTitle('アプリ情報を編集')).toBeDisabled();
+            await expect(appRow.getByTitle('アプリを削除')).toBeEnabled(); // 公開準備中はアプリ削除が可能
 
             // バージョン管理画面でバージョンのボタン状態を確認
-            await appRow.getByRole('button', { name: '選択' }).click();
-            await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
-            const versionRow = page.locator('.version-list tbody tr', { hasText: version }).first();
-            await expect(versionRow.getByRole('button', { name: '編集' })).toBeDisabled();
-            await expect(versionRow.getByRole('button', { name: '削除' })).toBeEnabled(); // 公開準備中はバージョン削除が可能
+            await appRow.getByRole('button', { name: /選択/ }).click();
+            await expect(page.getByRole('heading', { name: /バージョン/ })).toBeVisible();
+            const versionRow = page.locator('.version-card', { hasText: version }).first();
+            await expect(versionRow.getByTitle('バージョン名を変更')).toBeDisabled();
+            await expect(versionRow.getByTitle('バージョンを削除')).toBeEnabled(); // 公開準備中はバージョン削除が可能
         });
 
         await test.step('状態遷移: バージョンを「公開中」にする', async () => {
@@ -79,16 +79,16 @@ test.describe('削除・編集のガード条件テスト', () => {
 
             // ワークベンチタブでアプリのボタン状態を確認
             await navigateToTab(page, 'workbench');
-            const appRow = page.locator('.app-list tbody tr', { hasText: appName }).first();
-            await expect(appRow.getByRole('button', { name: '編集' })).toBeDisabled();
-            await expect(appRow.getByRole('button', { name: '削除' })).toBeDisabled();
+            const appRow = page.locator('.app-card', { hasText: appName }).first();
+            await expect(appRow.getByTitle('アプリ情報を編集')).toBeDisabled();
+            await expect(appRow.getByTitle('アプリを削除')).toBeDisabled();
 
             // バージョン管理画面でバージョンのボタン状態を確認
-            await appRow.getByRole('button', { name: '選択' }).click();
-            await expect(page.getByRole('heading', { name: 'バージョン管理' })).toBeVisible();
-            const versionRow = page.locator('.version-list tbody tr', { hasText: version }).first();
-            await expect(versionRow.getByRole('button', { name: '編集' })).toBeDisabled();
-            await expect(versionRow.getByRole('button', { name: '削除' })).toBeDisabled();
+            await appRow.getByRole('button', { name: /選択/ }).click();
+            await expect(page.getByRole('heading', { name: /バージョン/ })).toBeVisible();
+            const versionRow = page.locator('.version-card', { hasText: version }).first();
+            await expect(versionRow.getByTitle('バージョン名を変更')).toBeDisabled();
+            await expect(versionRow.getByTitle('バージョンを削除')).toBeDisabled();
         });
 
         await test.step('クリーンアップ: バージョンを非公開にし、アプリを削除する', async () => {
@@ -102,12 +102,12 @@ test.describe('削除・編集のガード条件テスト', () => {
 
             // 削除ボタンが活性化したことを確認してから削除を実行
             await navigateToTab(page, 'workbench');
-            const appRowWorkbench = page.locator('.app-list tbody tr', { hasText: appName }).first();
-            await expect(appRowWorkbench.getByRole('button', { name: '削除' })).toBeEnabled();
+            const appRowWorkbench = page.locator('.app-card', { hasText: appName }).first();
+            await expect(appRowWorkbench.getByTitle('アプリを削除')).toBeEnabled();
             await deleteApp(page, appKey);
 
             // 最終的にリストから消えたことを確認
-            const appNameCell = page.locator('.app-list tbody tr td:first-child', { hasText: new RegExp(`^${appName}$`) });
+            const appNameCell = page.locator('.app-card .app-name', { hasText: new RegExp(`^${appName}$`) });
             await expect(appNameCell).toBeHidden();
         });
     });

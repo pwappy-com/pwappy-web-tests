@@ -96,8 +96,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         });
 
         await test.step('テスト: アプリケーションを編集する', async () => {
-            const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-            await appRow.getByRole('button', { name: '編集' }).click();
+            const appRow = page.locator('.app-card', { hasText: appName });
+            await appRow.getByTitle('アプリ情報を編集').click();
 
             const modal = page.locator('dashboard-modal-window#appModal');
             // モーダルダイアログが完全に表示されるのを待機します。
@@ -115,9 +115,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await expectAppVisibility(page, appKey, true);
 
             // 名前が変更されたことを確認
-            // appKeyを含む行の最初のセル(Name)が editedAppName であること
-            const editedAppRow = page.locator('.app-list tbody tr', { has: page.locator('td:nth-child(2)', { hasText: new RegExp(`^${appKey}$`) }) });
-            await expect(editedAppRow.locator('td').first()).toHaveText(editedAppName);
+            const editedAppRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });
+            await expect(editedAppRow.locator('.app-name')).toHaveText(editedAppName);
         });
 
         await test.step('クリーンアップ: アプリケーションを削除する', async () => {
@@ -139,8 +138,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         });
 
         await test.step('テスト: 編集ダイアログでバリデーションエラーを確認', async () => {
-            const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-            await appRow.getByRole('button', { name: '編集' }).click();
+            const appRow = page.locator('.app-card', { hasText: appName });
+            await appRow.getByTitle('アプリ情報を編集').click();
             await page.waitForTimeout(500);
 
             const modal = page.locator('dashboard-modal-window#appModal');
@@ -212,45 +211,6 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         });
     });
 
-    // -------------------------------------------------------------------------------
-    // delete-and-edit-guard.spec.tsで同様のテストをしているのでこちらはコメントアウト
-    // -------------------------------------------------------------------------------
-    // test('WB-APP-DEL (Abnormal): 公開中のアプリが削除できないことをテストする', async ({ page }) => {
-    //     // バージョンの公開・非公開には審査待ち時間が発生する可能性があるため、テストのタイムアウトを延長します。
-    //     test.setTimeout(180000);
-    //     const timestamp = Date.now().toString();
-    //     const appName = `公開中アプリ削除テスト-${timestamp}`.slice(0, 30);
-    //     const appKey = `published-app-${timestamp}`.slice(0, 30);
-    //     const version = '1.0.0';
-
-    //     await test.step('セットアップ: アプリを作成しバージョンを公開状態にする', async () => {
-    //         await createApp(page, appName, appKey);
-    //         await publishVersion(page, appName, version);
-    //     });
-
-    //     await test.step('テスト: ワークベンチで削除ボタンが非活性であることを確認', async () => {
-    //         await navigateToTab(page, 'workbench');
-    //         const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-    //         const deleteButton = appRow.getByRole('button', { name: '削除' });
-    //         await expect(deleteButton).toBeDisabled();
-    //     });
-
-    //     await test.step('クリーンアップ: バージョンを非公開にしてからアプリを削除する', async () => {
-    //         // 公開中のバージョンを非公開にします。
-    //         await unpublishVersion(page, appName, version);
-
-    //         // ワークベンチに戻り、削除ボタンが活性化していることを確認します。
-    //         await navigateToTab(page, 'workbench');
-    //         const appRowWorkbench = page.locator('.app-list tbody tr', { hasText: appName });
-    //         const deleteButton = appRowWorkbench.getByRole('button', { name: '削除' });
-    //         await expect(deleteButton).toBeEnabled();
-
-    //         // アプリを削除します。
-    //         await deleteApp(page, appName);
-    //         await expectAppVisibility(page, appKey, false);
-    //     });
-    // });
-
     test('WB-APP-EDIT-010: 編集時にキーが他のアプリと重複するとエラーになる', async ({ page }) => {
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
@@ -268,8 +228,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         });
 
         await test.step('テスト: アプリAのキーをアプリBのキーに変更してエラーを確認', async () => {
-            const appARow = page.locator('.app-list tbody tr', { hasText: appA_Name });
-            await appARow.getByRole('button', { name: '編集' }).click();
+            const appARow = page.locator('.app-card', { hasText: appA_Name });
+            await appARow.getByTitle('アプリ情報を編集').click();
 
             const modal = page.locator('dashboard-modal-window#appModal');
             // モーダルダイアログが完全に表示されるのを待機します。
@@ -311,8 +271,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         });
 
         await test.step('テスト: 削除確認ダイアログでキャンセルを押し、アプリが削除されないことを確認', async () => {
-            const appRow = page.locator('.app-list tbody tr', { hasText: appName });
-            await appRow.getByRole('button', { name: '削除' }).click();
+            const appRow = page.locator('.app-card', { hasText: appName });
+            await appRow.getByTitle('アプリを削除').click();
 
             // 削除確認ダイアログで「キャンセル」ボタンをクリックします。
             const confirmDialog = page.locator('message-box#delete-confirm');

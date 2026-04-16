@@ -38,7 +38,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         });
 
         await test.step('テスト: アプリケーションをアーカイブする', async () => {
-            const appRow = page.locator('.app-list tbody tr', { hasText: appName });
+            const appRow = page.locator('.app-card', { hasText: appName });
 
             // UIの不安定さを吸収するため、toPassでリトライ可能にする
             await expect(async () => {
@@ -48,7 +48,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 }
 
                 // force: true で確実なクリックを発火
-                await appRow.getByRole('button', { name: 'アーカイブ' }).click({ force: true, timeout: 2000 });
+                await appRow.getByTitle('アーカイブへ移動').click({ force: true, timeout: 2000 });
 
                 // アーカイブ確認ダイアログで実行します。
                 const confirmDialog = page.locator('message-box#archive-confirm');
@@ -78,7 +78,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         });
 
         await test.step('テスト: アーカイブから復元する', async () => {
-            const archiveRow = page.locator('.app-list tbody tr', { hasText: appName });
+            const archiveRow = page.locator('.app-card', { hasText: appName });
 
             // UIの不安定さ（not stable -> not visible のエラー）を吸収するため、toPassでリトライ可能にする
             await expect(async () => {
@@ -88,7 +88,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 }
 
                 // force: true で確実なクリックを発火
-                await archiveRow.getByRole('button', { name: 'ワークベンチに復元' }).click({ force: true, timeout: 2000 });
+                await archiveRow.getByRole('button', { name: /ワークベンチに復元/ }).click({ force: true, timeout: 2000 });
 
                 // 復元確認ダイアログで実行します。
                 const confirmDialog = page.locator('message-box#restore-confirm');
