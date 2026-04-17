@@ -258,7 +258,9 @@ customElements.define('${tagName}', ${scriptName});
             // スクリプト名を入力して追加
             const addMenu = eventContainer.locator('#scriptAddMenu');
             await expect(addMenu).toBeVisible();
-            await addMenu.locator('input#script-name').fill(attachedScriptName);
+            const scriptNameInput = addMenu.locator('input#script-name');
+            await expect(scriptNameInput).toBeEditable();
+            await scriptNameInput.fill(attachedScriptName);
             await addMenu.getByRole('button', { name: '追加' }).click();
             await expect(addMenu).toBeHidden();
 

@@ -85,7 +85,9 @@ test.describe('スクリプトの並べ替えテスト', () => {
                     await scriptListPopup.locator('#add-attr').click();
                 }
                 await expect(addMenu).toBeVisible();
-                await addMenu.locator('input#script-name').fill(name);
+                const scriptNameInput = addMenu.locator('input#script-name');
+                await expect(scriptNameInput).toBeEditable();
+                await scriptNameInput.fill(name);
                 await addMenu.locator('button#script-add-button').click();
                 await expect(addMenu).toBeHidden();
             }

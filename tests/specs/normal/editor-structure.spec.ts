@@ -186,6 +186,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             await editorHelper.openMoveingHandle('right');
 
             const explainInput = editorHelper.getPropertyInput('explain').locator('input');
+            await expect(explainInput).toBeEditable();
             await explainInput.fill('秘密のボタン');
             await explainInput.press('Enter');
             await editorPage.waitForTimeout(500);
@@ -197,7 +198,9 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             const searchWindow = editorPage.locator('template-search-sub-window');
             await expect(searchWindow).toBeVisible();
 
-            await searchWindow.locator('input.filter-box').fill('秘密');
+            const filterInput = searchWindow.locator('input.filter-box');
+            await expect(filterInput).toBeEditable();
+            await filterInput.fill('秘密');
 
             const resultItem = searchWindow.locator('template-search-result').first();
             await resultItem.locator('.fa-arrow-up-right-from-square').click();

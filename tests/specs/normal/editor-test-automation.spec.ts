@@ -68,8 +68,12 @@ test.describe('エディタ内：テスト自動化（テストシナリオとAP
             const modal = editorPage.locator('test-scenario-editor .modal');
             await expect(modal).toBeVisible();
 
-            await modal.locator('#scenario-name').fill(scenarioName);
-            await modal.locator('#scenario-desc').fill('ログイン画面の正常系テスト');
+            const senarioNameInput = modal.locator('#scenario-name');
+            const senarioDescInput = modal.locator('#scenario-desc');
+            await expect(senarioNameInput).toBeEditable();
+            await expect(senarioDescInput).toBeEditable();
+            await senarioNameInput.fill(scenarioName);
+            await senarioDescInput.fill('ログイン画面の正常系テスト');
 
             // モーダル内のボタンはモバイルでもテキストが表示されるので getByRole が使える
             await modal.getByRole('button', { name: '保存' }).click();
@@ -87,7 +91,9 @@ test.describe('エディタ内：テスト自動化（テストシナリオとAP
             const modal = editorPage.locator('test-scenario-editor .modal');
             await expect(modal).toBeVisible();
 
-            await modal.locator('#scenario-name').fill(editedName);
+            const senarioNameInput = modal.locator('#scenario-name');
+            await expect(senarioNameInput).toBeEditable();
+            await senarioNameInput.fill(editedName);
             await modal.getByRole('button', { name: '保存' }).click();
             await expect(modal).toBeHidden();
 
@@ -123,9 +129,15 @@ test.describe('エディタ内：テスト自動化（テストシナリオとAP
             const modal = testContainer.locator('.modal-dialog');
             await expect(modal).toBeVisible();
 
-            await modal.locator('#mock-path').fill(mockPath);
-            await modal.locator('#mock-pattern').fill(mockName);
-            await modal.locator('#mock-response').fill('{ "status": "ok" }');
+            const mockPathInput = modal.locator('#mock-path');
+            const mockPatternInput = modal.locator('#mock-pattern');
+            const mockResponseInput = modal.locator('#mock-response');
+            await expect(mockPathInput).toBeEditable();
+            await expect(mockPatternInput).toBeEditable();
+            await expect(mockResponseInput).toBeEditable();
+            await mockPathInput.fill(mockPath);
+            await mockPatternInput.fill(mockName);
+            await mockResponseInput.fill('{ "status": "ok" }');
 
             await modal.getByRole('button', { name: '設定を保存' }).click();
             await expect(modal).toBeHidden();

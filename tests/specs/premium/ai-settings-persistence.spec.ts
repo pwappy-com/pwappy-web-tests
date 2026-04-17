@@ -161,8 +161,12 @@ test.describe('AI設定の永続化テスト', () => {
             console.log(`[AI Agent Test] UIから取得したランダムモデル: ${targetModel}`);
 
             await select.selectOption({ value: targetModel });
-            await modal.locator('#max-history-input').fill(targetHistory);
-            await modal.locator('#max-recovery-input').fill(targetRecovery);
+            const maxHistoryInput = modal.locator('#max-history-input');
+            const maxRecoveryInput = modal.locator('#max-recovery-input');
+            await expect(maxHistoryInput).toBeEditable();
+            await expect(maxRecoveryInput).toBeEditable();
+            await maxHistoryInput.fill(targetHistory);
+            await maxRecoveryInput.fill(targetRecovery);
             await modal.locator('button', { hasText: '設定を保存' }).click();
 
             const modeBtn = agentWindow.locator('.mode-btn').filter({ hasText: targetMode });

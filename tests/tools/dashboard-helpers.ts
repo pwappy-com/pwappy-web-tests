@@ -30,10 +30,11 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await page.waitForTimeout(500);
 
     const appNameInput = page.locator('#input-app-name');
-    await expect(appNameInput).toBeEditable({ timeout: 10000 });
+    await expect(appNameInput).toBeEditable();
     await appNameInput.fill(appName);
 
     const appKeyInput = page.locator('#input-app-key');
+    await expect(appKeyInput).toBeEditable();
     await appKeyInput.fill(appKey);
 
     await expect(async () => {
@@ -278,7 +279,9 @@ export async function addVersion(page: Page, versionName: string): Promise<void>
     }).toPass({ timeout: 15000, intervals: [1000] });
 
     const modal = page.locator('dashboard-modal-window#versionModal');
-    await modal.locator('#input-version').fill(versionName);
+    const versionInput = modal.locator('#input-version');
+    await expect(versionInput).toBeEditable();
+    await versionInput.fill(versionName);
 
     await expect(async () => {
         const alert = page.locator('alert-component');
@@ -326,7 +329,9 @@ export async function editVersion(page: Page, oldVersion: string, newVersion: st
 
     await page.waitForTimeout(500);
 
-    await modal.locator('#input-version').fill(newVersion);
+    const versionInput = modal.locator('#input-version');
+    await expect(versionInput).toBeEditable();
+    await versionInput.fill(newVersion);
     await modal.locator('.submit-button').evaluate((el: HTMLElement) => el.click()).catch(() => modal.locator('.submit-button').click({ force: true }));
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });

@@ -82,7 +82,9 @@ function ${scriptName}(event) {
             // メニューからスクリプトを選択して追加
             const addMenu = swContainer.locator('#scriptAddMenu');
             await expect(addMenu).toBeVisible();
-            await addMenu.locator('#script-name').fill(scriptName);
+            const scriptNameInput = addMenu.locator('#script-name');
+            await expect(scriptNameInput).toBeEditable();
+            await scriptNameInput.fill(scriptName);
             await addMenu.getByRole('button', { name: '追加' }).click();
             await expect(addMenu).toBeHidden();
 
@@ -249,6 +251,7 @@ customElements.define('${componentTagName}', ${scriptName});
             // プロパティでIDを設定
             await editorHelper.openMoveingHandle('right');
             const idInput = editorHelper.getPropertyInput('domId').locator('input');
+            await expect(idInput).toBeEditable();
             await idInput.fill(buttonId);
             await idInput.press('Enter');
 

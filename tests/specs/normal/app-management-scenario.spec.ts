@@ -43,6 +43,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
             const appNameInput = modal.locator('#input-app-name');
             const appKeyInput = modal.locator('#input-app-key');
+            await expect(appNameInput).toBeEditable();
+            await expect(appKeyInput).toBeEditable();
             await appNameInput.fill('不正キーテスト');
             await appKeyInput.fill('Invalid-KEY!');
             await appKeyInput.blur();
@@ -50,6 +52,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await page.waitForTimeout(500);
             await expect(modal.locator('#error-app-key')).toHaveText(/英小文字、数字、ハイフン、アンダーバーのみ入力可能です/, { timeout: 5000 });
 
+            await expect(appKeyInput).toBeEditable();
             await appKeyInput.fill(existingAppKey);
             await modal.locator('.submit-button').click({ force: true });
             const alertDialog = page.locator('alert-component');
@@ -97,7 +100,9 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             const modal = page.locator('dashboard-modal-window#appEditModal');
             await expect(modal.locator('span[slot="header-title"]')).toContainText('アプリケーションの編集');
 
-            await modal.locator('#edit-app-name').fill(editedAppName);
+            const appNameInput = modal.locator('#edit-app-name');
+            await expect(appNameInput).toBeEditable();
+            await appNameInput.fill(editedAppName);
             await modal.locator('.submit-button').click({ force: true });
 
             await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
@@ -141,6 +146,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             const appNameInput = modal.locator('#edit-app-name');
 
             await test.step('名前を空にしてバリデーション確認', async () => {
+                await expect(appNameInput).toBeEditable();
                 await appNameInput.fill('');
                 await appNameInput.blur();
 
@@ -186,6 +192,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
             // アプリキーが編集可能（disabledでない）か確認して実行
             if (await appKeyInput.isVisible() && await appKeyInput.isEnabled()) {
+                await expect(appKeyInput).toBeEditable();
                 await appKeyInput.fill(appA_Key);
                 await modal.locator('.submit-button').click({ force: true });
 

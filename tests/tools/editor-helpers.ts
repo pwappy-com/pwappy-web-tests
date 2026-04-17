@@ -212,10 +212,20 @@ export class EditorHelper {
     async addAttributeDefinition({ name, template, scope }: { name: string; template: string; scope: 'element' | 'tag' }): Promise<void> {
         const propertyContainer = this.getPropertyContainer();
         const scopeButtonName = scope === 'element' ? '要素に追加' : 'タグに追加';
+        await expect(propertyContainer).toBeVisible();
         await propertyContainer.getByRole('button', { name: scopeButtonName }).click();
 
-        await propertyContainer.getByRole('combobox', { name: '属性名:' }).fill(name);
-        await propertyContainer.getByRole('combobox', { name: 'テンプレート:' }).fill(template);
+        const nameCombobox = propertyContainer.getByRole('combobox', { name: '属性名:' });
+        const templateCombobox = propertyContainer.getByRole('combobox', { name: 'テンプレート:' });
+
+        // 入力可能状態になるまで待機＆検証
+        await expect(nameCombobox).toBeEditable();
+        await expect(templateCombobox).toBeEditable();
+
+        // 実際に入力
+        await nameCombobox.fill(name);
+        await templateCombobox.fill(template);
+
         await propertyContainer.getByRole('button', { name: '追加' }).click();
 
         await expect(propertyContainer.locator('#attributeList')).toBeHidden();
@@ -636,7 +646,9 @@ export class EditorHelper {
         const scriptAddMenu = this.page.locator('event-container #scriptAddMenu');
         await expect(scriptAddMenu).toBeVisible();
 
-        await scriptAddMenu.locator('#script-name').fill(scriptName);
+        const scriptNameInput = scriptAddMenu.locator('#script-name');
+        await expect(scriptNameInput).toBeEditable();
+        await scriptNameInput.fill(scriptName);
         await expect(scriptAddMenu).toBeVisible();
         await expect(scriptAddMenu).toBeEnabled();
         await scriptAddMenu.locator('#edit-add-script').click();
@@ -705,6 +717,7 @@ export class EditorHelper {
 
             // 入力
             if (browserName === 'webkit') {
+                await expect(textarea).toBeEditable();
                 await textarea.fill(scriptContent);
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
@@ -824,7 +837,9 @@ export class EditorHelper {
         const addMenu = scriptListContainer.locator('#scriptAddMenu');
         await expect(addMenu).toBeVisible();
         await addMenu.locator(`input[type="radio"][value="${scriptType}"]`).check();
-        await addMenu.locator('input#script-name').fill(scriptName);
+        const scriptNameInput = addMenu.locator('input#script-name');
+        await expect(scriptNameInput).toBeEditable();
+        await scriptNameInput.fill(scriptName);
         await addMenu.locator('button:has-text("追加")').click();
         await expect(addMenu).toBeHidden();
         await expect(scriptContainer.locator(`.editor-row-left:has-text("${scriptName}")`)).toBeVisible();
@@ -875,6 +890,7 @@ export class EditorHelper {
             await this.page.waitForTimeout(300);
 
             if (browserName === 'webkit' || browserName === 'chromium') {
+                await expect(textarea).toBeEditable();
                 await textarea.fill(scriptContent);
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
@@ -917,9 +933,15 @@ export class EditorHelper {
         await expect(eventAddPopup).toBeVisible();
 
         // 各項目を入力
-        await eventAddPopup.locator('input#event-target').fill(listenerTarget);
-        await eventAddPopup.locator('input#event-name').fill(eventName);
-        await eventAddPopup.locator('input#comment-value').fill(comment);
+        const eventTargetInput = eventAddPopup.locator('input#event-target');
+        const eventNameInput = eventAddPopup.locator('input#event-name');
+        const commentValueInput = eventAddPopup.locator('input#comment-value');
+        await expect(eventTargetInput).toBeEditable();
+        await expect(eventNameInput).toBeEditable();
+        await expect(commentValueInput).toBeEditable();
+        await eventTargetInput.fill(listenerTarget);
+        await eventNameInput.fill(eventName);
+        await commentValueInput.fill(comment);
 
         // 「追加」ボタンをクリックしてイベントを登録
         await eventAddPopup.getByRole('button', { name: '追加' }).click();
@@ -965,8 +987,12 @@ export class EditorHelper {
         await expect(eventAddPopup).toBeVisible();
 
         // 各項目を入力 (イベント登録先はサービスワーカータブにはない)
-        await eventAddPopup.locator('input#event-name').fill(eventName);
-        await eventAddPopup.locator('input#comment-value').fill(comment);
+        const eventNameInput = eventAddPopup.locator('input#event-name');
+        const commentValueInput = eventAddPopup.locator('input#comment-value');
+        await expect(eventNameInput).toBeEditable();
+        await expect(commentValueInput).toBeEditable();
+        await eventNameInput.fill(eventName);
+        await commentValueInput.fill(comment);
 
         // 「追加」ボタンをクリックしてイベントを登録
         await eventAddPopup.getByRole('button', { name: '追加' }).click();
@@ -1018,6 +1044,7 @@ export class EditorHelper {
             await this.page.keyboard.press('Backspace');
 
             if (browserName === 'webkit' || browserName === 'chromium') {
+                await expect(textarea).toBeEditable();
                 await textarea.fill(scriptContent);
             } else {
                 await textarea.pressSequentially(scriptContent, { delay: 10 });
@@ -1164,6 +1191,7 @@ export class EditorHelper {
 
         // 3. プロンプトを入力して送信し、応答を待つ
         const inputArea = aiWindow.locator('textarea#user-input');
+        await expect(inputArea).toBeEditable();
         await inputArea.fill(prompt);
         await aiWindow.locator('button#send-btn').click();
 
@@ -1249,6 +1277,7 @@ export class EditorHelper {
 
         // 名前を入力
         const input = dialog.locator('.input-field');
+        await expect(input).toBeEditable();
         await input.fill(name);
 
         // 作成ボタンをクリック
@@ -1438,6 +1467,7 @@ export class EditorHelper {
         await expect(dialog).toBeVisible();
 
         const input = dialog.locator('.input-field');
+        await expect(input).toBeEditable();
         await input.fill(newName);
         await dialog.locator('#ok-button').click();
 

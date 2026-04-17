@@ -92,8 +92,12 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
                 await snapshotManager.getByRole('button', { name: '新規スナップショット' }).click();
 
                 const saveDialog = editorPage.locator('snapshot-save-dialog');
-                await saveDialog.locator('#snapshot-name').fill(uniqueSnapshotName);
-                await saveDialog.locator('#snapshot-description').fill('E2E Test Snapshot');
+                const snapshotNameInput = saveDialog.locator('#snapshot-name');
+                const snapshotDescInput = saveDialog.locator('#snapshot-description');
+                await expect(snapshotNameInput).toBeEditable();
+                await expect(snapshotDescInput).toBeEditable();
+                await snapshotNameInput.fill(uniqueSnapshotName);
+                await snapshotDescInput.fill('E2E Test Snapshot');
                 await saveDialog.getByRole('button', { name: '保存' }).click();
 
                 await expect(saveDialog).toBeHidden();
@@ -166,6 +170,7 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
 
             // プロパティ変更
             const textInput = editorHelper.getPropertyInput('text').locator('input');
+            await expect(textInput).toBeEditable();
             await textInput.fill(testButtonText);
             await textInput.press('Enter');
 

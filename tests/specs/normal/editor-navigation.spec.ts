@@ -91,6 +91,7 @@ test.describe('エディタ内機能のテスト', () => {
             const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
 
             await editorHelper.openMoveingHandle('right');
+            await expect(propertyTextInput).toBeEditable();
             await propertyTextInput.fill('Button2');
             await propertyTextInput.press('Enter');
 
@@ -139,13 +140,31 @@ test.describe('エディタ内機能のテスト', () => {
             const propertyContainer = editorPage.locator('property-container');
             const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
 
-            await propertyContainer.getByTitle('属性を編集').click();
-            await propertyContainer.getByRole('button', { name: '要素に追加' }).click();
-            await propertyContainer.getByRole('combobox', { name: '属性名:' }).fill(attrName);
-            await propertyContainer.getByRole('button', { name: '追加' }).click();
+            await expect(propertyContainer).toBeVisible();
+
+            const editAttrButton = propertyContainer.getByTitle('属性を編集');
+            await expect(editAttrButton).toBeVisible();
+            await expect(editAttrButton).toBeEnabled(); // 押せる状態かチェック
+            await editAttrButton.click();
+
+            const addElementButton = propertyContainer.getByRole('button', { name: '要素に追加' });
+            await expect(addElementButton).toBeVisible();
+            await expect(addElementButton).toBeEnabled();
+            await addElementButton.click();
+
+            const attrNameInput = propertyContainer.getByRole('combobox', { name: '属性名:' });
+            await expect(attrNameInput).toBeVisible();
+            await expect(attrNameInput).toBeEditable(); // 入力可能（Readonlyでない）かチェック
+            await attrNameInput.fill(attrName);
+
+            const addButton = propertyContainer.getByRole('button', { name: '追加' });
+            await expect(addButton).toBeVisible();
+            await expect(addButton).toBeEnabled();
+            await addButton.click();
 
             const targetInput = propertyContainer.locator(`input[data-attribute-type="${attrName}"]`);
             await expect(targetInput).toBeVisible();
+            await expect(targetInput).toBeEditable();
 
             // 値を設定し、プレビューに反映される
             await targetInput.fill(attrValue);
@@ -174,22 +193,52 @@ test.describe('エディタ内機能のテスト', () => {
         await test.step('検証: 属性定義自体を削除できること', async () => {
             const propertyContainer = editorPage.locator('property-container');
 
-            // 削除フローをテストするため、再度同じ属性を追加する
-            await propertyContainer.getByTitle('属性を編集').click();
-            await propertyContainer.getByRole('button', { name: '要素に追加' }).click();
-            await propertyContainer.getByRole('combobox', { name: '属性名:' }).fill(attrName);
-            await propertyContainer.getByRole('button', { name: '追加' }).click();
+            // --- 1. 属性の再追加フロー ---
+            const editAttrButton = propertyContainer.getByTitle('属性を編集');
+            await expect(editAttrButton).toBeVisible();
+            await editAttrButton.click();
 
-            // 属性を削除するために、まず属性編集モーダルを開き直す
-            await propertyContainer.getByTitle('属性を編集').click();
+            const addElementButton = propertyContainer.getByRole('button', { name: '要素に追加' });
+            await expect(addElementButton).toBeVisible();
+            await expect(addElementButton).toBeEnabled();
+            await addElementButton.click();
+
+            const attrInput = propertyContainer.getByRole('combobox', { name: '属性名:' });
+            await expect(attrInput).toBeEditable();
+            await attrInput.fill(attrName);
+
+            const addButton = propertyContainer.getByRole('button', { name: '追加' });
+            await expect(addButton).toBeEnabled();
+            await addButton.click();
+
+            // --- 2. 属性の削除フロー ---
+            // 再度モーダルを開く
+            await expect(editAttrButton).toBeVisible();
+            await editAttrButton.click();
+
             const attrList = propertyContainer.locator('#attributeList');
             await expect(attrList).toBeVisible();
 
+            // 削除対象のコンテナと削除アイコンの特定
             const deleteTargetContainer = attrList.locator('div', { hasText: attrName }).locator('..');
-            await deleteTargetContainer.locator('> .edit-icon > .fa-solid').click();
-            editorPage.once('dialog', dialog => dialog.accept());
-            await editorPage.getByRole('button', { name: '削除' }).click();
+            const deleteIcon = deleteTargetContainer.locator('> .edit-icon > .fa-solid');
 
+            // 削除アイコンが表示されているか確認
+            await expect(deleteIcon).toBeVisible();
+
+            // ダイアログのハンドリング（クリックの直前にセット）
+            editorPage.once('dialog', dialog => dialog.accept());
+
+            // 削除アイコンをクリック
+            await deleteIcon.click();
+
+            // モーダル内の最終的な「削除」ボタンの状態を確認してクリック
+            const finalDeleteButton = editorPage.getByRole('button', { name: '削除' });
+            await expect(finalDeleteButton).toBeVisible();
+            await expect(finalDeleteButton).toBeEnabled();
+            await finalDeleteButton.click();
+
+            // 最終検証: 対象の属性入力欄が消えていること
             await expect(propertyContainer.locator(`input[data-attribute-type="${attrName}"]`)).toBeHidden();
         });
     });
@@ -210,6 +259,7 @@ test.describe('エディタ内機能のテスト', () => {
             const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
             const targetInput = propertyContainer.locator(`input[data-attribute-type="${attrName}"]`);
             await expect(targetInput).toBeVisible();
+            await expect(targetInput).toBeEditable();
 
             await targetInput.fill(attrValue);
             await targetInput.press('Enter');
@@ -266,22 +316,45 @@ test.describe('エディタ内機能のテスト', () => {
             await editorHelper.openMoveingHandle('right');
             const propertyContainer = editorPage.locator('property-container');
 
-            await propertyContainer.getByTitle('属性を編集').click();
-            await propertyContainer.getByRole('button', { name: '要素に追加' }).click();
-            await propertyContainer.getByRole('combobox', { name: '属性名:' }).fill(attrName);
-            await propertyContainer.getByRole('button', { name: '追加' }).click();
+            // 1. 「属性を編集」ボタンのチェックとクリック
+            const editAttrButton = propertyContainer.getByTitle('属性を編集');
+            await expect(editAttrButton).toBeVisible();
+            await editAttrButton.click();
 
+            // 2. 「要素に追加」ボタンのチェックとクリック
+            const addElementButton = propertyContainer.getByRole('button', { name: '要素に追加' });
+            await expect(addElementButton).toBeVisible();
+            await expect(addElementButton).toBeEnabled();
+            await addElementButton.click();
+
+            // 3. 「属性名」入力欄のチェックと入力
+            const attrInput = propertyContainer.getByRole('combobox', { name: '属性名:' });
+            await expect(attrInput).toBeVisible();
+            await expect(attrInput).toBeEditable();
+            await attrInput.fill(attrName);
+
+            // 4. 「追加」ボタンのチェックとクリック
+            const addButton = propertyContainer.getByRole('button', { name: '追加' });
+            await expect(addButton).toBeVisible();
+            await expect(addButton).toBeEnabled();
+            await addButton.click();
+
+            // 5. 追加された属性の入力欄が表示されるまで待機
             const targetInput = propertyContainer.locator(`input[data-attribute-type="${attrName}"]`);
             await expect(targetInput).toBeVisible();
 
-            // Shadow DOM内の要素のスタイルを取得して検証
+            // 6. Shadow DOM内の要素のスタイルを取得してハイライトを検証
+            // evaluate の前に、対象の要素がアタッチされていることを保証
             const backgroundColor = await targetInput.evaluate(el => {
                 const root = el.getRootNode();
                 if (!(root instanceof ShadowRoot)) return null; // 型安全のためのガード
                 const hostElement = root.host;
+                // 親方向にある .editor-row を探す
                 const editorRow = hostElement.closest('.editor-row');
                 return editorRow ? window.getComputedStyle(editorRow).backgroundColor : null;
             });
+
+            // ハイライト色の検証
             expect(backgroundColor).toBe('rgba(0, 112, 255, 0.11)');
         });
 
@@ -289,14 +362,45 @@ test.describe('エディタ内機能のテスト', () => {
             const propertyContainer = editorPage.locator('property-container');
             const targetInput = propertyContainer.locator(`input[data-attribute-type="${attrName}"]`);
 
-            // タグレベルで同じ名前の属性を定義
-            await propertyContainer.getByTitle('属性を編集').click();
-            await propertyContainer.getByRole('button', { name: 'タグに追加' }).click();
-            await propertyContainer.getByRole('combobox', { name: '属性名:' }).fill(attrName);
-            await propertyContainer.getByRole('combobox', { name: 'テンプレート:' }).fill('input[text]');
-            await propertyContainer.getByRole('button', { name: '追加' }).click();
+            // 事前確認: 対象の入力欄がまだ表示されていること
+            await expect(targetInput).toBeVisible();
 
-            // ハイライトが消え、デフォルトの背景色に戻ることを確認
+            // 1. 「属性を編集」ボタンのチェックとクリック
+            const editAttrButton = propertyContainer.getByTitle('属性を編集');
+            await expect(editAttrButton).toBeVisible();
+            await editAttrButton.click();
+
+            // 2. 「タグに追加」ボタンのチェックとクリック
+            const addTagButton = propertyContainer.getByRole('button', { name: 'タグに追加' });
+            await expect(addTagButton).toBeVisible();
+            await expect(addTagButton).toBeEnabled();
+            await addTagButton.click();
+
+            // 3. 「属性名」入力欄のチェックと入力
+            const nameInput = propertyContainer.getByRole('combobox', { name: '属性名:' });
+            await expect(nameInput).toBeVisible();
+            await expect(nameInput).toBeEditable();
+            await nameInput.fill(attrName);
+
+            // 4. 「テンプレート」入力欄のチェックと入力
+            const templateInput = propertyContainer.getByRole('combobox', { name: 'テンプレート:' });
+            await expect(templateInput).toBeVisible();
+            await expect(templateInput).toBeEditable();
+            await templateInput.fill('input[text]');
+
+            // 5. 「追加」ボタンのチェックとクリック
+            const addButton = propertyContainer.getByRole('button', { name: '追加' });
+            await expect(addButton).toBeVisible();
+            await expect(addButton).toBeEnabled();
+            await addButton.click();
+
+            // --- 検証フェーズ ---
+
+            // 背景色が更新されるまでわずかに待機が必要な場合があるため、
+            // evaluate を実行する前に対象要素が操作可能な状態であることを再確認
+            await expect(targetInput).toBeVisible();
+
+            // ハイライトが消え、デフォルトの背景色（透明など）に戻ることを確認
             const backgroundColor = await targetInput.evaluate(el => {
                 const root = el.getRootNode();
                 if (!(root instanceof ShadowRoot)) return null;
@@ -304,6 +408,8 @@ test.describe('エディタ内機能のテスト', () => {
                 const editorRow = hostElement.closest('.editor-row');
                 return editorRow ? window.getComputedStyle(editorRow).backgroundColor : null;
             });
+
+            // 透明（rgba(0, 0, 0, 0)）になっていることを検証
             expect(backgroundColor).toBe('rgba(0, 0, 0, 0)');
         });
     });
@@ -449,7 +555,7 @@ test.describe('エディタ内機能のテスト', () => {
 
         await test.step('検証', async () => {
             const targetInput = editorHelper.getPropertyInput(attrName).locator('textarea');
-
+            await expect(targetInput).toBeEditable();
             await targetInput.fill(attrValue);
             await targetInput.press('Tab');
             await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: attrValue });
@@ -546,24 +652,28 @@ test.describe('エディタ内機能のテスト', () => {
             // --- 'flex-grow' の操作 ---
             const flexGrowInput = targetInputPanel.locator('input[id="flex-grow"]');
             await expect(flexGrowInput).toBeVisible();
+            await expect(flexGrowInput).toBeEditable();
             await flexGrowInput.fill('1');
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-grow', value: '1' });
 
             // --- 'flex-shrink' の操作 ---
             const flexShrinkInput = targetInputPanel.locator('input[id="flex-shrink"]');
             await expect(flexShrinkInput).toBeVisible();
+            await expect(flexShrinkInput).toBeEditable();
             await flexShrinkInput.fill('2');
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-shrink', value: '2' });
 
             // --- 'flex-basis' の操作 ---
             const flexBasisInput = targetInputPanel.locator('input[id="flex-basis"]');
             await expect(flexBasisInput).toBeVisible();
+            await expect(flexBasisInput).toBeEditable();
             await flexBasisInput.fill('100%');
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-basis', value: '100%' });
 
             // --- 'order' の操作 ---
             const orderInput = targetInputPanel.locator('input[id="order"]');
             await expect(orderInput).toBeVisible();
+            await expect(orderInput).toBeEditable();
             await orderInput.fill('10');
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'order', value: '10' });
 

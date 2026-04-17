@@ -227,7 +227,9 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             await editorHelper.openMoveingHandle('right');
             // navigatorNodeのpage属性にpage1.htmlを設定
             const navigatorPageAttribute = editorHelper.getPropertyInput('page');
-            await navigatorPageAttribute.locator("input").fill('page1.html');
+            const navAttInput = navigatorPageAttribute.locator("input");
+            await expect(navAttInput).toBeEditable();
+            await navAttInput.fill('page1.html');
 
             // トップレベルをPage2に切り替え
             await editorHelper.switchTopLevelTemplate(page2Id);

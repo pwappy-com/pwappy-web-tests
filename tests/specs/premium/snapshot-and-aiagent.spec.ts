@@ -267,7 +267,9 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await editorPage.waitForTimeout(1000); // モーダルが開くのを待つ
                 const modal = agentWindow.locator('.modal-dialog');
                 await expect(modal).toBeVisible();
-                await modal.locator('#snapshot-name').fill(snapshotName);
+                const snapshotNameInput = modal.locator('#snapshot-name');
+                await expect(snapshotNameInput).toBeEditable();
+                await snapshotNameInput.fill(snapshotName);
 
                 // console.log('[DEBUG] snapshot: Clicking create button in modal...');
                 await editorPage.waitForTimeout(500);

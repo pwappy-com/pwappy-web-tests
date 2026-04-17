@@ -90,7 +90,9 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
 
             // console.log('[DEBUG] agent-protection: Clicking AI Agent button...');
             await bottomMenu.getByText('AIエージェント').click({ force: true });
-            await editorPage.locator('agent-chat-window textarea.user-input').fill('テスト');
+            const userInput = editorPage.locator('agent-chat-window textarea.user-input');
+            await expect(userInput).toBeEditable();
+            await userInput.fill('テスト');
             await editorPage.locator('agent-chat-window #send-button').click({ force: true });
         });
 
@@ -110,7 +112,9 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
                 thought: "手動で修正しました。"
             }, null, 2);
 
-            await editorPage.locator('agent-chat-window #manual-response-input').fill(validJson);
+            const responseInput = editorPage.locator('agent-chat-window #manual-response-input');
+            await expect(responseInput).toBeEditable();
+            await responseInput.fill(validJson);
             await editorPage.locator('agent-chat-window').getByRole('button', { name: '処理を続行' }).click({ force: true });
 
             // 重要：反映完了のログが出るのを待つ
@@ -202,7 +206,9 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
 
             // console.log('[DEBUG] agent-protection: Clicking AI Agent button...');
             await bottomMenu.getByText('AIエージェント').click({ force: true });
-            await editorPage.locator('agent-chat-window textarea.user-input').fill('バグを作って');
+            const userInput = editorPage.locator('agent-chat-window textarea.user-input');
+            await expect(userInput).toBeEditable();
+            await userInput.fill('バグを作って');
             await editorPage.locator('agent-chat-window #send-button').click({ force: true });
         });
 
@@ -232,6 +238,7 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
             await editorHelper.selectNodeInDomTree(pageNode);
             await editorHelper.openMoveingHandle('right');
             const explainInput = editorHelper.getPropertyInput('explain').locator('input');
+            await expect(explainInput).toBeEditable();
             await explainInput.fill(targetPageName);
             await explainInput.press('Enter');
 
@@ -310,7 +317,9 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
                 await expect(agentWindow).toBeVisible({ timeout: 2000 });
             }).toPass({ timeout: 15000, intervals: [1000] });
 
-            await editorPage.locator('agent-chat-window textarea.user-input').fill('命令');
+            const userInput = editorPage.locator('agent-chat-window textarea.user-input');
+            await expect(userInput).toBeEditable();
+            await userInput.fill('命令');
             await editorPage.locator('agent-chat-window #send-button').click({ force: true });
 
             await expect(editorPage.locator('agent-chat-window').getByText('システム構成を更新しました')).toBeVisible({ timeout: 20000 });

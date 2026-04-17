@@ -36,14 +36,14 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
         });
 
         await test.step('WB-VER-NEW: バージョンのバリデーションをテストする', async () => {
-            const newVersionBtn =  page.getByRole('button', { name: '+ 新規バージョン' });
+            const newVersionBtn = page.getByRole('button', { name: '+ 新規バージョン' });
             await newVersionBtn.click();
             await page.waitForTimeout(500);
             const modal = page.locator('dashboard-modal-window#versionModal');
             await expect(modal.locator('span[slot="header-title"]')).toContainText('バージョンの追加');
 
             const versionInput = modal.locator('#input-version');
-
+            await expect(versionInput).toBeEditable();
             await versionInput.fill(autoCreatedVersion);
             await modal.locator('.submit-button').click({ force: true });
 
@@ -54,7 +54,7 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
             if (await alertDialog.isVisible().catch(() => false)) {
                 await alertDialog.getByRole('button', { name: '閉じる' }).click();
             }
-
+            await expect(versionInput).toBeEditable();
             await versionInput.fill('Invalid+Version');
             await modal.locator('.submit-button').click({ force: true });
             await expect(modal.locator('#error-version')).toContainText('英小文字、数字、ハイフン、アンダーバー、ドットのみ入力可能です');
@@ -126,7 +126,9 @@ test.describe('バージョン管理 E2Eシナリオ', () => {
             const modal = page.locator('dashboard-modal-window#versionModal');
             await expect(modal.locator('span[slot="header-title"]')).toContainText('バージョンの編集');
 
-            await modal.locator('#input-version').fill('1.1.0');
+            const versionInput = modal.locator('#input-version');
+            await expect(versionInput).toBeEditable();
+            await versionInput.fill('1.1.0');
             await modal.locator('.submit-button').click({ force: true });
 
             const alertDialog = page.locator('alert-component');
