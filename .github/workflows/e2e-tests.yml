@@ -150,11 +150,29 @@ jobs:
         run: npm install
 
       # Ubuntuランナーには日本語フォントがないためインストール (文字化け/トーフ対策)
-      - name: Install Japanese fonts (Ubuntu only)
+      # フォントのキャッシュ確認
+      - name: Cache Japanese fonts (Ubuntu only)
         if: matrix.os == 'ubuntu-latest'
+        id: cache-fonts
+        uses: actions/cache@v5
+        with:
+          path: ~/.fonts
+          key: ${{ runner.os }}-fonts-noto-cjk-v1
+
+      # キャッシュがない場合のみインストールしてユーザーディレクトリにコピー
+      - name: Install Japanese fonts (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest' && steps.cache-fonts.outputs.cache-hit !=
+          'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
+          mkdir -p ~/.fonts
+          cp -r /usr/share/fonts/opentype/noto ~/.fonts/
+
+      # 復元した(または新規コピーした)フォントをシステムに認識させる
+      - name: Refresh font cache (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: fc-cache -fv
 
       # 日本時間（JST）で日付を取得するように修正
       - name: Get daily cache key suffix
@@ -215,7 +233,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: playwright-report-normal-${{ matrix.os }}-${{ matrix.browser }}-${{ github.run_id }}
+          name: playwright-report-normal-${{ matrix.os }}-${{ matrix.browser }}-${{
+            github.run_id }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
@@ -259,11 +278,27 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Install Japanese fonts (Ubuntu only)
+      # Ubuntuランナーには日本語フォントがないためインストール (文字化け/トーフ対策)
+      - name: Cache Japanese fonts (Ubuntu only)
         if: matrix.os == 'ubuntu-latest'
+        id: cache-fonts
+        uses: actions/cache@v5
+        with:
+          path: ~/.fonts
+          key: ${{ runner.os }}-fonts-noto-cjk-v1
+
+      - name: Install Japanese fonts (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest' && steps.cache-fonts.outputs.cache-hit !=
+          'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
+          mkdir -p ~/.fonts
+          cp -r /usr/share/fonts/opentype/noto ~/.fonts/
+
+      - name: Refresh font cache (Ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: fc-cache -fv
 
       - name: Get daily cache key suffix
         id: get-date
@@ -320,7 +355,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: playwright-report-premium-${{ matrix.os }}-${{ matrix.browser }}-${{ github.run_id }}
+          name: playwright-report-premium-${{ matrix.os }}-${{ matrix.browser }}-${{
+            github.run_id }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
@@ -334,7 +370,7 @@ jobs:
   # ===================================================================
   cleanup:
     # NormalまたはPremiumいずれかの実行が終わった後、常に呼び出す。
-    needs: [e2e-normal, e2e-premium]
+    needs: [ e2e-normal, e2e-premium ]
     if: always()
     runs-on: ubuntu-latest
     permissions:
@@ -378,7 +414,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run Cleanup Script
-        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=chromium
+        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
+          --project=chromium
         env:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
