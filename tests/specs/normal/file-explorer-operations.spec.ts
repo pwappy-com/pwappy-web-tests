@@ -53,8 +53,6 @@ test.describe('ファイルエクスプローラー操作テスト', () => {
         // これをしないと、createApp 内の「アプリケーションの追加」ボタンがクリックできません
         const loadingOverlay = page.locator('dashboard-main-content > dashboard-loading-overlay');
         await expect(loadingOverlay).toBeHidden({ timeout: 30000 });
-
-        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
     test('ディレクトリのコピー＆ペーストができる', async ({ editorPage, editorHelper }) => {

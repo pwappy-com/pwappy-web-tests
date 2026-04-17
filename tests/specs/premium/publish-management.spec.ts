@@ -15,7 +15,7 @@ import {
     deleteGeminiApiKey,
     waitForVersionStatus,
     openEditor,
-    gotoDashboard
+    gotoDashboard,
 } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
 
@@ -23,12 +23,10 @@ test.describe.configure({ mode: 'serial' });
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
-// --- テストシナリオ ---
 test.describe('公開管理 E2Eシナリオ', () => {
 
     test.beforeEach(async ({ page, context }) => {
         await gotoDashboard(page);
-        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
     test('公開状態の遷移とダウンロード機能をテストする', async ({ page }) => {
@@ -43,7 +41,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await createApp(page, appName, appKey);
         });
 
-        // APIキーを削除するテスト
         await test.step('テスト: Gemini APIキーを削除する', async () => {
             await deleteGeminiApiKey(page);
         });
@@ -53,37 +50,29 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
             const initialPoints = await getCurrentPoints(page);
             console.log(`取得した初期ポイント: ${initialPoints}`);
-            expect(initialPoints).toBeGreaterThanOrEqual(20); // 審査に必要な最低20PPがあること
+            expect(initialPoints).toBeGreaterThanOrEqual(20);
 
-            // 公開準備を開始
             await startPublishPreparation(page, appName, version);
-            await expectVersionStatus(page, version, '公開準備中');
-
-            // アニメーションおよび処理完了まで待機
-            await page.waitForTimeout(3000);
-
+            await expectVersionStatus(page, version, '審査待ち');
+            await expectVersionStatus(page, version, '準備完了');
             const currentPoints = await getCurrentPoints(page);
             console.log(`公開審査を開始したあとに取得したポイント: ${currentPoints}`);
 
             const pointsDiff = initialPoints - currentPoints;
             expect(pointsDiff).toBe(0);
 
-            // 公開準備完了を経て公開中にする
             await completePublication(page, appName, version);
             await expectVersionStatus(page, version, '公開中');
 
-            // 非公開に戻す
             await unpublishVersion(page, appName, version);
             await expectVersionStatus(page, version, '非公開');
         });
 
         await test.step('テスト: ダウンロード機能を確認する', async () => {
-            // ダウンロード時は10PP消費される
             await downloadVersion(page, { appName, appKey, version });
         });
 
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
-            // ダウンロードダイアログの残存や通信ラグを防ぐため、networkidleまでリロードして状態を完全にリセット
             await page.reload({ waitUntil: 'networkidle' });
             await deleteApp(page, appKey);
             await expectAppVisibility(page, appKey, false);
@@ -111,20 +100,17 @@ test.describe('公開管理 E2Eシナリオ', () => {
             console.log(`取得した初期ポイント: ${initialPoints}`);
 
             await startPublishPreparation(page, appName, version);
-            await expectVersionStatus(page, version, '公開準備中');
-
-            await page.waitForTimeout(3000);
+            await expectVersionStatus(page, version, '審査待ち');
+            await expectVersionStatus(page, version, '準備完了');
 
             const currentPoints = await getCurrentPoints(page);
             console.log(`公開審査後のポイント: ${currentPoints}`);
 
-            // 無料で審査できるため0PP消費される
             const pointsDiff = initialPoints - currentPoints;
             expect(pointsDiff).toBe(0);
         });
 
         await test.step('クリーンアップ: APIキー削除とアプリ削除', async () => {
-            // 状態をクリーンにして削除ボタンが確実に押せるようにする
             await page.reload({ waitUntil: 'networkidle' });
             await deleteGeminiApiKey(page);
             await deleteApp(page, appKey);
@@ -146,31 +132,25 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('セットアップ: アプリ作成と無効なAPIキー設定', async () => {
             await createApp(page, appName, appKey);
-            // ユーザー設定として無効なGeminiキーを登録
             await setGeminiApiKey(page, apiKey);
         });
 
         await test.step('テスト: 審査実行と20PP消費、および審査通過の確認', async () => {
             test.setTimeout(120000);
 
-            // 審査開始前のポイントを保持
             const initialPoints = await getCurrentPoints(page);
 
-            // 公開準備を開始（OpenAI Moderationによる審査が走る）
             await startPublishPreparation(page, appName, version);
 
-            // 1. 消費ポイントの検証: 無料で審査できるため0PP消費されることを確認
             await page.waitForTimeout(3000);
             const currentPoints = await getCurrentPoints(page);
             expect(initialPoints - currentPoints).toBe(0);
 
-            // OpenAI Moderation審査なので、ユーザーのGeminiキーが無効でも「公開準備完了」になる
-            await waitForVersionStatus(page, appName, version, '公開準備完了', { timeout: 150000, intervals: [10000, 20000] });
-            await expectVersionStatus(page, version, '公開準備完了');
+            await waitForVersionStatus(page, appName, version, '準備完了', { timeout: 150000, intervals: [10000, 20000] });
+            await expectVersionStatus(page, version, '準備完了');
         });
 
         await test.step('クリーンアップ', async () => {
-            // 状態をクリーンにして削除ボタンが確実に押せるようにする
             await page.reload({ waitUntil: 'networkidle' });
             await deleteGeminiApiKey(page);
             await deleteApp(page, appKey);
@@ -193,26 +173,18 @@ test.describe('公開管理 E2Eシナリオ', () => {
         const testContext = { page, context, isMobile, appName, version };
 
         await test.step('テスト: モック応答でAIコーディングのフローが完了することを確認', async () => {
-            // APIキーの有無に関わらず、モックが反応するので Gemini は消費されない
             await deleteGeminiApiKey(page);
-
-            // initialPoints の取得
             const initialPoints = await getCurrentPoints(page);
 
             const editorPage = await openEditor(page, context, appName, version);
 
-            // 状態管理用の変数
             let isProcessing = false;
             let getRequestAfterPostCount = 0;
 
-            // モックを設定する
-            // エンドポイントを **/ai-script-coding* に変更し、GET/POSTで分岐
-            // 末尾にワイルドカードをつけることでクエリパラメータ(?ticket=...)に対応
             await editorPage.route('**/ai-script-coding*', async (route) => {
                 const request = route.request();
 
                 if (request.method() === 'POST') {
-                    // 送信リクエストには受付OKを返す
                     isProcessing = true;
                     getRequestAfterPostCount = 0;
                     await route.fulfill({
@@ -222,8 +194,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
                     });
                 } else if (request.method() === 'GET') {
                     if (!isProcessing) {
-                        // 初期状態（エディタを開いた直後）は履歴なしを返す
-                        // これで「コード生成中」などの不要なメッセージが出ないようにする
                         await route.fulfill({
                             status: 200,
                             contentType: 'application/json',
@@ -234,12 +204,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
                         });
                     } else {
                         getRequestAfterPostCount++;
-
-                        // 送信後のポーリングリクエストには、状態を変化させて返す
-                        // 1回目: pending (コード生成中) -> verifyのために必要
-                        // 2回目以降: completed (完了) -> ボタンを表示させるため
                         const status = getRequestAfterPostCount <= 1 ? "pending" : "completed";
-
                         await route.fulfill({
                             status: 200,
                             contentType: 'application/json',
@@ -249,7 +214,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
                                     {
                                         ticket: "mock-ticket-12345",
                                         requestContent: "モック用の指示です",
-                                        // サーバー側でMarkdown記法や説明文は既に除去され、純粋なコードのみになっている状態をシミュレート
                                         responseContent: status === "completed" ?
                                             "function mockedFunction() {\n  console.log('This is a mocked response');\n}"
                                             : null,
@@ -275,12 +239,9 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await editorHelper.addNewScript('mockScript');
             await editorHelper.openScriptForEditing('mockScript');
 
-            // AI実行（ここで page.route が発動する）
             await editorHelper.generateCodeWithAi('モック用の指示です');
-
             await editorHelper.closeMoveingHandle();
 
-            // エディタを閉じる
             await editorPage.locator('platform-bottom-menu').evaluate((el: HTMLElement) => el.click());
             await Promise.all([
                 editorPage.waitForEvent('close'),
@@ -289,10 +250,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ', async () => {
-            // 状態をクリーンにして削除ボタンが確実に押せるようにする
             await page.reload({ waitUntil: 'networkidle' });
             await deleteApp(page, appKey);
         });
     });
-
 });

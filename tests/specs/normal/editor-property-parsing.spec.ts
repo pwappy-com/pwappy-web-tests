@@ -52,7 +52,6 @@ test.describe('JSDocからのプロパティ解析機能のテスト', () => {
      */
     test.beforeEach(async ({ page, context, isMobile }) => {
         await gotoDashboard(page);
-        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
     /**

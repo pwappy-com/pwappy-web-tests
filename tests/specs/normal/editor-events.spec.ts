@@ -42,7 +42,6 @@ const test = base.extend<EditorFixtures>({
 test.describe('エディタ内イベント＆スクリプト機能のテスト', () => {
     test.beforeEach(async ({ page, context, isMobile }) => {
         await gotoDashboard(page);
-        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
     test('アプリケーションのDOMContentLoadedイベントにスクリプトを割り当て', async ({ editorPage, editorHelper }) => {

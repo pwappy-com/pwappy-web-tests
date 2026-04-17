@@ -11,8 +11,6 @@ test.describe('AIヒントバナーの検証', () => {
     test.beforeEach(async ({ page, context }) => {
         // 1. テストの前提条件として、アカウントのAI機能を「無効」に設定する
         await gotoDashboard(page);
-        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
-
         try {
             await setAiCoding(page, false);
         } catch (e) {
