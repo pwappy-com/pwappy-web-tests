@@ -62,7 +62,7 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
  * クリーンアップスクリプトと同じ「アプリ設定」からの削除フローを使用します。
  */
 export async function deleteApp(page: Page, appKey: string): Promise<void> {
-    console.log(`[DEBUG] deleteApp開始: ${appKey}`);
+    // console.log(`[DEBUG] deleteApp開始: ${appKey}`);
     await page.bringToFront();
 
     // 1. 確実にダッシュボード（ワークベンチ）を表示
@@ -107,7 +107,7 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     const loadingOverlay = page.locator('dashboard-loading-overlay');
     await expect(loadingOverlay).toBeHidden({ timeout: 10000 });
 
-    console.log(`[DEBUG] deleteApp完了: ${appKey}`);
+    // console.log(`[DEBUG] deleteApp完了: ${appKey}`);
 }
 
 export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {

@@ -82,13 +82,13 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
 
         await test.step('1. AIにリクエストを送信', async () => {
             await editorHelper.closeMoveingHandle();
-            console.log('[DEBUG] agent-protection: Opening bottom menu...');
+            // console.log('[DEBUG] agent-protection: Opening bottom menu...');
             await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
 
             const bottomMenu = editorPage.locator('#platformBottomMenu');
             await expect(bottomMenu).toBeVisible({ timeout: 10000 });
 
-            console.log('[DEBUG] agent-protection: Clicking AI Agent button...');
+            // console.log('[DEBUG] agent-protection: Clicking AI Agent button...');
             await bottomMenu.getByText('AIエージェント').click({ force: true });
             await editorPage.locator('agent-chat-window textarea.user-input').fill('テスト');
             await editorPage.locator('agent-chat-window #send-button').click({ force: true });
@@ -194,13 +194,13 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
 
         await test.step('1. バグ入りスクリプトをAIに生成させる', async () => {
             await editorHelper.closeMoveingHandle();
-            console.log('[DEBUG] agent-protection: Opening bottom menu...');
+            // console.log('[DEBUG] agent-protection: Opening bottom menu...');
             await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
 
             const bottomMenu = editorPage.locator('#platformBottomMenu');
             await expect(bottomMenu).toBeVisible({ timeout: 10000 });
 
-            console.log('[DEBUG] agent-protection: Clicking AI Agent button...');
+            // console.log('[DEBUG] agent-protection: Clicking AI Agent button...');
             await bottomMenu.getByText('AIエージェント').click({ force: true });
             await editorPage.locator('agent-chat-window textarea.user-input').fill('バグを作って');
             await editorPage.locator('agent-chat-window #send-button').click({ force: true });
@@ -300,7 +300,7 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
 
             await editorHelper.closeMoveingHandle();
 
-            console.log('[DEBUG] agent-protection: Opening AI Agent window...');
+            // console.log('[DEBUG] agent-protection: Opening AI Agent window...');
             await expect(async () => {
                 await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
                 const bottomMenu = editorPage.locator('#platformBottomMenu');

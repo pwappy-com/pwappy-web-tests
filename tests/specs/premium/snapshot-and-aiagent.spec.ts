@@ -90,7 +90,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
         try {
             await test.step('3. AIエージェントボタンが表示され、ウィンドウが開くことを確認', async () => {
-                console.log('[DEBUG] Case 1: Opening AI Agent window...');
+                // console.log('[DEBUG] Case 1: Opening AI Agent window...');
                 await expect(async () => {
                     await editorPage.locator('#fab-bottom-menu-box').evaluate((el: HTMLElement) => el.click());
                     const bottomMenu = editorPage.locator('#platformBottomMenu');
@@ -146,7 +146,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
         try {
             await test.step('3. メニューを開き、AIエージェントボタンが表示されることを確認', async () => {
-                console.log('[DEBUG] Case 2: Opening AI Agent window...');
+                // console.log('[DEBUG] Case 2: Opening AI Agent window...');
                 await expect(async () => {
                     await editorPage.locator('#fab-bottom-menu-box').evaluate((el: HTMLElement) => el.click());
                     const bottomMenu = editorPage.locator('#platformBottomMenu');
@@ -185,7 +185,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
         try {
             await test.step('3. メニューを開き、AIエージェントボタンが非表示であることを確認', async () => {
-                console.log('[DEBUG] Case 3: Checking AI Agent button is hidden...');
+                // console.log('[DEBUG] Case 3: Checking AI Agent button is hidden...');
                 await expect(async () => {
                     await editorPage.locator('#fab-bottom-menu-box').evaluate((el: HTMLElement) => el.click());
                     const bottomMenu = editorPage.locator('#platformBottomMenu');
@@ -236,7 +236,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await editorHelper.closeMoveingHandle();
 
                 // メニュー展開とエージェントウィンドウ表示をリトライ付きで確実に行う
-                console.log('[DEBUG] snapshot: Opening AI Agent window...');
+                // console.log('[DEBUG] snapshot: Opening AI Agent window...');
                 await expect(async () => {
                     const agentWindow = editorPage.locator('agent-chat-window');
 
@@ -269,7 +269,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await expect(modal).toBeVisible();
                 await modal.locator('#snapshot-name').fill(snapshotName);
 
-                console.log('[DEBUG] snapshot: Clicking create button in modal...');
+                // console.log('[DEBUG] snapshot: Clicking create button in modal...');
                 await editorPage.waitForTimeout(500);
                 const createBtn = modal.locator('button', { hasText: '作成' });
                 await createBtn.evaluate((el: HTMLElement) => el.click()).catch(() => createBtn.click({ force: true }));
@@ -296,7 +296,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await editorHelper.closeMoveingHandle();
 
                 // スナップショット管理画面の展開も確実に行う
-                console.log('[DEBUG] snapshot: Opening Snapshot Manager...');
+                // console.log('[DEBUG] snapshot: Opening Snapshot Manager...');
                 await expect(async () => {
                     const manager = editorPage.locator('snapshot-manager');
                     // Playwrightの判定回避のため、ShadowDOM内部の実体コンテナで可視性をチェック
@@ -323,7 +323,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 let alertDismissed = false;
                 const dialogHandler = async (dialog: any) => {
                     const msg = dialog.message();
-                    console.log(`[DEBUG] dialog event: ${dialog.type()} - ${msg}`);
+                    // console.log(`[DEBUG] dialog event: ${dialog.type()} - ${msg}`);
                     if (msg.includes('現在の編集内容は破棄され')) {
                         await dialog.accept(); // confirm を承認
                     } else if (msg.includes('復元しました')) {
@@ -337,7 +337,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 editorPage.on('dialog', dialogHandler);
 
                 try {
-                    console.log('[DEBUG] snapshot: Clicking restore button...');
+                    // console.log('[DEBUG] snapshot: Clicking restore button...');
                     const restoreBtn = item.getByRole('button', { name: '復元' });
                     // インターセプトを防ぐために evaluate を使用
                     await restoreBtn.evaluate((node: HTMLElement) => node.click());
@@ -358,12 +358,12 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await expect(domTree.locator('.node[data-node-type="ons-button"]')).toBeVisible();
             });
         } finally {
-            console.log('[DEBUG] snapshot-and-aiagent: finally block started. Closing editorPage...');
+            // console.log('[DEBUG] snapshot-and-aiagent: finally block started. Closing editorPage...');
             try {
                 await editorPage.close();
-                console.log('[DEBUG] snapshot-and-aiagent: editorPage closed successfully. Bringing dashboard page to front...');
+                // console.log('[DEBUG] snapshot-and-aiagent: editorPage closed successfully. Bringing dashboard page to front...');
                 await page.bringToFront();
-                console.log('[DEBUG] snapshot-and-aiagent: bringToFront completed.');
+                // console.log('[DEBUG] snapshot-and-aiagent: bringToFront completed.');
             } catch (e) {
                 console.error('[DEBUG ERROR] snapshot-and-aiagent: Error in finally block:', e);
             }
@@ -392,7 +392,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
 
         try {
             await test.step('3. AIエージェントウィンドウを開く', async () => {
-                console.log('[DEBUG] snapshot-cancel: Opening AI Agent window...');
+                // console.log('[DEBUG] snapshot-cancel: Opening AI Agent window...');
                 await expect(async () => {
                     const agentWindow = editorPage.locator('agent-chat-window');
                     if (await agentWindow.isVisible().catch(() => false)) return;
@@ -419,7 +419,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 const modal = agentWindow.locator('.modal-dialog');
                 await expect(modal).toBeVisible();
 
-                console.log('[DEBUG] snapshot-cancel: Clicking cancel button in modal...');
+                // console.log('[DEBUG] snapshot-cancel: Clicking cancel button in modal...');
                 const cancelBtn = modal.locator('button', { hasText: 'キャンセル' });
                 await cancelBtn.evaluate((el: HTMLElement) => el.click()).catch(() => cancelBtn.click({ force: true }));
 
@@ -427,7 +427,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await expect(modal).toBeHidden({ timeout: 5000 });
             });
         } finally {
-            console.log('[DEBUG] snapshot-cancel: finally block started. Closing editorPage...');
+            // console.log('[DEBUG] snapshot-cancel: finally block started. Closing editorPage...');
             try {
                 await editorPage.close();
                 await page.bringToFront();
