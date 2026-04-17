@@ -48,7 +48,7 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     await expect(appModal).toBeHidden();
 
-    await  page.waitForTimeout(500);
+    await page.waitForTimeout(500);
 
     // 新規作成後は自動的に選択状態になるはずなので、バージョンセクションを待機
     await expect(page.locator('dashboard-app-detail')).toBeVisible({ timeout: 15000 });
@@ -83,16 +83,20 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     // 4. 詳細画面が表示されるのを待機（アクティブなタブが表示されるまで）
     await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
 
+    await page.waitForTimeout(500);
+
     // 5. 「アプリ設定」タブをクリック
     await page.getByText('アプリ設定').click();
+
+    await page.waitForTimeout(500);
 
     // 6. 「削除する」ボタンが有効になるのを待ってクリック
     const deleteButton = page.getByRole('button', { name: '削除する' });
     await expect(deleteButton).toBeEnabled({ timeout: 10000 });
     await deleteButton.click({ force: true });
 
-    await page.waitForTimeout(1000);
-    
+    await page.waitForTimeout(500);
+
     // 7. 確認ダイアログ（設定画面からの削除用ID: #delete-confirm-general）を処理
     const confirmDialog = page.locator('message-box#delete-confirm-general');
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });

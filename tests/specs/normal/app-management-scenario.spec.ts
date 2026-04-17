@@ -87,6 +87,8 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await expect(page.locator('dashboard-app-detail')).toBeVisible({ timeout: 15000 });
             await page.getByText('アプリ設定').click();
 
+            await page.waitForTimeout(500);
+
             const editButton = page.getByRole('button', { name: '編集する' });
             await editButton.click();
 
@@ -128,6 +130,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         await test.step('テスト: 編集ダイアログでバリデーションエラーを確認', async () => {
             // アプリ詳細画面から設定タブへ移動（createApp後は詳細画面にいる）
             await page.getByText('アプリ設定').click();
+            await page.waitForTimeout(500);
             await page.getByRole('button', { name: '編集する' }).click();
             await page.waitForTimeout(500);
 
@@ -172,6 +175,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         await test.step('テスト: アプリBのキーをアプリAのキーに変更してエラーを確認', async () => {
             // 現在アプリBの詳細画面にいるはず
             await page.getByText('アプリ設定').click();
+            await page.waitForTimeout(500);
             await page.getByRole('button', { name: '編集する' }).click();
 
             const modal = page.locator('dashboard-modal-window#appEditModal');
@@ -228,6 +232,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             await expect(page.locator('dashboard-app-detail')).toBeVisible({ timeout: 15000 });
 
             await page.getByText('アプリ設定').click();
+            await page.waitForTimeout(500);
             const deleteButton = page.getByRole('button', { name: '削除する' });
             await expect(deleteButton).toBeEnabled();
             await deleteButton.click({ force: true });

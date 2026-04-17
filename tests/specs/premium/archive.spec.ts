@@ -39,6 +39,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
 
                 const appSettingBtn = page.getByText('アプリ設定');
                 await appSettingBtn.click();
+                await page.waitForTimeout(500);
 
                 await page.getByRole('button', { name: ' アーカイブする' }).click();
                 const confirmDialog = page.locator('message-box#archive-confirm');
