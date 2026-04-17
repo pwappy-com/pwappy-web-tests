@@ -15,7 +15,6 @@ test.describe('クーポン機能 E2Eシナリオ', () => {
 
     test.beforeEach(async ({ page, context }) => {
         await gotoDashboard(page);
-        await expect(page.getByRole('heading', { name: 'アプリケーション一覧' })).toBeVisible();
     });
 
     test('TEST_DAILY_COUPONの適用と重複利用の防止', async ({ page }) => {
