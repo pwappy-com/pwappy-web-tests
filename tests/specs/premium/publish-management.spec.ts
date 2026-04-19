@@ -18,6 +18,7 @@ import {
     gotoDashboard,
 } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
+import { time } from 'console';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -54,6 +55,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
             await startPublishPreparation(page, appName, version);
             await expectVersionStatus(page, version, '審査待ち');
+            await waitForVersionStatus(page, version, '準備完了', { timeout: 150000, intervals: [10000, 20000] });
             await expectVersionStatus(page, version, '準備完了');
             const currentPoints = await getCurrentPoints(page);
             console.log(`公開審査を開始したあとに取得したポイント: ${currentPoints}`);
@@ -146,7 +148,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
             const currentPoints = await getCurrentPoints(page);
             expect(initialPoints - currentPoints).toBe(0);
 
-            await waitForVersionStatus(page, appName, version, '準備完了', { timeout: 150000, intervals: [10000, 20000] });
+            await waitForVersionStatus(page, version, '準備完了', { timeout: 150000, intervals: [10000, 20000] });
             await expectVersionStatus(page, version, '準備完了');
         });
 

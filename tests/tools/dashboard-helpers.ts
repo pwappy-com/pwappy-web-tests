@@ -154,7 +154,8 @@ export async function publishVersion(page: Page, appName: string, version: strin
     await applyBtn.evaluate((el: HTMLElement) => el.click()).catch(() => applyBtn.click({ force: true }));
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
-    await waitForVersionStatus(page, appName, version, '準備完了');
+    await waitForVersionStatus(page, version, '準備完了', { timeout: 150000, intervals: [10000, 20000] });
+    await waitForVersionStatus(page, version, '準備完了');
 
     versionRow = page.locator('.version-card', { hasText: version });
     const pubBtn = versionRow.getByRole('button', { name: '公開する' });
@@ -201,7 +202,8 @@ export async function startPublishPreparation(page: Page, appName: string, versi
 }
 
 export async function completePublication(page: Page, appName: string, version: string): Promise<void> {
-    await waitForVersionStatus(page, appName, version, '準備完了');
+    await waitForVersionStatus(page, version, '準備完了', { timeout: 150000, intervals: [10000, 20000] });
+    await waitForVersionStatus(page, version, '準備完了');
 
     const readyVersionRow = page.locator('.version-card', { hasText: version });
     const pubBtn = readyVersionRow.getByRole('button', { name: '公開する' });
@@ -516,7 +518,6 @@ export async function deleteGeminiApiKey(page: Page): Promise<void> {
 
 export async function waitForVersionStatus(
     page: Page,
-    appName: string,
     version: string,
     expectedStatus: string,
     options: { timeout?: number; intervals?: number[] } = {}

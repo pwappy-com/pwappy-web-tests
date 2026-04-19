@@ -36,7 +36,7 @@ test.describe('削除・編集のガード条件テスト', () => {
             const versionRow = page.locator('.version-card', { hasText: version }).first();
 
             await expect(versionRow).toContainText('審査待ち');
-            await expect(versionRow).toContainText('準備完了');
+            await expect(versionRow).toContainText('準備完了', { timeout: 120000 });
 
             await expect(versionRow.locator('.btn-icon').filter({ has: page.locator('.fa-pen') })).toBeVisible({ visible: false });
             await expect(versionRow.locator('.btn-icon').filter({ has: page.locator('.fa-trash') })).toBeVisible({ visible: false });

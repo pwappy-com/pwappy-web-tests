@@ -276,7 +276,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 const createBtn = modal.locator('button', { hasText: '作成' });
                 await createBtn.evaluate((el: HTMLElement) => el.click()).catch(() => createBtn.click({ force: true }));
 
-                const snapshotItem = agentWindow.locator(`.snapshot-body:has-text("${snapshotName}")`);
+                const snapshotItem = agentWindow.locator(`.snapshot-compact-title:has-text("${snapshotName}")`);
                 await expect(snapshotItem).toBeVisible({ timeout: 45000 });
 
                 await agentWindow.locator('.close-btn').evaluate((el: HTMLElement) => el.click());
