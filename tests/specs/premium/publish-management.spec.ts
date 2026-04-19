@@ -95,7 +95,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await setGeminiApiKey(page, apiKey);
         });
 
-        await test.step('テスト: APIキーがあっても消費PPが20であることを確認', async () => {
+        await test.step('テスト: APIキーがあっても消費PPが0であることを確認', async () => {
             test.setTimeout(120000);
 
             const initialPoints = await getCurrentPoints(page);
