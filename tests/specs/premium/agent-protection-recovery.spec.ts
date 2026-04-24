@@ -45,12 +45,10 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
 
     test('修復不能なJSONの連続受信時、リトライ上限で停止し手動修正から再開できる', async ({ editorPage, editorHelper }) => {
         let isProcessing1 = false;
-        let getRequestCount1 = 0;
         await editorPage.route(/.*agent.*/, async route => {
             const request = route.request();
             if (request.method() === 'POST') {
                 isProcessing1 = true;
-                getRequestCount1 = 0;
                 await route.fulfill({
                     status: 200,
                     contentType: 'application/json',
@@ -65,14 +63,13 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
                     });
                     return;
                 }
-                getRequestCount1++;
-                const status = getRequestCount1 <= 1 ? "pending" : "completed";
+                // 即座に完了状態かつ不正なJSONを返却し、ポーリング待機時間をカットする
                 await route.fulfill({
                     status: 200,
                     contentType: 'application/json',
                     body: JSON.stringify({
                         code: 200,
-                        details: { aiAgentRequests: [{ status: status, responsePayload: `THIS IS NOT A JSON AT ALL. SYSTEM MUST FAIL.` }] }
+                        details: { aiAgentRequests: [{ status: "completed", responsePayload: `THIS IS NOT A JSON AT ALL. SYSTEM MUST FAIL.` }] }
                     })
                 });
             } else {
@@ -98,12 +95,17 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
 
         await test.step('2. リトライ上限到達と手動修正モードへの移行を確認', async () => {
             const agentWindow = editorPage.locator('agent-chat-window');
-            await expect(agentWindow.getByText('致命的なエラーが発生しました')).toBeVisible({ timeout: 45000 });
-            await agentWindow.getByRole('button', { name: '手動モードに切り替えて対応する' }).click({ force: true });
-            await expect(agentWindow.getByText('手動実行の待機中')).toBeVisible();
+            // 高速にループが回るため、タイムアウトを20秒程度に短縮しても十分間に合う
+            await expect(agentWindow.getByText('構築エラーが発生しました')).toBeVisible({ timeout: 20000 });
+            await expect(agentWindow.getByText('自動修復の試行回数が')).toBeVisible();
+            const manualButton = editorPage.getByRole('button', { name: ' 手動' });
+            await manualButton.click();
+            await expect(manualButton).toBeFocused();
+            await agentWindow.getByRole('button', { name: 'AIに修正を依頼する' }).click({ force: true });
         });
 
         await test.step('3. 正しいJSONを手動で入力して続行し、正常に反映されるか確認', async () => {
+
             await editorPage.unroute(/.*agent.*/);
             const validJson = JSON.stringify({
                 blueprint: {
@@ -142,7 +144,7 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
         });
     });
 
-    test('実行時エラー（Syntax Error）の自動検知とクリーンなロールバック', async ({ editorPage, editorHelper }) => {
+    test('実行時エラー（Syntax Error）の自動検知とエラー状態の維持', async ({ editorPage, editorHelper }) => {
         const { buttonNode } = await editorHelper.setupPageWithButton();
         await editorHelper.openMoveingHandle('right');
         const scriptContainer = editorPage.locator('script-container');
@@ -150,12 +152,10 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
         await editorHelper.addNewScript('goodScript');
 
         let isProcessing2 = false;
-        let getRequestCount2 = 0;
         await editorPage.route(/.+\/ai-.+/, async route => {
             const request = route.request();
             if (request.method() === 'POST') {
                 isProcessing2 = true;
-                getRequestCount2 = 0;
                 await route.fulfill({
                     status: 200,
                     contentType: 'application/json',
@@ -170,14 +170,13 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
                     });
                     return;
                 }
-                getRequestCount2++;
-                const status = getRequestCount2 <= 1 ? "pending" : "completed";
+                // 即座に完了状態を返す
                 const mockPayload = JSON.stringify({
                     blueprint: {
                         scripts: [{
                             name: "badScript",
-                            // 構文エラー(SyntaxError)が iframe で確実に捕捉されるよう、即時実行で Error オブジェクトを投げる形に修正します
-                            content: "function badScript() { throw new Error('SyntaxError: Simulated execution error'); }\nsetTimeout(badScript, 100);",
+                            // スクリプト追加時の即時評価で確実にSyntaxErrorを発生させるための不正な構文
+                            content: "function badScript() { \n const a = ; // SyntaxError \n }",
                             description: "バグ"
                         }]
                     },
@@ -188,7 +187,7 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
                     contentType: 'application/json',
                     body: JSON.stringify({
                         code: 200,
-                        details: { aiAgentRequests: [{ status: status, responsePayload: mockPayload }] }
+                        details: { aiAgentRequests: [{ status: "completed", responsePayload: mockPayload }] }
                     })
                 });
             } else {
@@ -218,13 +217,14 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
             await expect(agentWindow.locator('.message-agent').filter({ hasText: 'SyntaxError' })).toBeVisible();
         });
 
-        await test.step('3. ロールバックの検証（不完全なデータが残っていないこと）', async () => {
+        await test.step('3. エラー状態が維持されることの検証（バグ入りデータが残っていること）', async () => {
             const agentWindow = editorPage.locator('agent-chat-window');
             await agentWindow.locator('.close-btn').click({ force: true });
 
             await editorHelper.openMoveingHandle('right');
             await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
-            await expect(scriptContainer.locator('.editor-row', { hasText: 'badScript' })).toBeHidden();
+            // 新仕様では自動ロールバックされず、エラーの原因となった badScript がそのまま残る
+            await expect(scriptContainer.locator('.editor-row', { hasText: 'badScript' })).toBeVisible();
             await expect(scriptContainer.locator('.editor-row', { hasText: 'goodScript' })).toBeVisible();
         });
     });
@@ -263,12 +263,10 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
 
         await test.step('2. AIにロック対象の削除と上書きを命じる', async () => {
             let isProcessing3 = false;
-            let getRequestCount3 = 0;
             await editorPage.route(/.*agent.*/, async route => {
                 const request = route.request();
                 if (request.method() === 'POST') {
                     isProcessing3 = true;
-                    getRequestCount3 = 0;
                     await route.fulfill({
                         status: 200,
                         contentType: 'application/json',
@@ -283,8 +281,7 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
                         });
                         return;
                     }
-                    getRequestCount3++;
-                    const status = getRequestCount3 <= 1 ? "pending" : "completed";
+                    // 即座に完了状態を返す
                     const mockPayload = JSON.stringify({
                         blueprint: {
                             deleted_items: { pages: ["application", "home.html", "page2.html"] },
@@ -297,7 +294,7 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
                         contentType: 'application/json',
                         body: JSON.stringify({
                             code: 200,
-                            details: { aiAgentRequests: [{ status: status, responsePayload: mockPayload }] }
+                            details: { aiAgentRequests: [{ status: "completed", responsePayload: mockPayload }] }
                         })
                     });
                 } else {
