@@ -100,7 +100,7 @@ test.describe('AIエージェント：エラーリカバリと保護機能（ロ
             await expect(agentWindow.getByText('自動修復の試行回数が')).toBeVisible();
             const manualButton = editorPage.getByRole('button', { name: ' 手動' });
             await manualButton.click();
-            await expect(manualButton).toBeFocused();
+            await expect(manualButton).toHaveClass(/active/);
             await agentWindow.getByRole('button', { name: 'AIに修正を依頼する' }).click({ force: true });
         });
 
