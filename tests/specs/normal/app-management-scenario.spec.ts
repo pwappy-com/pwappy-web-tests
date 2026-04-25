@@ -238,11 +238,12 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
         await test.step('テスト: 削除確認ダイアログでキャンセルを押し、アプリが削除されないことを確認', async () => {
             await expect(page.locator('dashboard-app-detail')).toBeVisible({ timeout: 15000 });
 
-            await page.getByText('アプリ設定').click();
-            await page.waitForTimeout(500);
+            const appSettingButton = page.getByText('アプリ設定');
+            await expect(appSettingButton).toBeVisible();
+            await appSettingButton.click();
             const deleteButton = page.getByRole('button', { name: '削除する' });
             await expect(deleteButton).toBeEnabled();
-            await deleteButton.click({ force: true });
+            await deleteButton.click();
 
             const confirmDialog = page.locator('message-box#delete-confirm-general');
             await expect(confirmDialog).toBeVisible();
