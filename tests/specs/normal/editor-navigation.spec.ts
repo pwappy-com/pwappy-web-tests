@@ -696,5 +696,86 @@ test.describe('エディタ内機能のテスト', () => {
 
             await editorHelper.expectPreviewElementAttribute({ selector: nodeType, attributeName: 'style', value: null });
         });
+    }); 
+
+    test('トップテンプレートリストをキーボード（上下キー）で移動すると即座にテンプレートが切り替わる', async ({ editorPage, editorHelper }) => {
+        let page1Id: string;
+        let page2Id: string;
+
+        await test.step('セットアップ: ページを2つ追加', async () => {
+            // 左側のハンドルを開く
+            await editorHelper.openMoveingHandle('left');
+
+            // ページを2つ追加
+            const page1Node = await editorHelper.addPage();
+            page1Id = await page1Node.getAttribute('data-node-id') as string;
+
+            const page2Node = await editorHelper.addPage();
+            page2Id = await page2Node.getAttribute('data-node-id') as string;
+
+            // 初期状態はpage2 (2番目に追加したもの) が選択されているはず
+        });
+
+        await test.step('検証: 上下キーによる即時切り替え', async () => {
+            const topContainer = editorPage.locator('.top-container');
+            const selectBox = topContainer.locator('.select');
+
+            // リストを開く
+            await selectBox.click();
+
+            const topTemplateListContainer = editorPage.locator('#top-template-list');
+            await expect(topTemplateListContainer).toBeVisible({ timeout: 5000 });
+
+            // 現在の選択要素を確認
+            const items = topTemplateListContainer.locator('.top-template-item');
+            await expect(items).toHaveCount(3);
+
+            // アプリケーション（ルート）の template-id は items の最初 (nth(0)) から取得
+            const appId = await items.nth(0).getAttribute('data-template-id');
+            expect(appId).not.toBeNull();
+
+            // 下キーを押す -> page2 の次は application (先頭に戻る) のはず
+            await editorPage.keyboard.press('ArrowDown');
+
+            // 選択要素が変わったか確認 (appId)
+            const selectedItem1 = topTemplateListContainer.locator('.selected-template');
+            await expect(selectedItem1).toBeVisible();
+            expect(await selectedItem1.getAttribute('data-template-id')).toBe(appId);
+
+            // 上キーを押す -> 先頭から最後（page2）へ
+            await editorPage.keyboard.press('ArrowUp');
+            const selectedItem2 = topTemplateListContainer.locator('.selected-template');
+            await expect(selectedItem2).toBeVisible();
+            expect(await selectedItem2.getAttribute('data-template-id')).toBe(page2Id);
+
+            // 上キーをもう一度押す -> page1
+            await editorPage.keyboard.press('ArrowUp');
+            const selectedItem3 = topTemplateListContainer.locator('.selected-template');
+            await expect(selectedItem3).toBeVisible();
+            expect(await selectedItem3.getAttribute('data-template-id')).toBe(page1Id);
+
+            // Enterを押して閉じる
+            await editorPage.keyboard.press('Enter');
+
+            // リストが閉じたことを確認
+            await expect(topTemplateListContainer).toBeHidden();
+        });
+
+        await test.step('検証: Escapeによるキャンセル（閉じる動作）', async () => {
+            const topContainer = editorPage.locator('.top-container');
+            const selectBox = topContainer.locator('.select');
+
+            // リストを開く
+            await selectBox.click();
+
+            const topTemplateListContainer = editorPage.locator('#top-template-list');
+            await expect(topTemplateListContainer).toBeVisible({ timeout: 5000 });
+
+            // Escapeを押して閉じる
+            await editorPage.keyboard.press('Escape');
+
+            // リストが閉じたことを確認
+            await expect(topTemplateListContainer).toBeHidden();
+        });
     });
 });
