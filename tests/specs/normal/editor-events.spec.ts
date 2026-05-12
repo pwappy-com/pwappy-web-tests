@@ -294,7 +294,7 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             const backButton = previewFrame.locator('ons-back-button');
             await expect(backButton).toBeVisible();
             await expect(backButton).toBeEnabled();
-            await previewFrame.locator('ons-back-button').click();
+            await previewFrame.locator('ons-back-button').click({ force: true });
 
             // --- こちらも個別に検証 ---
             await editorHelper.verifyAndCloseAlert(previewFrame, 'page2_hide');

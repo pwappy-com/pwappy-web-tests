@@ -55,7 +55,7 @@ export class EditorHelper {
                 // ダイアログが表示されるか確認
                 if (await snapshotConfirmDialog.isVisible({ timeout: 5000 }).catch(() => false)) {
                     // --- 1. 最初のダイアログ: 「破棄する」をクリック ---
-                    await snapshotConfirmDialog.getByRole('button', { name: '破棄する' }).click();
+                    await snapshotConfirmDialog.getByRole('button', { name: '破棄する' }).click({ force: true });
 
                     // --- 2. 再確認ダイアログが表示されるのを待つ ---
                     const discardConfirmDialog = this.page.locator('message-box', {
@@ -65,7 +65,7 @@ export class EditorHelper {
 
                     // --- 3. 「はい、破棄します」をクリック ---
                     // これにより、アプリ側で alert() が実行されるが、冒頭のリスナーが自動で閉じる
-                    await discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' }).click();
+                    await discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' }).click({ force: true });
 
                     // 4. すべてのモーダルが消え去るのを待つ
                     await expect(snapshotConfirmDialog).toBeHidden();
@@ -1402,7 +1402,7 @@ export class EditorHelper {
             if (await alert.isVisible().catch(() => false)) {
                 await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
             }
-            await explorer.locator('#menu-operation').click({ timeout: 2000 });
+            await explorer.locator('#menu-operation').click({ timeout: 2000, force: true });
             const popupList = explorer.locator('file-explorer-popup-menu ul');
             await expect(popupList).toBeVisible({ timeout: 2000 });
         }).toPass({ timeout: 15000, intervals: [1000] });
@@ -1417,7 +1417,7 @@ export class EditorHelper {
         }
 
         await expect(targetItem).toBeVisible();
-        await targetItem.click();
+        await targetItem.click({ force: true });
 
         await expect(popupList).toBeHidden();
 

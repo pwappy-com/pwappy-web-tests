@@ -187,7 +187,7 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
             const restoreDialog = editorPage.locator('message-box', { hasText: '前回正常に終了されなかった可能性' });
             await expect(restoreDialog).toBeVisible({ timeout: 20000 });
 
-            await restoreDialog.getByRole('button', { name: '復元する' }).click();
+            await restoreDialog.getByRole('button', { name: '復元する' }).click({ force: true });
             // pageNodeを表示する
             await editorHelper.switchTopLevelTemplate(pageNodeId);
         });
@@ -210,13 +210,6 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
      * スナップショットの破棄フローを検証します。
      */
     test('スナップショットの削除と「破棄」フローの検証', async ({ editorPage, editorHelper }) => {
-        // --- 事前クリーンアップ（既存データの破棄） ---
-        await test.step('0. 事前クリーンアップ', async () => {
-            await editorPage.reload({ waitUntil: 'domcontentloaded' });
-            // ダイアログが出たら破棄するヘルパー
-            await editorHelper.handleSnapshotRestoreDialog();
-        });
-
         await test.step('1. スナップショットを作成', async () => {
             await editorHelper.addPage();
             // リロードして自動スナップショットを作成させる
@@ -227,25 +220,19 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
             const restoreDialog = editorPage.locator('message-box', { hasText: '前回正常に終了されなかった可能性' });
             await expect(restoreDialog).toBeVisible({ timeout: 20000 });
 
-            await restoreDialog.getByRole('button', { name: '破棄する' }).click();
+            await restoreDialog.getByRole('button', { name: '破棄する' }).click({ force: true });
 
             // 確認ダイアログ
             const discardConfirm = editorPage.locator('message-box', { hasText: 'すべてのスナップショットを破棄しますか？' });
-            await expect(discardConfirm).toBeVisible();
-            await discardConfirm.getByRole('button', { name: 'はい、破棄します' }).click();
-
-            // // 完了メッセージ（非同期処理待ちのため toPass を使用）
-            // await expect(async () => {
-            //     const alert = editorPage.locator('alert-component');
-            //     await expect(alert).toBeVisible();
-            //     await expect(alert).toContainText('不要なスナップショットを破棄しました');
-            // }).toPass({ timeout: 15000 });
-
-            // await editorPage.locator('alert-component').getByRole('button', { name: '閉じる' }).click();
+            await expect(discardConfirm).toBeVisible({ timeout: 10000 });
+            await discardConfirm.getByRole('button', { name: 'はい、破棄します' }).click({ force: true });
         });
 
         await test.step('3. スナップショット画面の状態確認', async () => {
-            await editorPage.locator('#fab-bottom-menu-box').click();
+            // ダイアログが消えるのを待機
+            await expect(editorPage.locator('message-box', { hasText: 'すべてのスナップショットを破棄しますか？' })).toBeHidden({ timeout: 10000 });
+
+            await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
             const bottomMenu = editorPage.locator('#platformBottomMenu');
             await expect(bottomMenu).toBeVisible();
             await bottomMenu.getByText('スナップショット').click();

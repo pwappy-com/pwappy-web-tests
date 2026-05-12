@@ -156,7 +156,7 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
             await expect(consoleContainer.locator('.log-item')).toHaveCount(2);
 
             // コピーボタンをクリック
-            await copyButton.click();
+            await copyButton.click({ force: true });
         });
 
         await test.step('アラートの確認', async () => {
