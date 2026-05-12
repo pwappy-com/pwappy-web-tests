@@ -1554,7 +1554,7 @@ export class EditorHelper {
         await this.page.locator('#fab-bottom-menu-box').click({ force: true });
         const platformBottomMenu = this.page.locator('#platformBottomMenu');
         await expect(platformBottomMenu).toBeVisible();
-        await platformBottomMenu.getByText('スナップショット管理').click();
+        await platformBottomMenu.getByText('スナップショット').click();
 
         await this.page.waitForTimeout(500);
 
@@ -1595,7 +1595,7 @@ export class EditorHelper {
             await this.page.locator('#fab-bottom-menu-box').click();
             const bottomMenu = this.page.locator('#platformBottomMenu');
             await expect(bottomMenu).toBeVisible();
-            await bottomMenu.getByText('スナップショット管理').click();
+            await bottomMenu.getByText('スナップショット').click();
 
             const snapshotManager = this.page.locator('snapshot-manager');
             await expect(snapshotManager.locator('.container')).toBeVisible();

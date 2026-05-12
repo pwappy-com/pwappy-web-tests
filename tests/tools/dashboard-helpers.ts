@@ -539,6 +539,11 @@ export async function gotoDashboard(page: Page): Promise<void> {
 
     await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
 
+    // デフォルトでツアーを表示させないようにする
+    await page.evaluate(() => {
+        localStorage.setItem('pwappy_tour_completed', 'true');
+    });
+
     // 1. まず通信の完了を待つ
     await dashboardInitPromise;
 

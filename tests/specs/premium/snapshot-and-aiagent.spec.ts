@@ -33,7 +33,7 @@ const test = base.extend<{ appName: string }>({
 test.describe.configure({ mode: 'serial' });
 
 /**
- * AIエージェント機能およびスナップショット管理機能の統合テストスイート。
+ * AIエージェント機能およびスナップショット機能の統合テストスイート。
  * 
  * 重要: 
  * AI機能の有効化/無効化やAPIキーの設定はダッシュボード上のグローバルな設定を操作するため、
@@ -294,10 +294,10 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 await expect(buttonNode).toBeHidden();
             });
 
-            await test.step('5. スナップショット管理画面から復元を実行', async () => {
+            await test.step('5. スナップショット画面から復元を実行', async () => {
                 await editorHelper.closeMoveingHandle();
 
-                // スナップショット管理画面の展開も確実に行う
+                // スナップショット画面の展開も確実に行う
                 // console.log('[DEBUG] snapshot: Opening Snapshot Manager...');
                 await expect(async () => {
                     const manager = editorPage.locator('snapshot-manager');
@@ -314,7 +314,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                         await expect(bottomMenu).toBeVisible({ timeout: 2000 });
                     }
 
-                    await bottomMenu.getByText('スナップショット管理').evaluate((el: HTMLElement) => el.click());
+                    await bottomMenu.getByText('スナップショット').evaluate((el: HTMLElement) => el.click());
                     await expect(managerContainer).toBeVisible({ timeout: 2000 });
                 }).toPass({ timeout: 15000, intervals: [1000] });
 

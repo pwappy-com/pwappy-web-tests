@@ -48,7 +48,7 @@ const test = base.extend<EditorFixtures>({
 });
 
 /**
- * スナップショット管理および自動復旧機能のテストスイート。
+ * スナップショットおよび自動復旧機能のテストスイート。
  */
 test.describe('スナップショットと自動復旧機能の統合テスト', () => {
 
@@ -84,7 +84,7 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
                 await menuButton.click();
 
                 const platformBottomMenu = editorPage.locator('#platformBottomMenu');
-                await platformBottomMenu.getByText('スナップショット管理').click();
+                await platformBottomMenu.getByText('スナップショット').click();
 
                 const snapshotManager = editorPage.locator('snapshot-manager');
                 await expect(snapshotManager.locator('.container')).toBeVisible();
@@ -123,7 +123,7 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
                 await menuButton.click();
                 const bottomMenu = editorPage.locator('#platformBottomMenu');
                 await expect(bottomMenu).toBeVisible();
-                await bottomMenu.getByText('スナップショット管理').click();
+                await bottomMenu.getByText('スナップショット').click();
 
                 const snapshotManager = editorPage.locator('snapshot-manager');
                 const snapshotItem = snapshotManager.locator('.snapshot-item', { hasText: uniqueSnapshotName });
@@ -244,11 +244,11 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
             // await editorPage.locator('alert-component').getByRole('button', { name: '閉じる' }).click();
         });
 
-        await test.step('3. スナップショット管理画面の状態確認', async () => {
+        await test.step('3. スナップショット画面の状態確認', async () => {
             await editorPage.locator('#fab-bottom-menu-box').click();
             const bottomMenu = editorPage.locator('#platformBottomMenu');
             await expect(bottomMenu).toBeVisible();
-            await bottomMenu.getByText('スナップショット管理').click();
+            await bottomMenu.getByText('スナップショット').click();
 
             const manager = editorPage.locator('snapshot-manager');
             const managerTitle = editorPage.locator('h3', { hasText: 'スナップショット管理' });
@@ -258,9 +258,9 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
 
             // 検証:
             // 1. リロード前に作成されたはずの「自動保存 - 未保存」などの古いスナップショットは消えていること
-            // 2. 仕様により「自動保存 - エディタ読み込み完了」は1つ残っていること
-            await expect(listItems).toHaveCount(1);
-            await expect(listItems.first()).toContainText('自動保存 - エディタ読み込み完了');
+            // 2. プロジェクトの仕様変更により、起動直後に作成される「自動保存 - エディタ読み込み完了」も
+            //    全破棄の対象に含まれるようになったため、最終的に0件になることを期待する。
+            await expect(listItems).toHaveCount(0);
         });
     });
 });
