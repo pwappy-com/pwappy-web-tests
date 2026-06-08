@@ -193,6 +193,8 @@ jobs:
       - name: Install Playwright Browsers
         if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps ${{ matrix.binary }}
+        env:
+          DEBUG: pw:install
 
       - name: Set OS Short Name
         shell: bash
@@ -317,6 +319,8 @@ jobs:
       - name: Install Playwright Browsers
         if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps ${{ matrix.binary }}
+        env:
+          DEBUG: pw:install
 
       - name: Set OS Short Name
         shell: bash
@@ -412,6 +416,8 @@ jobs:
       - name: Install Playwright Browsers
         if: steps.cache-playwright-browsers-cleanup.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+        env:
+          DEBUG: pw:install
 
       - name: Run Cleanup Script
         run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
