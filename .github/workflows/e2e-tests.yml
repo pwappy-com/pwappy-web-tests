@@ -162,7 +162,8 @@ jobs:
 
       # キャッシュがない場合のみインストールしてユーザーディレクトリにコピー
       - name: Install Japanese fonts (Ubuntu only)
-        if: matrix.os == 'ubuntu-latest' && steps.cache-fonts.outputs.cache-hit !=
+        if:
+          matrix.os == 'ubuntu-latest' && steps.cache-fonts.outputs.cache-hit !=
           'true'
         run: |
           sudo apt-get update
@@ -189,6 +190,16 @@ jobs:
           key: ${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}
           restore-keys: |
             ${{ env.CACHE_KEY_PREFIX }}-
+
+      # キャッシュから復元された不要なロックファイルを事前に強制削除してハングを防ぐ
+      - name: Remove stale Playwright locks
+        shell: bash
+        run: |
+          if [ -d "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" ]; then
+            echo "Checking for stale locks in ${{ env.PLAYWRIGHT_BROWSERS_PATH }}..."
+            rm -rf "${{ env.PLAYWRIGHT_BROWSERS_PATH }}/__dirlock"
+            find "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" -name "__dirlock" -exec rm -rf {} + || true
+          fi
 
       # システム依存関係のインストール (プロンプト停止防止)
       - name: Install Playwright system dependencies
@@ -229,11 +240,11 @@ jobs:
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
-      # テスト失敗時：このブラウザエンジン/OSに関連する「全ての古いキャッシュ」を削除する
-      - name: Delete cache on failure
-        if: failure()
+      # テスト失敗またはタイムアウト（キャンセル）時：このブラウザエンジン/OSに関連する「全ての古いキャッシュ」を削除する
+      - name: Delete cache on failure or cancellation
+        if: failure() || cancelled()
         run: |
-          echo "Test failed. Clearing all related caches for ${{ env.CACHE_KEY_PREFIX }}..."
+          echo "Test failed or was cancelled. Clearing all related caches for ${{ env.CACHE_KEY_PREFIX }}..."
           # 一致する接頭辞を持つキャッシュをリストアップして全て削除
           gh cache list --key "${{ env.CACHE_KEY_PREFIX }}-" --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
         env:
@@ -243,7 +254,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: playwright-report-normal-${{ matrix.os }}-${{ matrix.browser }}-${{
+          name:
+            playwright-report-normal-${{ matrix.os }}-${{ matrix.browser }}-${{
             github.run_id }}
           path: test-results/
           retention-days: 7
@@ -299,7 +311,8 @@ jobs:
           key: ${{ runner.os }}-fonts-noto-cjk-v1
 
       - name: Install Japanese fonts (Ubuntu only)
-        if: matrix.os == 'ubuntu-latest' && steps.cache-fonts.outputs.cache-hit !=
+        if:
+          matrix.os == 'ubuntu-latest' && steps.cache-fonts.outputs.cache-hit !=
           'true'
         run: |
           sudo apt-get update
@@ -324,6 +337,16 @@ jobs:
           key: ${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}
           restore-keys: |
             ${{ env.CACHE_KEY_PREFIX }}-
+
+      # キャッシュから復元された不要なロックファイルを事前に強制削除してハングを防ぐ
+      - name: Remove stale Playwright locks
+        shell: bash
+        run: |
+          if [ -d "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" ]; then
+            echo "Checking for stale locks in ${{ env.PLAYWRIGHT_BROWSERS_PATH }}..."
+            rm -rf "${{ env.PLAYWRIGHT_BROWSERS_PATH }}/__dirlock"
+            find "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" -name "__dirlock" -exec rm -rf {} + || true
+          fi
 
       - name: Install Playwright system dependencies
         if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
@@ -362,10 +385,11 @@ jobs:
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
-      - name: Delete cache on failure
-        if: failure()
+      # テスト失敗またはタイムアウト（キャンセル）時：このブラウザエンジン/OSに関連する「全ての古いキャッシュ」を削除する
+      - name: Delete cache on failure or cancellation
+        if: failure() || cancelled()
         run: |
-          echo "Test failed. Clearing all related caches for ${{ env.CACHE_KEY_PREFIX }}..."
+          echo "Test failed or was cancelled. Clearing all related caches for ${{ env.CACHE_KEY_PREFIX }}..."
           gh cache list --key "${{ env.CACHE_KEY_PREFIX }}-" --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -374,7 +398,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: playwright-report-premium-${{ matrix.os }}-${{ matrix.browser }}-${{
+          name:
+            playwright-report-premium-${{ matrix.os }}-${{ matrix.browser }}-${{
             github.run_id }}
           path: test-results/
           retention-days: 7
@@ -389,7 +414,7 @@ jobs:
   # ===================================================================
   cleanup:
     # NormalまたはPremiumいずれかの実行が終わった後、常に呼び出す。
-    needs: [ e2e-normal, e2e-premium ]
+    needs: [e2e-normal, e2e-premium]
     if: always()
     runs-on: ubuntu-latest
     permissions:
@@ -428,6 +453,16 @@ jobs:
           restore-keys: |
             ${{ env.CACHE_KEY_PREFIX }}-
 
+      # キャッシュから復元された不要なロックファイルを事前に強制削除してハングを防ぐ
+      - name: Remove stale Playwright locks for cleanup
+        shell: bash
+        run: |
+          if [ -d "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" ]; then
+            echo "Checking for stale locks in ${{ env.PLAYWRIGHT_BROWSERS_PATH }}..."
+            rm -rf "${{ env.PLAYWRIGHT_BROWSERS_PATH }}/__dirlock"
+            find "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" -name "__dirlock" -exec rm -rf {} + || true
+          fi
+
       - name: Install Playwright system dependencies for cleanup
         if: steps.cache-playwright-browsers-cleanup.outputs.cache-hit != 'true'
         run: npx playwright install-deps chromium
@@ -453,7 +488,7 @@ jobs:
 
       - name: Check upstream job status
         # 先行するe2e-normalまたはe2e-premiumの結果を確認。
-        # 実行されたジョブがいずれか一方でも失敗（failure）していたら、このジョブも失敗させる。
+        # 実行されたジョブがいえないか一方でも失敗（failure）していたら、このジョブも失敗させる。
         if: |
           (needs.e2e-normal.result == 'failure') || 
           (needs.e2e-premium.result == 'failure')
