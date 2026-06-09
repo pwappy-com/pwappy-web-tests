@@ -119,6 +119,7 @@ jobs:
   e2e-normal:
     needs: prepare-matrix
     if: ${{ needs.prepare-matrix.outputs.run_normal == 'true' }}
+    timeout-minutes: 60
     permissions:
       contents: read
       actions: write
@@ -258,6 +259,7 @@ jobs:
   e2e-premium:
     needs: prepare-matrix
     if: ${{ needs.prepare-matrix.outputs.run_premium == 'true' }}
+    timeout-minutes: 120
     permissions:
       contents: read
       actions: write
