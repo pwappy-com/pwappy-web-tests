@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Locator, FrameLocator } from '@playwright/test';
+import { clickAndOpenNewTabSafely } from './window-helpers';
 
 /**
  * Playwrightテスト用のエディタ操作ヘルパークラス。
@@ -523,16 +524,15 @@ export class EditorHelper {
         await expect(platformBottomMenu).toBeVisible();
 
         // 保存ボタンを押す前に、保存通信(API)の完了を監視する準備をする
-        // (環境によってエンドポイントが異なる場合はURLの条件を調整してください)
         const saveResponsePromise = this.page.waitForResponse(
             response => response.request().method() === 'PUT' && response.url().includes('editor'),
             { timeout: 30000 }
-        ).catch(() => null); // タイムアウト時はnullを返してテストを止めない
+        ).catch(() => null);
 
         // 保存をクリック
         await platformBottomMenu.getByText('保存', { exact: true }).click();
 
-        // 「処理中」が一瞬表示されるのを待ってから、消えるのを待つ（誤判定防止）
+        // 「処理中」が一瞬表示されるのを待ってから、消えるのを待つ
         const loadingOverlay = this.page.locator('app-container-loading-overlay');
         await loadingOverlay.getByText('処理中').waitFor({ state: 'visible', timeout: 2000 }).catch(() => { });
         await loadingOverlay.getByText('処理中').waitFor({ state: 'hidden', timeout: 30000 });
@@ -559,21 +559,15 @@ export class EditorHelper {
             await expect(platformBottomMenu).toBeVisible();
         }
 
-        const testPagePromise = this.page.context().waitForEvent('page');
-        // QRコードをクリック
-        await this.page.locator('#qrcode').click();
-
-        const testPage = await testPagePromise;
+        // 共通関数を使ってテストページ（タブ）を開く
+        const testPage = await clickAndOpenNewTabSafely(this.page, this.page.context(), async () => {
+            await this.page.locator('#qrcode').click({ force: true }).catch(async () => {
+                await this.page.locator('#qrcode').evaluate((el: HTMLElement) => el.click());
+            });
+        });
 
         await testPage.waitForLoadState('domcontentloaded');
-
-        // ▼ 変更前
         console.log(`[TestPage URL] 開いた実機テストページのURL: ${testPage.url()}`);
-
-        // ▼ 変更後：URLを1文字ずつスペース区切りで出力する（マスク回避）
-        // const actualUrl = testPage.url();
-        // const unmaskedUrl = actualUrl.split('').join(' ');
-        // console.log(`[DEBUG URL] マスク回避URL: \n${unmaskedUrl}`);
 
         return testPage;
     }

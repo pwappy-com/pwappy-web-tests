@@ -1,5 +1,6 @@
 import { expect, type Page, type BrowserContext } from '@playwright/test';
 import { EditorHelper } from './editor-helpers';
+import { clickAndOpenNewTabSafely } from './window-helpers';
 
 /**
  * アプリケーションがリストに表示されているか/いないかを確認します。
@@ -121,69 +122,12 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     // アプリ作成直後など、背後でローディング中であれば消えるのを待つ
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 15000 }).catch(() => { });
 
-    let editorPage: Page | undefined;
-
-    // 現在実行中のブラウザエンジンを取得
-    const browserName = context.browser()?.browserType().name();
-
-    if (browserName === 'webkit') {
-        // =========================================================================
-        // WebKitエンジンの特定のバージョンにおいて、window.open() がOSレベルの
-        // Segmentation fault を引き起こしブラウザが消滅するバグへの一時的な回避策。
-        // =========================================================================
-        console.warn(`[Workaround] WebKit環境の window.open クラッシュバグを回避するため、URLをインターセプトします。`);
-
-        await page.evaluate(() => {
-            (window as any)._interceptedUrl = null;
-            if (!(window as any)._isMockedForWebkit) {
-                (window as any)._isMockedForWebkit = true;
-                window.open = function (...args) {
-                    (window as any)._interceptedUrl = args[0];
-                    return null; // クラッシュする本来の呼び出しを防ぐ
-                };
-            }
+    // 共通関数を使ってタブを開く
+    const editorPage = await clickAndOpenNewTabSafely(page, context, async () => {
+        await editorBtn.click({ force: true }).catch(async () => {
+            await editorBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
         });
-
-        await expect(async () => {
-            await page.evaluate(() => { (window as any)._interceptedUrl = null; });
-
-            // クラッシュが防がれているため、安全にクリックを実行
-            await editorBtn.click({ force: true, timeout: 5000 }).catch(async () => {
-                await editorBtn.evaluate((el: HTMLElement) => el.click());
-            });
-
-            const targetUrlHandle = await page.waitForFunction(() => {
-                return (window as any)._interceptedUrl;
-            }, { timeout: 10000 }).catch(() => null);
-
-            const urlString = targetUrlHandle ? await targetUrlHandle.jsonValue() as string : null;
-            if (!urlString) throw new Error('window.open が検知されませんでした。');
-
-            const newPage = await context.newPage();
-            const absoluteUrl = new URL(urlString, page.url()).toString();
-            await newPage.goto(absoluteUrl, { waitUntil: 'domcontentloaded' });
-            editorPage = newPage;
-        }).toPass({ timeout: 30000, intervals: [2000] });
-
-    } else {
-        // =========================================================================
-        // (Chromium 等の正常なブラウザ向け)
-        // 本来のアプリケーションの挙動（クリック -> 新しいタブ発生）をそのまま検証する
-        // =========================================================================
-        await expect(async () => {
-            const editorPagePromise = context.waitForEvent('page', { timeout: 15000 }).catch(() => null);
-
-            await editorBtn.click({ force: true }).catch(async () => {
-                await editorBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
-            });
-
-            const newPage = await editorPagePromise;
-            if (!newPage) throw new Error('エディタの新しいタブが開かれませんでした。');
-            editorPage = newPage;
-        }).toPass({ timeout: 30000, intervals: [2000] });
-    }
-
-    if (!editorPage) throw new Error('エディタのオープンに失敗しました。');
+    });
 
     await editorPage.waitForLoadState('domcontentloaded');
     const tempHelper = new EditorHelper(editorPage, false);
