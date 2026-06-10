@@ -128,9 +128,18 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
         const editorBtn = versionRow.getByRole('button', { name: /エディタ/ });
         await expect(editorBtn).toBeVisible({ timeout: 5000 });
 
-        // ボタンの現在のHTMLをダンプし、disabledになっていないか等をログに出力
-        const btnHtml = await editorBtn.evaluate((el: HTMLElement) => el.outerHTML).catch(e => e.message);
-        console.log(`[openEditor:DEBUG] editorBtn の状態: ${btnHtml}`);
+        // ボタンとその親要素の構造を詳細にダンプ（リンク構造等を確認するため）
+        const elementInfo = await editorBtn.evaluate((el: HTMLElement) => {
+            return {
+                html: el.outerHTML,
+                parentHtml: el.parentElement?.outerHTML,
+                nodeName: el.nodeName,
+                href: el.getAttribute('href'),
+                target: el.getAttribute('target'),
+                onclick: el.getAttribute('onclick')
+            };
+        }).catch(e => e.message);
+        console.log(`[openEditor:DEBUG] editorBtn 詳細情報: ${JSON.stringify(elementInfo, null, 2)}`);
 
         // アプリ作成直後など、背後でローディング中であれば消えるのを待つ
         await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 15000 }).catch(() => {
@@ -148,7 +157,8 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
                 return null;
             });
 
-            console.log(`[openEditor:DEBUG] editorBtn をクリックします`);
+            console.log(`[openEditor:DEBUG] ブラウザクラッシュ直前の状態確認完了、クリック処理(Playwright API)を実行します`);
+
             try {
                 await editorBtn.click({ force: true, timeout: 5000 });
                 console.log(`[openEditor:DEBUG] editorBtn.click({ force: true }) 完了`);
@@ -190,7 +200,6 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
         console.log(`[openEditor:DEBUG] 正常完了`);
         return editorPage;
     } finally {
-        // リスナーのクリーンアップ
         page.off('console', consoleHandler);
         page.off('pageerror', errorHandler);
     }
