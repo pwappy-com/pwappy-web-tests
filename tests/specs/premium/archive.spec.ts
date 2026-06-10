@@ -17,6 +17,18 @@ const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 test.describe('アーカイブ E2Eシナリオ', () => {
 
     test.beforeEach(async ({ page, context }) => {
+        // =========================================================================
+        // 【ログ追加】 復元失敗時に何のエラーがサーバーから返っているかを追跡します
+        // =========================================================================
+        page.on('console', msg => console.log(`[ArchiveTest:Console] ${msg.type()}: ${msg.text()}`));
+        page.on('response', async response => {
+            if (response.status() >= 400 && response.url().includes('api')) {
+                console.log(`[ArchiveTest:NetworkError] ${response.request().method()} ${response.url()} -> Status: ${response.status()}`);
+                try {
+                    console.log(`[ArchiveTest:NetworkErrorBody] ${await response.text()}`);
+                } catch (e) { }
+            }
+        });
         await gotoDashboard(page);
     });
 

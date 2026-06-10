@@ -16,6 +16,18 @@ const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 test.describe('削除・編集のガード条件テスト', () => {
 
     test.beforeEach(async ({ page, context }) => {
+        // =========================================================================
+        // 【ログ追加】 審査待ちが「審査却下」に変わる理由を特定するためAPI通信を追跡します
+        // =========================================================================
+        page.on('console', msg => console.log(`[GuardTest:Console] ${msg.type()}: ${msg.text()}`));
+        page.on('response', async response => {
+            if (response.url().includes('publish') || response.status() >= 400) {
+                console.log(`[GuardTest:Network] ${response.request().method()} ${response.url()} -> Status: ${response.status()}`);
+                try {
+                    console.log(`[GuardTest:NetworkBody] ${(await response.text()).slice(0, 500)}`);
+                } catch (e) { }
+            }
+        });
         await gotoDashboard(page);
     });
 

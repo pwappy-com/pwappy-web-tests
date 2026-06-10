@@ -18,7 +18,6 @@ import {
     gotoDashboard,
 } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
-import { time } from 'console';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -27,6 +26,18 @@ const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 test.describe('公開管理 E2Eシナリオ', () => {
 
     test.beforeEach(async ({ page, context }) => {
+        // =========================================================================
+        // 【ログ追加】 審査状態やページリロードのハングアップを追跡します
+        // =========================================================================
+        page.on('console', msg => console.log(`[PublishTest:Console] ${msg.type()}: ${msg.text()}`));
+        page.on('response', async response => {
+            if (response.url().includes('publish') || response.url().includes('app_versions') || response.status() >= 400) {
+                console.log(`[PublishTest:Network] ${response.request().method()} ${response.url()} -> Status: ${response.status()}`);
+                try {
+                    console.log(`[PublishTest:NetworkBody] ${(await response.text()).slice(0, 500)}`);
+                } catch (e) { }
+            }
+        });
         await gotoDashboard(page);
     });
 
@@ -172,8 +183,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await setAiCoding(page, true);
         });
 
-        const testContext = { page, context, isMobile, appName, version };
-
         await test.step('テスト: モック応答でAIコーディングのフローが完了することを確認', async () => {
             await deleteGeminiApiKey(page);
             const initialPoints = await getCurrentPoints(page);
@@ -252,7 +261,23 @@ test.describe('公開管理 E2Eシナリオ', () => {
         });
 
         await test.step('クリーンアップ', async () => {
-            await page.reload({ waitUntil: 'networkidle' });
+            // =========================================================================
+            // 【ログ追加】 ここでの reload 処理がタイムアウト/クラッシュする原因を調査します
+            // =========================================================================
+            console.log(`[PublishTest:DEBUG:Cleanup] page.reload({ waitUntil: 'networkidle' }) を開始します`);
+            try {
+                await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
+                console.log(`[PublishTest:DEBUG:Cleanup] reload(networkidle) 成功`);
+            } catch (e: any) {
+                console.log(`[PublishTest:DEBUG:Cleanup] reload(networkidle) でエラー/タイムアウト発生: ${e.message}`);
+                console.log(`[PublishTest:DEBUG:Cleanup] fallback: domcontentloaded でのリロードを試行します`);
+                try {
+                    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
+                    console.log(`[PublishTest:DEBUG:Cleanup] fallback reload 成功`);
+                } catch (ee: any) {
+                    console.log(`[PublishTest:DEBUG:Cleanup] fallback reload も失敗: ${ee.message}`);
+                }
+            }
             await deleteApp(page, appKey);
         });
     });
