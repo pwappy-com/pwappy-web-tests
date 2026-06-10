@@ -112,118 +112,86 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
 }
 
 export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
-    console.log(`[openEditor:DEBUG] 開始: appName=${appName}, version=${version}`);
+    const versionRow = page.locator('.version-card', { hasText: version }).first();
+    await expect(versionRow).toBeVisible({ timeout: 10000 });
 
-    const consoleHandler = (msg: any) => console.log(`[openEditor:DEBUG:PageConsole] ${msg.type()}: ${msg.text()}`);
-    const errorHandler = (err: any) => console.log(`[openEditor:DEBUG:PageError] ${err.message}`);
-    // ポップアップイベントも監視
-    const popupHandler = (popup: any) => console.log(`[openEditor:DEBUG:PopupEvent] 新規ポップアップ発生`);
+    const editorBtn = versionRow.getByRole('button', { name: /エディタ/ });
+    await expect(editorBtn).toBeVisible({ timeout: 5000 });
 
-    page.on('console', consoleHandler);
-    page.on('pageerror', errorHandler);
-    page.on('popup', popupHandler);
+    // アプリ作成直後など、背後でローディング中であれば消えるのを待つ
+    await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 15000 }).catch(() => { });
 
-    try {
-        const versionRow = page.locator('.version-card', { hasText: version }).first();
-        await expect(versionRow).toBeVisible({ timeout: 10000 });
-        console.log(`[openEditor:DEBUG] versionRow が表示されました`);
+    let editorPage: Page | undefined;
 
-        const editorBtn = versionRow.getByRole('button', { name: /エディタ/ });
-        await expect(editorBtn).toBeVisible({ timeout: 5000 });
+    // 現在実行中のブラウザエンジンを取得
+    const browserName = context.browser()?.browserType().name();
 
-        // JS内での別タブオープン(window.open)を監視
+    if (browserName === 'webkit') {
+        // =========================================================================
+        // WebKitエンジンの特定のバージョンにおいて、window.open() がOSレベルの
+        // Segmentation fault を引き起こしブラウザが消滅するバグへの一時的な回避策。
+        // =========================================================================
+        console.warn(`[Workaround] WebKit環境の window.open クラッシュバグを回避するため、URLをインターセプトします。`);
+
         await page.evaluate(() => {
-            if (!(window as any)._origOpen) {
-                (window as any)._origOpen = window.open;
+            (window as any)._interceptedUrl = null;
+            if (!(window as any)._isMockedForWebkit) {
+                (window as any)._isMockedForWebkit = true;
                 window.open = function (...args) {
-                    console.log(`[openEditor:DEBUG:window.open] 呼び出し引数: ${JSON.stringify(args)}`);
-                    return (window as any)._origOpen.apply(this, args);
+                    (window as any)._interceptedUrl = args[0];
+                    return null; // クラッシュする本来の呼び出しを防ぐ
                 };
             }
         });
 
-        await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 15000 }).catch(() => {
-            console.log(`[openEditor:DEBUG] dashboard-loading-overlay 非表示待ちタイムアウト`);
-        });
-
-        let editorPage: Page | undefined;
-        let attempt = 1;
-
         await expect(async () => {
-            console.log(`[openEditor:DEBUG] 新規タブオープン試行 ${attempt}回目。現在のタブ数: ${context.pages().length}`);
+            await page.evaluate(() => { (window as any)._interceptedUrl = null; });
 
-            const editorPagePromise = context.waitForEvent('page', { timeout: 15000 }).catch((e) => {
-                console.log(`[openEditor:DEBUG] waitForEvent('page') タイムアウトまたはエラー: ${e.message}`);
-                return null;
+            // クラッシュが防がれているため、安全にクリックを実行
+            await editorBtn.click({ force: true, timeout: 5000 }).catch(async () => {
+                await editorBtn.evaluate((el: HTMLElement) => el.click());
             });
 
-            console.log(`[openEditor:DEBUG] クリックアクションを低レベルに分解して実行します`);
+            const targetUrlHandle = await page.waitForFunction(() => {
+                return (window as any)._interceptedUrl;
+            }, { timeout: 10000 }).catch(() => null);
 
-            try {
-                console.log(`[openEditor:DEBUG] 1. scrollIntoViewIfNeeded 実行`);
-                await editorBtn.scrollIntoViewIfNeeded();
+            const urlString = targetUrlHandle ? await targetUrlHandle.jsonValue() as string : null;
+            if (!urlString) throw new Error('window.open が検知されませんでした。');
 
-                console.log(`[openEditor:DEBUG] 2. boundingBox 取得`);
-                const box = await editorBtn.boundingBox();
-                if (!box) throw new Error('BoundingBox is null');
-                console.log(`[openEditor:DEBUG] BoundingBox: x=${box.x}, y=${box.y}, w=${box.width}, h=${box.height}`);
-
-                const centerX = box.x + box.width / 2;
-                const centerY = box.y + box.height / 2;
-
-                console.log(`[openEditor:DEBUG] 3. mouse.move (Hover) 実行`);
-                await page.mouse.move(centerX, centerY);
-                await page.waitForTimeout(500);
-
-                console.log(`[openEditor:DEBUG] 4. mouse.down 実行`);
-                await page.mouse.down();
-                await page.waitForTimeout(500);
-
-                console.log(`[openEditor:DEBUG] 5. mouse.up (Click発火) 実行`);
-                await page.mouse.up();
-
-                console.log(`[openEditor:DEBUG] マウス操作ステップ完了`);
-            } catch (e: any) {
-                console.log(`[openEditor:DEBUG] マウス操作ステップ中に失敗(クラッシュ等): ${e.message}`);
-                console.log(`[openEditor:DEBUG] locator.click({force: true}) にフォールバックします`);
-                try {
-                    await editorBtn.click({ force: true, timeout: 5000 });
-                } catch (ee: any) {
-                    console.log(`[openEditor:DEBUG] locator.click() も失敗: ${ee.message}`);
-                }
-            }
-
-            console.log(`[openEditor:DEBUG] 新規タブを待機中...`);
-            const newPage = await editorPagePromise;
-
-            if (!newPage) {
-                console.log(`[openEditor:DEBUG] newPage が null です。`);
-                attempt++;
-                throw new Error('エディタの新しいタブが開かれませんでした。');
-            }
-
-            console.log(`[openEditor:DEBUG] 新しいタブを検知。URL=${newPage.url()}`);
+            const newPage = await context.newPage();
+            const absoluteUrl = new URL(urlString, page.url()).toString();
+            await newPage.goto(absoluteUrl, { waitUntil: 'domcontentloaded' });
             editorPage = newPage;
         }).toPass({ timeout: 30000, intervals: [2000] });
 
-        if (!editorPage) throw new Error('エディタのオープンに失敗しました。');
+    } else {
+        // =========================================================================
+        // (Chromium 等の正常なブラウザ向け)
+        // 本来のアプリケーションの挙動（クリック -> 新しいタブ発生）をそのまま検証する
+        // =========================================================================
+        await expect(async () => {
+            const editorPagePromise = context.waitForEvent('page', { timeout: 15000 }).catch(() => null);
 
-        await editorPage.waitForLoadState('domcontentloaded');
-        console.log(`[openEditor:DEBUG] 新しいタブの domcontentloaded 完了`);
+            await editorBtn.click({ force: true }).catch(async () => {
+                await editorBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
+            });
 
-        const tempHelper = new EditorHelper(editorPage, false);
-        await tempHelper.handleSnapshotRestoreDialog();
-
-        await expect(editorPage.locator('ios-component')).toBeVisible();
-        await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
-
-        console.log(`[openEditor:DEBUG] 正常完了`);
-        return editorPage;
-    } finally {
-        page.off('console', consoleHandler);
-        page.off('pageerror', errorHandler);
-        page.off('popup', popupHandler);
+            const newPage = await editorPagePromise;
+            if (!newPage) throw new Error('エディタの新しいタブが開かれませんでした。');
+            editorPage = newPage;
+        }).toPass({ timeout: 30000, intervals: [2000] });
     }
+
+    if (!editorPage) throw new Error('エディタのオープンに失敗しました。');
+
+    await editorPage.waitForLoadState('domcontentloaded');
+    const tempHelper = new EditorHelper(editorPage, false);
+    await tempHelper.handleSnapshotRestoreDialog();
+
+    await expect(editorPage.locator('ios-component')).toBeVisible();
+    await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
+    return editorPage;
 }
 
 export async function publishVersion(page: Page, appName: string, version: string): Promise<void> {
