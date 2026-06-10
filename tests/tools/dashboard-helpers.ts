@@ -114,11 +114,14 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
 export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
     console.log(`[openEditor:DEBUG] 開始: appName=${appName}, version=${version}`);
 
-    // Webkit環境特有のエラーやログをキャッチするための一時リスナー
     const consoleHandler = (msg: any) => console.log(`[openEditor:DEBUG:PageConsole] ${msg.type()}: ${msg.text()}`);
     const errorHandler = (err: any) => console.log(`[openEditor:DEBUG:PageError] ${err.message}`);
+    // ポップアップイベントも監視
+    const popupHandler = (popup: any) => console.log(`[openEditor:DEBUG:PopupEvent] 新規ポップアップ発生`);
+
     page.on('console', consoleHandler);
     page.on('pageerror', errorHandler);
+    page.on('popup', popupHandler);
 
     try {
         const versionRow = page.locator('.version-card', { hasText: version }).first();
@@ -128,22 +131,19 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
         const editorBtn = versionRow.getByRole('button', { name: /エディタ/ });
         await expect(editorBtn).toBeVisible({ timeout: 5000 });
 
-        // ボタンとその親要素の構造を詳細にダンプ（リンク構造等を確認するため）
-        const elementInfo = await editorBtn.evaluate((el: HTMLElement) => {
-            return {
-                html: el.outerHTML,
-                parentHtml: el.parentElement?.outerHTML,
-                nodeName: el.nodeName,
-                href: el.getAttribute('href'),
-                target: el.getAttribute('target'),
-                onclick: el.getAttribute('onclick')
-            };
-        }).catch(e => e.message);
-        console.log(`[openEditor:DEBUG] editorBtn 詳細情報: ${JSON.stringify(elementInfo, null, 2)}`);
+        // JS内での別タブオープン(window.open)を監視
+        await page.evaluate(() => {
+            if (!(window as any)._origOpen) {
+                (window as any)._origOpen = window.open;
+                window.open = function (...args) {
+                    console.log(`[openEditor:DEBUG:window.open] 呼び出し引数: ${JSON.stringify(args)}`);
+                    return (window as any)._origOpen.apply(this, args);
+                };
+            }
+        });
 
-        // アプリ作成直後など、背後でローディング中であれば消えるのを待つ
         await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 15000 }).catch(() => {
-            console.log(`[openEditor:DEBUG] dashboard-loading-overlay 非表示待ちタイムアウト（無視して続行します）`);
+            console.log(`[openEditor:DEBUG] dashboard-loading-overlay 非表示待ちタイムアウト`);
         });
 
         let editorPage: Page | undefined;
@@ -153,31 +153,51 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
             console.log(`[openEditor:DEBUG] 新規タブオープン試行 ${attempt}回目。現在のタブ数: ${context.pages().length}`);
 
             const editorPagePromise = context.waitForEvent('page', { timeout: 15000 }).catch((e) => {
-                console.log(`[openEditor:DEBUG] waitForEvent('page') でタイムアウトまたはエラー発生: ${e.message}`);
+                console.log(`[openEditor:DEBUG] waitForEvent('page') タイムアウトまたはエラー: ${e.message}`);
                 return null;
             });
 
-            console.log(`[openEditor:DEBUG] ブラウザクラッシュ直前の状態確認完了、クリック処理(Playwright API)を実行します`);
+            console.log(`[openEditor:DEBUG] クリックアクションを低レベルに分解して実行します`);
 
             try {
-                await editorBtn.click({ force: true, timeout: 5000 });
-                console.log(`[openEditor:DEBUG] editorBtn.click({ force: true }) 完了`);
+                console.log(`[openEditor:DEBUG] 1. scrollIntoViewIfNeeded 実行`);
+                await editorBtn.scrollIntoViewIfNeeded();
+
+                console.log(`[openEditor:DEBUG] 2. boundingBox 取得`);
+                const box = await editorBtn.boundingBox();
+                if (!box) throw new Error('BoundingBox is null');
+                console.log(`[openEditor:DEBUG] BoundingBox: x=${box.x}, y=${box.y}, w=${box.width}, h=${box.height}`);
+
+                const centerX = box.x + box.width / 2;
+                const centerY = box.y + box.height / 2;
+
+                console.log(`[openEditor:DEBUG] 3. mouse.move (Hover) 実行`);
+                await page.mouse.move(centerX, centerY);
+                await page.waitForTimeout(500);
+
+                console.log(`[openEditor:DEBUG] 4. mouse.down 実行`);
+                await page.mouse.down();
+                await page.waitForTimeout(500);
+
+                console.log(`[openEditor:DEBUG] 5. mouse.up (Click発火) 実行`);
+                await page.mouse.up();
+
+                console.log(`[openEditor:DEBUG] マウス操作ステップ完了`);
             } catch (e: any) {
-                console.log(`[openEditor:DEBUG] editorBtn.click() が失敗: ${e.message}`);
-                console.log(`[openEditor:DEBUG] evaluate() によるクリックにフォールバックします`);
+                console.log(`[openEditor:DEBUG] マウス操作ステップ中に失敗(クラッシュ等): ${e.message}`);
+                console.log(`[openEditor:DEBUG] locator.click({force: true}) にフォールバックします`);
                 try {
-                    await editorBtn.evaluate((el: HTMLElement) => el.click());
-                    console.log(`[openEditor:DEBUG] evaluate() によるクリック完了`);
+                    await editorBtn.click({ force: true, timeout: 5000 });
                 } catch (ee: any) {
-                    console.log(`[openEditor:DEBUG] evaluate() によるクリックも失敗: ${ee.message}`);
+                    console.log(`[openEditor:DEBUG] locator.click() も失敗: ${ee.message}`);
                 }
             }
 
-            console.log(`[openEditor:DEBUG] タブが開かれるのを待機中...`);
+            console.log(`[openEditor:DEBUG] 新規タブを待機中...`);
             const newPage = await editorPagePromise;
 
             if (!newPage) {
-                console.log(`[openEditor:DEBUG] newPage が null です。タブが開かれませんでした。`);
+                console.log(`[openEditor:DEBUG] newPage が null です。`);
                 attempt++;
                 throw new Error('エディタの新しいタブが開かれませんでした。');
             }
@@ -202,6 +222,7 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     } finally {
         page.off('console', consoleHandler);
         page.off('pageerror', errorHandler);
+        page.off('popup', popupHandler);
     }
 }
 
