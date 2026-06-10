@@ -118,9 +118,12 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
     const editorBtn = versionRow.getByRole('button', { name: /エディタ/ });
     await expect(editorBtn).toBeVisible({ timeout: 5000 });
 
+    // アプリ作成直後など、背後でローディング中であれば消えるのを待つ
+    await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 15000 }).catch(() => { });
+
     let editorPage: Page | undefined;
     await expect(async () => {
-        const editorPagePromise = context.waitForEvent('page', { timeout: 5000 }).catch(() => null);
+        const editorPagePromise = context.waitForEvent('page', { timeout: 15000 }).catch(() => null);
         await editorBtn.click({ force: true }).catch(async () => {
             await editorBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
         });
