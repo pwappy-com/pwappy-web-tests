@@ -17,18 +17,6 @@ const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 test.describe('アーカイブ E2Eシナリオ', () => {
 
     test.beforeEach(async ({ page, context }) => {
-        // =========================================================================
-        // 【ログ追加】 復元失敗時に何のエラーがサーバーから返っているかを追跡します
-        // =========================================================================
-        page.on('console', msg => console.log(`[ArchiveTest:Console] ${msg.type()}: ${msg.text()}`));
-        page.on('response', async response => {
-            if (response.status() >= 400 && response.url().includes('api')) {
-                console.log(`[ArchiveTest:NetworkError] ${response.request().method()} ${response.url()} -> Status: ${response.status()}`);
-                try {
-                    console.log(`[ArchiveTest:NetworkErrorBody] ${await response.text()}`);
-                } catch (e) { }
-            }
-        });
         await gotoDashboard(page);
     });
 
@@ -45,6 +33,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
 
         await test.step('テスト: アプリケーションをアーカイブする', async () => {
             const appRow = page.locator('.app-card', { hasText: appName }).first();
+            const confirmDialog = page.locator('message-box#archive-confirm');
 
             await expect(async () => {
                 const alert = page.locator('alert-component');
@@ -57,18 +46,19 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 await page.waitForTimeout(500);
 
                 await page.getByRole('button', { name: ' アーカイブする' }).click();
-                const confirmDialog = page.locator('message-box#archive-confirm');
-                await page.waitForTimeout(500);
                 await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-                await page.getByRole('button', { name: 'アーカイブ', exact: true }).click();
-                await page.waitForTimeout(500);
-                await page.getByRole('button', { name: '閉じる' }).click();
-
-                await expect(confirmDialog).toBeHidden({ timeout: 5000 });
             }).toPass({ timeout: 20000, intervals: [1000] });
 
-            await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
+            await confirmDialog.getByRole('button', { name: 'アーカイブ', exact: true }).click();
+            await page.waitForTimeout(500);
 
+            const closeBtn = page.getByRole('button', { name: '閉じる' });
+            if (await closeBtn.isVisible().catch(() => false)) {
+                await closeBtn.click();
+            }
+
+            await expect(confirmDialog).toBeHidden({ timeout: 5000 });
+            await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
             await expectAppVisibility(page, appKey, false);
         });
 
@@ -80,6 +70,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
 
         await test.step('テスト: アーカイブから復元する', async () => {
             const archiveRow = page.locator('.app-card', { hasText: appName });
+            const confirmDialog = page.locator('message-box#restore-confirm');
 
             await expect(async () => {
                 const alert = page.locator('alert-component');
@@ -88,13 +79,11 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 }
 
                 await archiveRow.getByRole('button', { name: /復元/ }).click({ force: true, timeout: 2000 });
-
-                const confirmDialog = page.locator('message-box#restore-confirm');
                 await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-                await confirmDialog.locator('.confirm-restore-button, .confirm-ok-button').click({ force: true, timeout: 2000 });
-
-                await expect(confirmDialog).toBeHidden({ timeout: 5000 });
             }).toPass({ timeout: 20000, intervals: [1000] });
+
+            await confirmDialog.locator('.confirm-restore-button, .confirm-ok-button').click({ force: true, timeout: 2000 });
+            await expect(confirmDialog).toBeHidden({ timeout: 5000 });
 
             await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
 
@@ -128,6 +117,8 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         });
 
         await test.step('テスト: アプリケーションをアーカイブする', async () => {
+            const confirmDialog = page.locator('message-box#archive-confirm');
+
             await expect(async () => {
                 const alert = page.locator('alert-component');
                 if (await alert.isVisible().catch(() => false)) {
@@ -139,24 +130,19 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 await page.waitForTimeout(500);
 
                 await page.getByRole('button', { name: ' アーカイブする' }).click();
-                const confirmDialog = page.locator('message-box#archive-confirm');
-                await page.waitForTimeout(500);
                 await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-                await page.getByRole('button', { name: 'アーカイブ', exact: true }).click();
-                await page.waitForTimeout(500);
-
-                // アラートの「閉じる」
-                const closeBtn = page.getByRole('button', { name: '閉じる' });
-                if (await closeBtn.isVisible().catch(() => false)) {
-                    await closeBtn.click();
-                }
-
-                await expect(confirmDialog).toBeHidden({ timeout: 5000 });
             }).toPass({ timeout: 20000, intervals: [1000] });
 
-            await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
+            await confirmDialog.getByRole('button', { name: 'アーカイブ', exact: true }).click();
+            await page.waitForTimeout(500);
 
-            // ワークベンチから消えたことを確認
+            const closeBtn = page.getByRole('button', { name: '閉じる' });
+            if (await closeBtn.isVisible().catch(() => false)) {
+                await closeBtn.click();
+            }
+
+            await expect(confirmDialog).toBeHidden({ timeout: 5000 });
+            await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
             await expectAppVisibility(page, appKey, false);
         });
 
@@ -172,6 +158,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
 
         await test.step('クリーンアップ: アプリを復元し、非公開にして削除する', async () => {
             const archiveRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });
+            const confirmDialog = page.locator('message-box#restore-confirm');
 
             await expect(async () => {
                 const alert = page.locator('alert-component');
@@ -180,13 +167,11 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 }
 
                 await archiveRow.getByRole('button', { name: /復元/ }).click({ force: true, timeout: 2000 });
-
-                const confirmDialog = page.locator('message-box#restore-confirm');
                 await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-                await confirmDialog.locator('.confirm-restore-button, .confirm-ok-button').click({ force: true, timeout: 2000 });
-
-                await expect(confirmDialog).toBeHidden({ timeout: 5000 });
             }).toPass({ timeout: 20000, intervals: [1000] });
+
+            await confirmDialog.locator('.confirm-restore-button, .confirm-ok-button').click({ force: true, timeout: 2000 });
+            await expect(confirmDialog).toBeHidden({ timeout: 5000 });
 
             await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
 
