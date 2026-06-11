@@ -177,6 +177,19 @@ test.describe('公開管理 E2Eシナリオ', () => {
             const editorPage = await openEditor(page, context, appName, version);
             logTime('openEditor 完了、route モック設定開始');
 
+            // ---------------------------------------------------------
+            // 【原因特定用】 ダイアログやエラーの監視
+            // ---------------------------------------------------------
+            editorPage.on('dialog', async dialog => {
+                logTime(`[PublishTest:Dialog] Type: ${dialog.type()}, Message: ${dialog.message()}`);
+                // Playwrightのデフォルト動作に委ねる場合はdismiss
+                await dialog.dismiss();
+            });
+            editorPage.on('pageerror', error => {
+                logTime(`[PublishTest:PageError] ${error.message}`);
+            });
+            // ---------------------------------------------------------
+
             let isProcessing = false;
             let getRequestAfterPostCount = 0;
 
@@ -245,11 +258,32 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await editorHelper.closeMoveingHandle();
 
             logTime('エディタを閉じる操作 開始');
-            await editorPage.locator('platform-bottom-menu').evaluate((el: HTMLElement) => el.click());
-            await Promise.all([
-                editorPage.waitForEvent('close'),
-                editorPage.locator('.menu-item', { hasText: '保存せずに閉じる' }).evaluate((el: HTMLElement) => el.click())
-            ]);
+
+            // ---------------------------------------------------------
+            // 【原因特定用】 100秒間のフリーズがどこで発生しているかを1行ずつ記録
+            // ---------------------------------------------------------
+            try {
+                logTime('Step A: platform-bottom-menu クリック実行');
+                await editorPage.locator('platform-bottom-menu').evaluate((el: HTMLElement) => el.click());
+                logTime('Step A: platform-bottom-menu クリック完了');
+
+                logTime('Step B: 保存せずに閉じる クリック実行');
+                // Promise.all にせず、1行ずつ実行してどこで詰まるか確認
+                const closeAction = editorPage.locator('.menu-item', { hasText: '保存せずに閉じる' }).evaluate((el: HTMLElement) => el.click());
+                logTime('Step B: 保存せずに閉じる クリック(非同期)発行完了');
+
+                logTime('Step C: waitForEvent("close") 待機開始');
+                // 無限に待たないようにタイムアウトを設定して状態を可視化
+                await editorPage.waitForEvent('close', { timeout: 15000 });
+                logTime('Step C: waitForEvent("close") 完了');
+
+                await closeAction; // クリック自体が完了したか確認
+                logTime('Step D: クリックPromiseの解決確認 完了');
+
+            } catch (e: any) {
+                logTime(`エディタを閉じる操作中にエラー/タイムアウト発生: ${e.message}`);
+            }
+
             logTime('エディタを閉じる操作 完了');
         });
 
