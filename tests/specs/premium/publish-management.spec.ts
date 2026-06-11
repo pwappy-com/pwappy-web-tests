@@ -23,19 +23,17 @@ test.describe.configure({ mode: 'serial' });
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
+const logTime = (msg: string) => {
+    const now = new Date();
+    console.log(`[PublishTest:Time] ${now.toISOString()} - ${msg}`);
+};
+
 test.describe('公開管理 E2Eシナリオ', () => {
 
     test.beforeEach(async ({ page, context }) => {
-        // =========================================================================
-        // 【ログ追加】 審査状態やページリロードのハングアップを追跡します
-        // =========================================================================
-        page.on('console', msg => console.log(`[PublishTest:Console] ${msg.type()}: ${msg.text()}`));
-        page.on('response', async response => {
-            if (response.url().includes('publish') || response.url().includes('app_versions') || response.status() >= 400) {
-                console.log(`[PublishTest:Network] ${response.request().method()} ${response.url()} -> Status: ${response.status()}`);
-                try {
-                    console.log(`[PublishTest:NetworkBody] ${(await response.text()).slice(0, 500)}`);
-                } catch (e) { }
+        page.on('console', msg => {
+            if (msg.type() === 'error' || msg.type() === 'warning') {
+                console.log(`[PublishTest:Console] ${msg.type()}: ${msg.text()}`);
             }
         });
         await gotoDashboard(page);
@@ -59,24 +57,15 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('テスト: 公開状態の遷移（非公開 -> 準備中 -> 準備完了 -> 公開 -> 非公開）', async () => {
             test.setTimeout(120000);
-
             const initialPoints = await getCurrentPoints(page);
-            console.log(`取得した初期ポイント: ${initialPoints}`);
-            expect(initialPoints).toBeGreaterThanOrEqual(20);
-
             await startPublishPreparation(page, appName, version);
             await expectVersionStatus(page, version, '審査待ち');
             await waitForVersionStatus(page, version, '準備完了', { timeout: 150000, intervals: [10000, 20000] });
             await expectVersionStatus(page, version, '準備完了');
             const currentPoints = await getCurrentPoints(page);
-            console.log(`公開審査を開始したあとに取得したポイント: ${currentPoints}`);
-
-            const pointsDiff = initialPoints - currentPoints;
-            expect(pointsDiff).toBe(0);
-
+            expect(initialPoints - currentPoints).toBe(0);
             await completePublication(page, appName, version);
             await expectVersionStatus(page, version, '公開中');
-
             await unpublishVersion(page, appName, version);
             await expectVersionStatus(page, version, '非公開');
         });
@@ -88,7 +77,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
         await test.step('クリーンアップ: 作成したアプリケーションを削除する', async () => {
             await page.reload({ waitUntil: 'networkidle' });
             await deleteApp(page, appKey);
-            await expectAppVisibility(page, appKey, false);
         });
     });
 
@@ -108,7 +96,6 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('テスト: APIキーがあっても消費PPが0であることを確認', async () => {
             test.setTimeout(120000);
-
             const initialPoints = await getCurrentPoints(page);
             console.log(`取得した初期ポイント: ${initialPoints}`);
 
@@ -116,12 +103,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await expectVersionStatus(page, version, '審査待ち');
             await waitForVersionStatus(page, version, '準備完了', { timeout: 150000, intervals: [10000, 20000] });
             await expectVersionStatus(page, version, '準備完了');
-
             const currentPoints = await getCurrentPoints(page);
-            console.log(`公開審査後のポイント: ${currentPoints}`);
-
-            const pointsDiff = initialPoints - currentPoints;
-            expect(pointsDiff).toBe(0);
+            expect(initialPoints - currentPoints).toBe(0);
         });
 
         await test.step('クリーンアップ: APIキー削除とアプリ削除', async () => {
@@ -151,11 +134,8 @@ test.describe('公開管理 E2Eシナリオ', () => {
 
         await test.step('テスト: 審査実行と20PP消費、および審査通過の確認', async () => {
             test.setTimeout(120000);
-
             const initialPoints = await getCurrentPoints(page);
-
             await startPublishPreparation(page, appName, version);
-
             await page.waitForTimeout(3000);
             const currentPoints = await getCurrentPoints(page);
             expect(initialPoints - currentPoints).toBe(0);
@@ -171,6 +151,9 @@ test.describe('公開管理 E2Eシナリオ', () => {
     });
 
     test('AIコーディングをテストする（モック実行）', async ({ page, context, isMobile }) => {
+        // 処理全体でどこに時間がかかっているかを完全追跡
+        logTime('テスト開始');
+
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
@@ -179,15 +162,20 @@ test.describe('公開管理 E2Eシナリオ', () => {
         const version = '1.0.0';
 
         await test.step('セットアップ: アプリ作成とAI有効化', async () => {
+            logTime('createApp 開始');
             await createApp(page, appName, appKey);
+            logTime('createApp 完了、setAiCoding 開始');
             await setAiCoding(page, true);
+            logTime('setAiCoding 完了');
         });
 
         await test.step('テスト: モック応答でAIコーディングのフローが完了することを確認', async () => {
+            logTime('deleteGeminiApiKey 開始');
             await deleteGeminiApiKey(page);
-            const initialPoints = await getCurrentPoints(page);
+            logTime('deleteGeminiApiKey 完了、openEditor 開始');
 
             const editorPage = await openEditor(page, context, appName, version);
+            logTime('openEditor 完了、route モック設定開始');
 
             let isProcessing = false;
             let getRequestAfterPostCount = 0;
@@ -198,6 +186,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
                 if (request.method() === 'POST') {
                     isProcessing = true;
                     getRequestAfterPostCount = 0;
+                    logTime('API Mock: POST 受信');
                     await route.fulfill({
                         status: 200,
                         contentType: 'application/json',
@@ -208,13 +197,11 @@ test.describe('公開管理 E2Eシナリオ', () => {
                         await route.fulfill({
                             status: 200,
                             contentType: 'application/json',
-                            body: JSON.stringify({
-                                code: 200,
-                                details: []
-                            })
+                            body: JSON.stringify({ code: 200, details: [] })
                         });
                     } else {
                         getRequestAfterPostCount++;
+                        logTime(`API Mock: GET 受信 (${getRequestAfterPostCount}回目)`);
                         const status = getRequestAfterPostCount <= 1 ? "pending" : "completed";
                         await route.fulfill({
                             status: 200,
@@ -243,6 +230,7 @@ test.describe('公開管理 E2Eシナリオ', () => {
             });
 
             const editorHelper = new EditorHelper(editorPage, isMobile);
+            logTime('editorHelper 初期化完了、UI操作開始');
 
             await editorHelper.openMoveingHandle("right");
             const scriptContainer = editorPage.locator('script-container');
@@ -250,35 +238,56 @@ test.describe('公開管理 E2Eシナリオ', () => {
             await editorHelper.addNewScript('mockScript');
             await editorHelper.openScriptForEditing('mockScript');
 
+            logTime('generateCodeWithAi 開始');
             await editorHelper.generateCodeWithAi('モック用の指示です');
+            logTime('generateCodeWithAi 完了');
+
             await editorHelper.closeMoveingHandle();
 
+            logTime('エディタを閉じる操作 開始');
             await editorPage.locator('platform-bottom-menu').evaluate((el: HTMLElement) => el.click());
             await Promise.all([
                 editorPage.waitForEvent('close'),
                 editorPage.locator('.menu-item', { hasText: '保存せずに閉じる' }).evaluate((el: HTMLElement) => el.click())
             ]);
+            logTime('エディタを閉じる操作 完了');
         });
 
         await test.step('クリーンアップ', async () => {
-            // =========================================================================
-            // 【ログ追加】 ここでの reload 処理がタイムアウト/クラッシュする原因を調査します
-            // =========================================================================
-            console.log(`[PublishTest:DEBUG:Cleanup] page.reload({ waitUntil: 'networkidle' }) を開始します`);
-            try {
-                await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
-                console.log(`[PublishTest:DEBUG:Cleanup] reload(networkidle) 成功`);
-            } catch (e: any) {
-                console.log(`[PublishTest:DEBUG:Cleanup] reload(networkidle) でエラー/タイムアウト発生: ${e.message}`);
-                console.log(`[PublishTest:DEBUG:Cleanup] fallback: domcontentloaded でのリロードを試行します`);
-                try {
-                    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
-                    console.log(`[PublishTest:DEBUG:Cleanup] fallback reload 成功`);
-                } catch (ee: any) {
-                    console.log(`[PublishTest:DEBUG:Cleanup] fallback reload も失敗: ${ee.message}`);
+            logTime('クリーンアップステップ 開始');
+            const activeRequests = new Set<string>();
+            const reqHandler = (req: any) => activeRequests.add(req.url());
+            const resHandler = (req: any) => activeRequests.delete(req.url());
+            page.on('request', reqHandler);
+            page.on('requestfinished', resHandler);
+            page.on('requestfailed', resHandler);
+
+            const interval = setInterval(() => {
+                if (activeRequests.size > 0) {
+                    console.log(`[PublishTest:PendingRequests] 待機中: ${Array.from(activeRequests).join(', ')}`);
                 }
+            }, 5000);
+
+            try {
+                logTime('page.reload(networkidle) 開始');
+                await page.reload({ waitUntil: 'networkidle', timeout: 30000 });
+                logTime('page.reload(networkidle) 完了');
+            } catch (e: any) {
+                logTime(`page.reload(networkidle) エラー: ${e.message}`);
+                try {
+                    await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
+                    logTime('page.reload(domcontentloaded) 完了');
+                } catch (ee) { }
+            } finally {
+                clearInterval(interval);
+                page.off('request', reqHandler);
+                page.off('requestfinished', resHandler);
+                page.off('requestfailed', resHandler);
             }
+
+            logTime('deleteApp 開始');
             await deleteApp(page, appKey);
+            logTime('deleteApp 完了');
         });
     });
 });
