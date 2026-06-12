@@ -66,6 +66,7 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
 
     test('ログレベルフィルタリング機能の検証', async ({ editorPage }) => {
         const consoleContainer = editorPage.locator('script-container console-container');
+
         const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
 
         await test.step('各種ログを出力', async () => {
@@ -80,17 +81,14 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
             });
 
             // =========================================================
-            // 【原因究明用ログ】
-            // Expected 3 Received 6 の詳細を知るためのダンプを追加
+            // 【ログ強化】
+            // アサーション前に、現在出力されている全てのログテキストを取得してダンプする
             // =========================================================
-            try {
-                await expect(consoleContainer.locator('.log-item')).toHaveCount(3, { timeout: 10000 });
-            } catch (e) {
-                const allLogs = await consoleContainer.locator('.log-item').allInnerTexts();
-                console.log(`[ConsoleTest:FATAL] Expected 3 logs, but found ${allLogs.length}.`);
-                console.log(`[ConsoleTest:Dump] Log contents:\n${allLogs.join('\n')}`);
-                throw e;
-            }
+            const currentLogs = await consoleContainer.locator('.log-item').allInnerTexts();
+            console.log(`[ConsoleTest:Pre-Assert Dump] Current log count: ${currentLogs.length}`);
+            console.log(`[ConsoleTest:Pre-Assert Dump] Logs:\n${currentLogs.join('\n')}`);
+
+            await expect(consoleContainer.locator('.log-item')).toHaveCount(3);
         });
 
         await test.step('フィルタメニューの開閉確認', async () => {
