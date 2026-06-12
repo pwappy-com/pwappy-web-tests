@@ -252,8 +252,40 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
             const confirmDialog = page.locator('message-box#delete-confirm-general');
             await expect(confirmDialog).toBeVisible();
+
+            // =========================================================
+            // 【原因究明用ログ】
+            // クリックイベントが内部まで到達しているかをブラウザ側でカウントする
+            // =========================================================
+            await page.evaluate(() => {
+                (window as any).__cancelClickCount = 0;
+                document.body.addEventListener('click', (e) => {
+                    const path = e.composedPath() as HTMLElement[];
+                    for (const el of path) {
+                        if (el.classList && el.classList.contains('confirm-cancel-button')) {
+                            (window as any).__cancelClickCount++;
+                            console.log(`[CancelTest:ClickEvent] cancel button actually clicked. count: ${(window as any).__cancelClickCount}`);
+                        }
+                    }
+                });
+            });
+
+            console.log('[CancelTest:Action] Calling .click({ force: true }) on cancel button');
             await confirmDialog.locator('.confirm-cancel-button').click({ force: true });
-            await expect(confirmDialog).toBeHidden();
+
+            try {
+                await expect(confirmDialog).toBeHidden({ timeout: 10000 });
+                console.log('[CancelTest:Result] Dialog hidden successfully.');
+            } catch (e) {
+                const clickCount = await page.evaluate(() => (window as any).__cancelClickCount);
+                console.log(`[CancelTest:FATAL] Timeout! Cancel click count in browser context: ${clickCount}`);
+                console.log(`[CancelTest:FATAL] Dialog visible state: ${await confirmDialog.isVisible()}`);
+
+                // HTMLダンプも出力
+                const dialogHTML = await confirmDialog.evaluate(el => el.outerHTML);
+                console.log(`[CancelTest:Dump] Dialog HTML:\n${dialogHTML.substring(0, 1000)}`);
+                throw e;
+            }
 
             await page.getByRole('button', { name: ' ワークベンチに戻る' }).click();
             await expectAppVisibility(page, appKey, true);

@@ -66,9 +66,6 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
 
     test('ログレベルフィルタリング機能の検証', async ({ editorPage }) => {
         const consoleContainer = editorPage.locator('script-container console-container');
-
-        // 1. 各種ログを出力させる (RenderZoneController経由で捕捉される)
-        // プレビューフレーム内で実行する必要があるため、iframeを特定
         const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
 
         await test.step('各種ログを出力', async () => {
@@ -82,7 +79,18 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
                 console.trace('Test Trace Log');
             });
 
-            await expect(consoleContainer.locator('.log-item')).toHaveCount(3);
+            // =========================================================
+            // 【原因究明用ログ】
+            // Expected 3 Received 6 の詳細を知るためのダンプを追加
+            // =========================================================
+            try {
+                await expect(consoleContainer.locator('.log-item')).toHaveCount(3, { timeout: 10000 });
+            } catch (e) {
+                const allLogs = await consoleContainer.locator('.log-item').allInnerTexts();
+                console.log(`[ConsoleTest:FATAL] Expected 3 logs, but found ${allLogs.length}.`);
+                console.log(`[ConsoleTest:Dump] Log contents:\n${allLogs.join('\n')}`);
+                throw e;
+            }
         });
 
         await test.step('フィルタメニューの開閉確認', async () => {
