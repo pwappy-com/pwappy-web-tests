@@ -27,22 +27,16 @@ const test = base.extend<EditorFixtures>({
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        const appKey = `test-key-${uniqueId}`.slice(0, 30); // ※ここは各ファイルのプレフィックスに合わせてください
-
+        const appKey = `test-key-${uniqueId}`.slice(0, 30);
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
 
-        // テスト本体の実行
+        // テスト本体（use）に準備した editorPage を渡す
         await use(editorPage);
 
-        try {
-            await editorPage.evaluate(() => window.stop());
-        } catch (e) {
-            // 既にナビゲーション中等でエラーが出た場合は無視
-        }
-
+        // テスト終了後のクリーンアップ処理
+        try { await editorPage.evaluate(() => window.stop()); } catch (e) { }
         await editorPage.close();
-        await page.bringToFront();
         await deleteApp(page, appKey);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {

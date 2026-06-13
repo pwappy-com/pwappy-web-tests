@@ -362,13 +362,9 @@ export class EditorHelper {
 
         if (!await targetContainer.isVisible()) {
             await expect(async () => {
-                console.log(`[EditorHelper:DEBUG] openMoveingHandle: tapping ${handleType} handle...`);
-                await handle.tap({ noWaitAfter: true }).catch(e => console.log(`[EditorHelper:DEBUG] tap 1 failed: ${e.message}`));
-                await handle.tap({ noWaitAfter: true }).catch(e => console.log(`[EditorHelper:DEBUG] tap 2 failed: ${e.message}`));
+                await handle.tap({ noWaitAfter: true });
+                await handle.tap({ noWaitAfter: true });
                 await this.page.waitForTimeout(500);
-
-                const isTargetVisible = await targetContainer.isVisible();
-                console.log(`[EditorHelper:DEBUG] openMoveingHandle: targetContainer(${handleType}) visible = ${isTargetVisible}`);
                 await expect(targetContainer).toBeVisible({ timeout: 1000 });
             }).toPass({
                 timeout: 10000

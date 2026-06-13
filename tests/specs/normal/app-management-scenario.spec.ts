@@ -252,37 +252,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
             const confirmDialog = page.locator('message-box#delete-confirm-general');
             await expect(confirmDialog).toBeVisible();
-
-            // イベント捕捉用リスナー
-            await page.evaluate(() => {
-                (window as any).__cancelClickCount = 0;
-                document.body.addEventListener('click', (e) => {
-                    const path = e.composedPath() as HTMLElement[];
-                    for (const el of path) {
-                        if (el.classList && el.classList.contains('confirm-cancel-button')) {
-                            (window as any).__cancelClickCount++;
-                            console.log(`[CancelTest:ClickEvent] cancel button clicked. count: ${(window as any).__cancelClickCount}`);
-                        }
-                    }
-                });
-            });
-
-            console.log('[CancelTest:Action] Calling .click({ force: true }) on cancel button');
             await confirmDialog.locator('.confirm-cancel-button').click({ force: true });
-
-            // =========================================================
-            // 【ログ強化】
-            // toBeHidden のアサーション前に状態を確実にダンプする
-            // =========================================================
-            await page.waitForTimeout(1000); // クリック処理の猶予
-            const clickCount = await page.evaluate(() => (window as any).__cancelClickCount);
-            const dialogVisibleState = await confirmDialog.isVisible();
-            const dialogHtmlDump = await confirmDialog.evaluate(el => el.outerHTML);
-
-            console.log(`[CancelTest:Pre-Assert Dump] Click Count: ${clickCount}`);
-            console.log(`[CancelTest:Pre-Assert Dump] isVisible() from Playwright: ${dialogVisibleState}`);
-            console.log(`[CancelTest:Pre-Assert Dump] Dialog HTML:\n${dialogHtmlDump.substring(0, 500)}`);
-
             await expect(confirmDialog).toBeHidden();
 
             await page.getByRole('button', { name: ' ワークベンチに戻る' }).click();

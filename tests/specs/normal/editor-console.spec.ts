@@ -18,25 +18,21 @@ const test = base.extend<EditorFixtures>({
         await use(`console-test-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        const appKey = `test-key-${uniqueId}`.slice(0, 30); // ※ここは各ファイルのプレフィックスに合わせてください
+        // ダッシュボードへ移動
+        await gotoDashboard(page);
+
+        // アプリ作成とエディタ起動
+        const uniqueId = Date.now().toString().slice(-6);
+        const appKey = `con-key-${uniqueId}`;
 
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
 
-        // テスト本体の実行
         await use(editorPage);
 
-        try {
-            await editorPage.evaluate(() => window.stop());
-        } catch (e) {
-            // 既にナビゲーション中等でエラーが出た場合は無視
-        }
-
+        // クリーンアップ
+        try { await editorPage.evaluate(() => window.stop()); } catch (e) { }
         await editorPage.close();
-        await page.bringToFront();
         await deleteApp(page, appKey);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
@@ -72,6 +68,8 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
     test('ログレベルフィルタリング機能の検証', async ({ editorPage }) => {
         const consoleContainer = editorPage.locator('script-container console-container');
 
+        // 1. 各種ログを出力させる (RenderZoneController経由で捕捉される)
+        // プレビューフレーム内で実行する必要があるため、iframeを特定
         const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
 
         await test.step('各種ログを出力', async () => {
@@ -84,14 +82,6 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
                 console.debug('Test Debug Log');
                 console.trace('Test Trace Log');
             });
-
-            // =========================================================
-            // 【ログ強化】
-            // アサーション前に、現在出力されている全てのログテキストを取得してダンプする
-            // =========================================================
-            const currentLogs = await consoleContainer.locator('.log-item').allInnerTexts();
-            console.log(`[ConsoleTest:Pre-Assert Dump] Current log count: ${currentLogs.length}`);
-            console.log(`[ConsoleTest:Pre-Assert Dump] Logs:\n${currentLogs.join('\n')}`);
 
             await expect(consoleContainer.locator('.log-item')).toHaveCount(3);
         });

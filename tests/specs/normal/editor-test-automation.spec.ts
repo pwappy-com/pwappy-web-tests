@@ -19,23 +19,14 @@ const test = base.extend<EditorFixtures>({
         await use(`test-auto-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        const appKey = `test-key-${uniqueId}`.slice(0, 30); // ※ここは各ファイルのプレフィックスに合わせてください
+        await gotoDashboard(page);
+        await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
+        const appKey = `test-auto-key-${Date.now().toString().slice(-6)}`;
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
-
-        // テスト本体の実行
         await use(editorPage);
-
-        try {
-            await editorPage.evaluate(() => window.stop());
-        } catch (e) {
-            // 既にナビゲーション中等でエラーが出た場合は無視
-        }
-
+        try { await editorPage.evaluate(() => window.stop()); } catch (e) { }
         await editorPage.close();
         await page.bringToFront();
         await deleteApp(page, appKey);
