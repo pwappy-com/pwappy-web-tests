@@ -24,12 +24,41 @@ const test = base.extend<EditorFixtures>({
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        const appKey = `test-key-${uniqueId}`.slice(0, 30);
+        const appKey = `test-key-${uniqueId}`.slice(0, 30); // ※ファイルごとのプレフィックスに合わせる
+
+        const tSetup = Date.now();
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
+        console.log(`[Fixture:${appName}] Setup completed in ${Date.now() - tSetup}ms`);
+
+        // =========================================================
+        // 【原因究明用ログ】 ネットワークリクエストのトラッキング
+        // =========================================================
+        const pendingRequests = new Map<string, string>(); // url -> method
+        editorPage.on('request', req => pendingRequests.set(req.url(), req.method()));
+        editorPage.on('requestfinished', req => pendingRequests.delete(req.url()));
+        editorPage.on('requestfailed', req => pendingRequests.delete(req.url()));
+
         await use(editorPage);
+
+        console.log(`[Fixture:${appName}] Teardown started`);
+        console.log(`[Fixture:${appName}] Pending requests: ${pendingRequests.size}`);
+        if (pendingRequests.size > 0) {
+            console.log(`[Fixture:${appName}] Pending URLs:`);
+            pendingRequests.forEach((method, url) => {
+                console.log(`  - [${method}] ${url}`);
+            });
+        }
+
+        const tClose = Date.now();
+        console.log(`[Fixture:${appName}] Calling editorPage.close()...`);
         await editorPage.close();
+        console.log(`[Fixture:${appName}] editorPage.close() took ${Date.now() - tClose}ms`);
+
+        const tDelete = Date.now();
+        await page.bringToFront();
         await deleteApp(page, appKey);
+        console.log(`[Fixture:${appName}] deleteApp took ${Date.now() - tDelete}ms`);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
@@ -339,7 +368,19 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
 
             // 3. UI操作と個別アラート検証
             const firstButton = testPage.locator('ons-button').first();
-            await expect(firstButton).toBeVisible({ timeout: 15000 });
+
+            // =========================================================
+            // 【原因究明用ログ】 503エラー等で画面が死んでいないかのダンプ
+            // =========================================================
+            try {
+                await expect(firstButton).toBeVisible({ timeout: 15000 });
+            } catch (e) {
+                console.log(`[EventsTest:FATAL] firstButton not visible. Current URL: ${testPage.url()}`);
+                const html = await testPage.evaluate(() => document.documentElement.outerHTML);
+                console.log(`[EventsTest:Dump] HTML:\n${html.substring(0, 1000)}`); // 冒頭1000文字を出力
+                throw e;
+            }
+
             await firstButton.click({ force: true });
 
             await editorHelper.verifyAndCloseAlert(testPage, 'page2_init');

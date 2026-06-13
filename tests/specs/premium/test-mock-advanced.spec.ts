@@ -18,16 +18,44 @@ const test = base.extend<EditorFixtures>({
         await use(`mock-adv-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
-        await gotoDashboard(page);
-        await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
+        const workerIndex = test.info().workerIndex;
+        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
+        const appKey = `test-key-${uniqueId}`.slice(0, 30); // ※ファイルごとのプレフィックスに合わせる
 
-        const appKey = `mock-adv-${Date.now().toString().slice(-6)}`;
+        const tSetup = Date.now();
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
+        console.log(`[Fixture:${appName}] Setup completed in ${Date.now() - tSetup}ms`);
+
+        // =========================================================
+        // 【原因究明用ログ】 ネットワークリクエストのトラッキング
+        // =========================================================
+        const pendingRequests = new Map<string, string>(); // url -> method
+        editorPage.on('request', req => pendingRequests.set(req.url(), req.method()));
+        editorPage.on('requestfinished', req => pendingRequests.delete(req.url()));
+        editorPage.on('requestfailed', req => pendingRequests.delete(req.url()));
+
         await use(editorPage);
+
+        console.log(`[Fixture:${appName}] Teardown started`);
+        console.log(`[Fixture:${appName}] Pending requests: ${pendingRequests.size}`);
+        if (pendingRequests.size > 0) {
+            console.log(`[Fixture:${appName}] Pending URLs:`);
+            pendingRequests.forEach((method, url) => {
+                console.log(`  - [${method}] ${url}`);
+            });
+        }
+
+        const tClose = Date.now();
+        console.log(`[Fixture:${appName}] Calling editorPage.close()...`);
         await editorPage.close();
+        console.log(`[Fixture:${appName}] editorPage.close() took ${Date.now() - tClose}ms`);
+
+        const tDelete = Date.now();
         await page.bringToFront();
         await deleteApp(page, appKey);
+        console.log(`[Fixture:${appName}] deleteApp took ${Date.now() - tDelete}ms`);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
