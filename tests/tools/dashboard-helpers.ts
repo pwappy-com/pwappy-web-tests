@@ -25,26 +25,16 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
         if (await appModal.locator('span[slot="header-title"]').isVisible().catch(() => false)) return;
         const addBtn = page.getByRole('button', { name: '+ 新規作成' });
 
-        // ========================================================
-        // 【ログ追加】 クリック失敗時に画面の状況をダンプする
-        // ========================================================
+        // 【原因究明用ログ】 クリック失敗時に画面のテキストをダンプし、503画面かどうかを確認する
         try {
             await addBtn.click({ force: true, timeout: 2000 });
         } catch (e: any) {
-            console.log(`[createApp:DEBUG] '+ 新規作成' button click failed: ${e.message}`);
-            console.log(`[createApp:DEBUG] Current URL: ${page.url()}`);
-            console.log(`[createApp:DEBUG] addBtn isVisible: ${await addBtn.isVisible().catch(() => false)}`);
-            const loadingCount = await page.locator('dashboard-loading-overlay').count();
-            console.log(`[createApp:DEBUG] dashboard-loading-overlay count: ${loadingCount}`);
-            if (loadingCount > 0) {
-                console.log(`[createApp:DEBUG] dashboard-loading-overlay isVisible: ${await page.locator('dashboard-loading-overlay').first().isVisible().catch(() => false)}`);
-            }
-            // 原因がアラートや別モーダルなどの場合を考慮し、bodyの冒頭を出力
-            const html = await page.evaluate(() => document.body.innerHTML.substring(0, 500));
-            console.log(`[createApp:DEBUG] Body HTML start:\n${html}`);
+            console.log(`[createApp:FATAL] '+ 新規作成' button click failed.`);
+            console.log(`[createApp:FATAL] Current URL: ${page.url()}`);
+            const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 300)).catch(() => '');
+            console.log(`[createApp:FATAL] Body Text (first 300 chars):\n${bodyText}`);
             throw e;
         }
-        // ========================================================
 
         await expect(appModal.locator('span[slot="header-title"]')).toBeVisible({ timeout: 3000 });
     }).toPass({ timeout: 20000, intervals: [1000] });
@@ -83,7 +73,6 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
  * クリーンアップスクリプトと同じ「アプリ設定」からの削除フローを使用します。
  */
 export async function deleteApp(page: Page, appKey: string): Promise<void> {
-    // console.log(`[DEBUG] deleteApp開始: ${appKey}`);
     await page.bringToFront();
 
     // 1. 確実にダッシュボード（ワークベンチ）を表示
@@ -127,8 +116,6 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
     const loadingOverlay = page.locator('dashboard-loading-overlay');
     await expect(loadingOverlay).toBeHidden({ timeout: 10000 });
-
-    // console.log(`[DEBUG] deleteApp完了: ${appKey}`);
 }
 
 export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
@@ -306,7 +293,6 @@ export async function addVersion(page: Page, versionName: string): Promise<void>
         if (await alert.isVisible().catch(() => false)) {
             await alert.getByRole('button', { name: '閉じる' }).evaluate((el: HTMLElement) => el.click()).catch(() => { });
         }
-        // force: true でスロット傍受を回避
         await modal.locator('.submit-button').click({ force: true, timeout: 2000 });
     }).toPass({ timeout: 15000, intervals: [1000] });
 
@@ -548,6 +534,16 @@ export async function waitForVersionStatus(
 }
 
 export async function gotoDashboard(page: Page): Promise<void> {
+    // 【原因究明用ログ】 ページ単位で発生した5xxエラーを記録
+    if (!(page as any).__hasErrorLogger) {
+        page.on('response', response => {
+            if (response.status() >= 500) {
+                console.log(`[Global:NetworkError] ${response.status()} ${response.statusText()} - ${response.request().method()} ${response.url()}`);
+            }
+        });
+        (page as any).__hasErrorLogger = true;
+    }
+
     const dashboardInitPromise = page.waitForResponse(response =>
         response.url().includes('dashboard-init') && response.status() === 200,
         { timeout: 15000 }
@@ -566,9 +562,7 @@ export async function gotoDashboard(page: Page): Promise<void> {
     // 2. ローディングオーバーレイが表示された場合、それが消えるのを待つ
     // z-index 3000 で前面を覆っているため、これがある間は何も操作できない
     const loadingOverlay = page.locator('dashboard-loading-overlay');
-    await expect(loadingOverlay).toBeHidden({ timeout: 30000 }).catch(() => {
-        console.log('[DEBUG] Loading overlay timeout or already hidden.');
-    });
+    await expect(loadingOverlay).toBeHidden({ timeout: 30000 }).catch(() => { });
 
     // 3. Litのレンダリング安定化のための微小待機
     await page.waitForTimeout(500);
