@@ -26,7 +26,6 @@ const test = base.extend<EditorFixtures>({
         await createApp(page, appName, appKey);
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
-        try { await editorPage.evaluate(() => window.stop()); } catch (e) { }
         await editorPage.close();
         await page.bringToFront();
         await deleteApp(page, appKey);

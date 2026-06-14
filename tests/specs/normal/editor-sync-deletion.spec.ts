@@ -37,7 +37,6 @@ const test = base.extend<EditorFixtures>({
         await use(editorPage);
 
         // テスト終了時のクリーンアップ
-        try { await editorPage.evaluate(() => window.stop()); } catch (e) { }
         await editorPage.close();
         await page.bringToFront();
         await deleteApp(page, appKey);
