@@ -24,7 +24,28 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await expect(async () => {
         if (await appModal.locator('span[slot="header-title"]').isVisible().catch(() => false)) return;
         const addBtn = page.getByRole('button', { name: '+ 新規作成' });
-        await addBtn.click({ force: true, timeout: 2000 });
+
+        // ========================================================
+        // 【ログ追加】 クリック失敗時に画面の状況をダンプする
+        // ========================================================
+        try {
+            await addBtn.click({ force: true, timeout: 2000 });
+        } catch (e: any) {
+            console.log(`[createApp:DEBUG] '+ 新規作成' button click failed: ${e.message}`);
+            console.log(`[createApp:DEBUG] Current URL: ${page.url()}`);
+            console.log(`[createApp:DEBUG] addBtn isVisible: ${await addBtn.isVisible().catch(() => false)}`);
+            const loadingCount = await page.locator('dashboard-loading-overlay').count();
+            console.log(`[createApp:DEBUG] dashboard-loading-overlay count: ${loadingCount}`);
+            if (loadingCount > 0) {
+                console.log(`[createApp:DEBUG] dashboard-loading-overlay isVisible: ${await page.locator('dashboard-loading-overlay').first().isVisible().catch(() => false)}`);
+            }
+            // 原因がアラートや別モーダルなどの場合を考慮し、bodyの冒頭を出力
+            const html = await page.evaluate(() => document.body.innerHTML.substring(0, 500));
+            console.log(`[createApp:DEBUG] Body HTML start:\n${html}`);
+            throw e;
+        }
+        // ========================================================
+
         await expect(appModal.locator('span[slot="header-title"]')).toBeVisible({ timeout: 3000 });
     }).toPass({ timeout: 20000, intervals: [1000] });
 
@@ -43,7 +64,6 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
         if (await alert.isVisible().catch(() => false)) {
             await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });
         }
-        // スロット要素のポインターインターセプトを回避するため force: true
         await appModal.locator('.submit-button').click({ force: true, timeout: 2000 });
     }).toPass({ timeout: 15000, intervals: [1000] });
 
@@ -52,7 +72,6 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
 
     await page.waitForTimeout(500);
 
-    // 新規作成後は自動的に選択状態になるはずなので、バージョンセクションを待機
     await expect(page.locator('dashboard-app-detail')).toBeVisible({ timeout: 15000 });
 }
 
