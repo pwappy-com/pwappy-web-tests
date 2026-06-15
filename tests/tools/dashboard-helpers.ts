@@ -25,7 +25,7 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
         if (await appModal.locator('span[slot="header-title"]').isVisible().catch(() => false)) return;
         const addBtn = page.getByRole('button', { name: '+ 新規作成' });
 
-        // 【原因究明用ログ】 クリック失敗時に画面のテキストをダンプし、503画面かどうかを確認する
+        // クリック失敗時に画面のテキストをダンプし、503画面かどうかを確認する
         try {
             await addBtn.click({ force: true, timeout: 2000 });
         } catch (e: any) {
@@ -534,7 +534,7 @@ export async function waitForVersionStatus(
 }
 
 export async function gotoDashboard(page: Page): Promise<void> {
-    // 【原因究明用ログ】 ページ単位で発生した5xxエラーを記録
+    // ページ単位で発生した5xxエラーを記録
     if (!(page as any).__hasErrorLogger) {
         page.on('response', response => {
             if (response.status() >= 500) {

@@ -17,10 +17,6 @@ const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 test.describe('アーカイブ E2Eシナリオ', () => {
 
     test.beforeEach(async ({ page, context }) => {
-        // =========================================================================
-        // 【原因究明ログ】 アーカイブおよび復元に関するAPIとクリックイベントの完全監視
-        // ※このコードはテストの合否やロジックには一切影響を与えません
-        // =========================================================================
         page.on('console', msg => {
             if (msg.text().includes('[ArchiveTest:') || msg.type() === 'error') {
                 console.log(`[ArchiveTest:Console] ${msg.type()}: ${msg.text()}`);

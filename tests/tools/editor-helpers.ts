@@ -606,7 +606,6 @@ export class EditorHelper {
             // ターゲットが見えるかチェック
             await expect(targetToplistItem).toBeVisible({ timeout: 5000 });
         } catch (e) {
-            // 【重要】失敗時にリストの中身を全出力して原因を特定する
             const items = await topTemplateListContainer.locator('div.top-template-item').all();
             for (const item of items) {
                 const id = await item.getAttribute('data-template-id');

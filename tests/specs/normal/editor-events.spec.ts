@@ -340,9 +340,6 @@ test.describe('エディタ内イベント＆スクリプト機能のテスト',
             // 3. UI操作と個別アラート検証
             const firstButton = testPage.locator('ons-button').first();
 
-            // =========================================================
-            // 【原因究明用ログ】 503エラー等で画面が死んでいないかのダンプ
-            // =========================================================
             try {
                 await expect(firstButton).toBeVisible({ timeout: 15000 });
             } catch (e) {
