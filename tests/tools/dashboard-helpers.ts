@@ -20,6 +20,7 @@ export async function expectAppVisibility(page: Page, appKey: string, isVisible:
  * ダッシュボード画面で新しいアプリケーションを正常に作成します。
  */
 export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
+    console.log(`[createApp:Enter] Current URL: ${page.url()}, appName: ${appName}, appKey: ${appKey}`);
     const appModal = page.locator('dashboard-modal-window#appModal');
     await expect(async () => {
         if (await appModal.locator('span[slot="header-title"]').isVisible().catch(() => false)) return;
@@ -31,8 +32,12 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
         } catch (e: any) {
             console.log(`[createApp:FATAL] '+ 新規作成' button click failed.`);
             console.log(`[createApp:FATAL] Current URL: ${page.url()}`);
+            console.log(`[createApp:FATAL] Context Pages Count: ${page.context().pages().length}`);
+            const pagesInfo = page.context().pages().map((p, i) => `Page ${i}: ${p.url()}`).join(', ');
+            console.log(`[createApp:FATAL] Pages Info: ${pagesInfo}`);
             const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 300)).catch(() => '');
             console.log(`[createApp:FATAL] Body Text (first 300 chars):\n${bodyText}`);
+            console.log(`[createApp:FATAL] Stack trace:\n${e.stack}`);
             throw e;
         }
 
@@ -65,9 +70,6 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await expect(page.locator('dashboard-app-detail')).toBeVisible({ timeout: 15000 });
 }
 
-/**
- * ダッシュボード画面で指定されたアプリケーションを正常に削除します。
- */
 /**
  * ダッシュボード画面で指定されたアプリケーションを正常に削除します。
  * クリーンアップスクリプトと同じ「アプリ設定」からの削除フローを使用します。
@@ -534,6 +536,7 @@ export async function waitForVersionStatus(
 }
 
 export async function gotoDashboard(page: Page): Promise<void> {
+    console.log(`[gotoDashboard:Enter] Current URL: ${page.url()}`);
     // ページ単位で発生した5xxエラーを記録
     if (!(page as any).__hasErrorLogger) {
         page.on('response', response => {
@@ -549,7 +552,9 @@ export async function gotoDashboard(page: Page): Promise<void> {
         { timeout: 15000 }
     ).catch(() => { });
 
+    console.log(`[gotoDashboard:Navigating] to ${String(process.env.PWAPPY_TEST_BASE_URL)}`);
     await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+    console.log(`[gotoDashboard:Navigated] Current URL: ${page.url()}`);
 
     // デフォルトでツアーを表示させないようにする
     await page.evaluate(() => {
