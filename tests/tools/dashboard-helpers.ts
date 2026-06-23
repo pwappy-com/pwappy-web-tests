@@ -21,6 +21,12 @@ export async function expectAppVisibility(page: Page, appKey: string, isVisible:
  */
 export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
     console.log(`[createApp:Enter] Current URL: ${page.url()}, appName: ${appName}, appKey: ${appKey}`);
+
+    // about:blank の場合に警告を出す
+    if (page.url() === 'about:blank') {
+        console.log(`[createApp:WARNING] The page URL is 'about:blank'. This means the dashboard is not loaded, and elements will likely not be found.`);
+    }
+
     const appModal = page.locator('dashboard-modal-window#appModal');
     await expect(async () => {
         if (await appModal.locator('span[slot="header-title"]').isVisible().catch(() => false)) return;
@@ -75,6 +81,7 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
  * クリーンアップスクリプトと同じ「アプリ設定」からの削除フローを使用します。
  */
 export async function deleteApp(page: Page, appKey: string): Promise<void> {
+    console.log(`[deleteApp:Enter] Current URL: ${page.url()}, appKey: ${appKey}`);
     await page.bringToFront();
 
     // 1. 確実にダッシュボード（ワークベンチ）を表示

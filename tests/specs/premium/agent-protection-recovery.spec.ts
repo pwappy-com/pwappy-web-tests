@@ -18,13 +18,18 @@ const test = base.extend<EditorFixtures>({
         await use(`agent-protect-${uniqueId}`.slice(0, 30));
     },
     editorPage: async ({ page, context, appName }, use) => {
+        console.log(`[Fixture:editorPage:Enter] appName: ${appName}, Initial URL: ${page.url()}`);
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appKey = `test-key-${uniqueId}`.slice(0, 30); // ※ここは各ファイルのプレフィックスに合わせてください
 
+        console.log(`[Fixture:editorPage:BeforeCreateApp] Current URL: ${page.url()}`);
         await createApp(page, appName, appKey);
+        console.log(`[Fixture:editorPage:AfterCreateApp] Current URL: ${page.url()}`);
+
         const editorPage = await openEditor(page, context, appName);
+        console.log(`[Fixture:editorPage:AfterOpenEditor]`);
 
         // テスト本体の実行
         await use(editorPage);
