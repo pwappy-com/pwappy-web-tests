@@ -72,6 +72,10 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
         const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
 
         await test.step('各種ログを出力', async () => {
+            // 既に出ているシステムログを一度クリアしてリセットする
+            const clearButton = consoleContainer.locator('button.toolbar-btn[title="コンソールをクリア"]');
+            await clearButton.click();
+
             await previewFrame.locator('body').waitFor({ state: 'attached' });
 
             await previewFrame.locator('body').evaluate(() => {

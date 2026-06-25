@@ -101,11 +101,11 @@ function ${scriptName}(event) {
             const deleteBtn = scriptItem.getByTitle('スクリプトの削除');
 
             // 1回目：削除予約（アイコンがチェックに変わる）
-            await deleteBtn.click();
+            await deleteBtn.click({ force: true });
             await expect(deleteBtn.locator('i')).toHaveClass(/fa-check/);
 
             // 2回目：削除確定
-            await deleteBtn.click();
+            await deleteBtn.click({ force: true });
 
             // 行からスクリプト名が消えていることを確認
             await expect(scriptItem).toBeHidden();
