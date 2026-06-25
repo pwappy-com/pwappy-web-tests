@@ -188,6 +188,10 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
             await expect(restoreDialog).toBeVisible({ timeout: 20000 });
 
             await restoreDialog.getByRole('button', { name: '復元する' }).click({ force: true });
+
+            // リロード後の復元フローで表示される可能性のあるモーダルをスキップ
+            await editorHelper.handleStarterTemplateModal();
+
             // pageNodeを表示する
             await editorHelper.switchTopLevelTemplate(pageNodeId);
         });
@@ -231,6 +235,9 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
         await test.step('3. スナップショット画面の状態確認', async () => {
             // ダイアログが消えるのを待機
             await expect(editorPage.locator('message-box', { hasText: 'すべてのスナップショットを破棄しますか？' })).toBeHidden({ timeout: 10000 });
+
+            // スナップショットを全破棄してアプリが空になったため、確実に出現するモーダルをスキップ
+            await editorHelper.handleStarterTemplateModal();
 
             await editorPage.locator('#fab-bottom-menu-box').click({ force: true });
             const bottomMenu = editorPage.locator('#platformBottomMenu');

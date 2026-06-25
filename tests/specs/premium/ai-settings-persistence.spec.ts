@@ -120,6 +120,7 @@ test.describe('AI設定の永続化テスト', () => {
             await editorPage.reload();
             await editorPage.waitForLoadState('domcontentloaded');
             await editorHelper.handleSnapshotRestoreDialog();
+            await editorHelper.handleStarterTemplateModal();
         });
 
         await test.step('3. スクリプトを再作成して設定が保持されているか確認', async () => {
@@ -188,6 +189,7 @@ test.describe('AI設定の永続化テスト', () => {
             await editorPage.reload();
             await editorPage.waitForLoadState('domcontentloaded');
             await editorHelper.handleSnapshotRestoreDialog();
+            await editorHelper.handleStarterTemplateModal();
         });
 
         await test.step('3. AIエージェントを再度開き、設定が保持されているか確認', async () => {
