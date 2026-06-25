@@ -189,6 +189,9 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
 
             await restoreDialog.getByRole('button', { name: '復元する' }).click({ force: true });
 
+            // 復旧ダイアログが完全に消えるのを待つ
+            await expect(restoreDialog).toBeHidden({ timeout: 10000 });
+
             // リロード後の復元フローで表示される可能性のあるモーダルをスキップ
             await editorHelper.handleStarterTemplateModal();
 
