@@ -127,7 +127,17 @@ export async function deleteApp(page: Page, appKey: string): Promise<void> {
     await expect(loadingOverlay).toBeHidden({ timeout: 10000 });
 }
 
-export async function openEditor(page: Page, context: BrowserContext, appName: string, version: string = '1.0.0'): Promise<Page> {
+/**
+ * ダッシュボードからエディタを新規タブで開きます。
+ * @param options.skipStarterModal デフォルトは true。false にするとスターターモーダルをスキップせず残します。
+ */
+export async function openEditor(
+    page: Page,
+    context: BrowserContext,
+    appName: string,
+    version: string = '1.0.0',
+    options: { skipStarterModal?: boolean } = { skipStarterModal: true }
+): Promise<Page> {
     const versionRow = page.locator('.version-card', { hasText: version }).first();
     await expect(versionRow).toBeVisible({ timeout: 10000 });
 
@@ -146,7 +156,14 @@ export async function openEditor(page: Page, context: BrowserContext, appName: s
 
     await editorPage.waitForLoadState('domcontentloaded');
     const tempHelper = new EditorHelper(editorPage, false);
+
+    // スナップショット復元ダイアログのスキップ
     await tempHelper.handleSnapshotRestoreDialog();
+
+    // スターターテンプレートモーダルの処理（デフォルトでスキップ）
+    if (options.skipStarterModal) {
+        await tempHelper.handleStarterTemplateModal();
+    }
 
     await expect(editorPage.locator('ios-component')).toBeVisible();
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });

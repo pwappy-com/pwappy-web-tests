@@ -33,6 +33,33 @@ export class EditorHelper {
     // =================================================================
 
     /**
+     * エディタ起動時に表示される「スターターテンプレートモーダル」を閉じてスキップします。
+     * 今後のテストでモーダル自体を操作したい場合は呼び出さないでください。
+     */
+    async handleStarterTemplateModal(): Promise<void> {
+        try {
+            await test.step('スターターテンプレートモーダルのチェックとスキップ', async () => {
+                const starterModal = this.page.locator('starter-template-modal');
+                // アプリが空でない場合は出現しないため、タイムアウトを短めに設定
+                if (await starterModal.isVisible({ timeout: 5000 }).catch(() => false)) {
+                    // 「閉じて一から自分で作る（スキップ）」ボタンをクリック
+                    const skipBtn = starterModal.locator('.btn-skip');
+                    await skipBtn.click({ force: true });
+
+                    // モーダルが非表示になるのを待つ
+                    await expect(starterModal).toBeHidden({ timeout: 5000 });
+
+                    // 処理後の安定化待ち
+                    await this.page.waitForTimeout(500);
+                }
+            });
+        } catch (e) {
+            // 万が一要素が見つからない等の例外が起きても、テスト全体を落とさないようにキャッチ
+            console.log('[EditorHelper] handleStarterTemplateModal skipped or failed:', e);
+        }
+    }
+
+    /**
      * エディタ起動時に表示される可能性のある「スナップショット復元ダイアログ」を処理します。
      * リスナーを事前に登録することで、ブラウザ標準ダイアログのハンドリングを安定させます。
      */
