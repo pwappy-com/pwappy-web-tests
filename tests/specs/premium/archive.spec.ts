@@ -115,7 +115,12 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         });
 
         await test.step('テスト: アーカイブタブで表示されることを確認', async () => {
-            await page.getByRole('button', { name: ' アーカイブ' }).click();
+            const alert = page.locator('alert-component');
+            if (await alert.isVisible().catch(() => false)) {
+                await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });
+            }
+
+            await page.getByRole('button', { name: ' アーカイブ' }).click({ force: true });
             const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });
             await expect(archivedAppCard).toBeVisible({ timeout: 10000 });
         });
@@ -204,7 +209,13 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         });
 
         await test.step('テスト: アーカイブタブでメニューグループ（QRコード等）が表示されることを確認', async () => {
-            await page.getByRole('button', { name: ' アーカイブ' }).click();
+            const alert = page.locator('alert-component');
+            if (await alert.isVisible().catch(() => false)) {
+                await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });
+            }
+
+            await page.getByRole('button', { name: ' アーカイブ' }).click({ force: true });
+
             const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });
             await expect(archivedAppCard).toBeVisible({ timeout: 10000 });
 

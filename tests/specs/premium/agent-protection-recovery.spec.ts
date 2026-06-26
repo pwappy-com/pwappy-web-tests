@@ -22,7 +22,9 @@ const test = base.extend<EditorFixtures>({
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        const appKey = `test-key-${uniqueId}`.slice(0, 30); // ※ここは各ファイルのプレフィックスに合わせてください
+        const appKey = `test-key-${uniqueId}`.slice(0, 30);
+
+        await gotoDashboard(page);
 
         console.log(`[Fixture:editorPage:BeforeCreateApp] Current URL: ${page.url()}`);
         await createApp(page, appName, appKey);
@@ -51,6 +53,27 @@ const test = base.extend<EditorFixtures>({
 });
 
 test.describe('AIエージェント：エラーリカバリと保護機能（ロック）の検証', () => {
+
+    test.beforeEach(async ({ page }) => {
+        await gotoDashboard(page);
+        await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
+
+        try {
+            // AIコーディング機能を有効化
+            await setAiCoding(page, true);
+        } catch (e) {
+            console.warn('[Warning] setAiCoding failed/timed out, continuing test...', e);
+        }
+    });
+
+    test.afterEach(async ({ page }) => {
+        try {
+            // 他のテストに影響を与えないよう無効化に戻す
+            await setAiCoding(page, false);
+        } catch (e) {
+            console.warn('[Warning] setAiCoding (disable) failed, ignoring...', e);
+        }
+    });
 
     test('修復不能なJSONの連続受信時、リトライ上限で停止し手動修正から再開できる', async ({ editorPage, editorHelper }) => {
         let isProcessing1 = false;

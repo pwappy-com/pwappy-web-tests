@@ -24,6 +24,8 @@ const test = base.extend<EditorFixtures>({
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         const appKey = `test-key-${uniqueId}`.slice(0, 30); // ※ここは各ファイルのプレフィックスに合わせてください
 
+        await gotoDashboard(page);
+        
         console.log(`[Fixture:editorPage:BeforeCreateApp] Current URL: ${page.url()}`);
         await createApp(page, appName, appKey);
         console.log(`[Fixture:editorPage:AfterCreateApp] Current URL: ${page.url()}`);
