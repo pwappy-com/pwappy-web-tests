@@ -100,17 +100,35 @@ function ${scriptName}(event) {
             const scriptItem = eventRow.locator('.editor-row-right-item', { hasText: scriptName });
             const deleteBtn = scriptItem.getByTitle('スクリプトの削除');
 
-            // 1回目：削除予約（アイコンがチェックに変わるまでクリックと検証をリトライする）
-            await expect(async () => {
-                await deleteBtn.click({ force: true, timeout: 2000 });
-                await expect(deleteBtn.locator('i')).toHaveClass(/fa-check/, { timeout: 2000 });
-            }).toPass({
-                timeout: 10000,
-                intervals: [1000] // 1秒間隔でリトライ
-            });
+            const browserName = editorPage.context().browser()?.browserType().name();
 
-            // 2回目：削除確定（1回目の状態変化を確認できているため、そのままクリック）
-            await deleteBtn.click({ force: true });
+            if (browserName === 'webkit') {
+                // =========================================================================
+                // 【WebKit専用ワークアラウンド】
+                // 座標計算のズレやレンダリング遅延による空振りを防ぐため、JS直接クリックを使用
+                // =========================================================================
+                await expect(async () => {
+                    await deleteBtn.evaluate((el: HTMLElement) => el.click());
+                    await expect(deleteBtn.locator('i')).toHaveClass(/fa-check/, { timeout: 2000 });
+                }).toPass({
+                    timeout: 10000,
+                    intervals: [1000]
+                });
+
+                // 2回目：削除確定
+                await deleteBtn.evaluate((el: HTMLElement) => el.click());
+            } else {
+                // =========================================================================
+                // 【本道の処理】 (Chromium、Firefox向け)
+                // 実際のユーザー操作に基づき、物理クリックが正常に機能するかを厳密に検証
+                // =========================================================================
+                // 1回目：削除予約
+                await deleteBtn.click();
+                await expect(deleteBtn.locator('i')).toHaveClass(/fa-check/);
+
+                // 2回目：削除確定
+                await deleteBtn.click();
+            }
 
             // 行からスクリプト名が消えていることを確認
             await expect(scriptItem).toBeHidden();
