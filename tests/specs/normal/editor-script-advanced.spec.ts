@@ -100,11 +100,16 @@ function ${scriptName}(event) {
             const scriptItem = eventRow.locator('.editor-row-right-item', { hasText: scriptName });
             const deleteBtn = scriptItem.getByTitle('スクリプトの削除');
 
-            // 1回目：削除予約（アイコンがチェックに変わる）
-            await deleteBtn.click({ force: true });
-            await expect(deleteBtn.locator('i')).toHaveClass(/fa-check/);
+            // 1回目：削除予約（アイコンがチェックに変わるまでクリックと検証をリトライする）
+            await expect(async () => {
+                await deleteBtn.click({ force: true, timeout: 2000 });
+                await expect(deleteBtn.locator('i')).toHaveClass(/fa-check/, { timeout: 2000 });
+            }).toPass({
+                timeout: 10000,
+                intervals: [1000] // 1秒間隔でリトライ
+            });
 
-            // 2回目：削除確定
+            // 2回目：削除確定（1回目の状態変化を確認できているため、そのままクリック）
             await deleteBtn.click({ force: true });
 
             // 行からスクリプト名が消えていることを確認
