@@ -229,4 +229,57 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
         });
     });
 
+    // console.table デバッグ出力テスト
+    test('console.tableによる表形式（テーブル）デバッグ出力機能の検証', async ({ editorPage }) => {
+        const consoleContainer = editorPage.locator('script-container console-container');
+        const logTable = consoleContainer.locator('table.log-table');
+
+        // ログを一度完全にクリア
+        const clearButton = consoleContainer.locator('button.toolbar-btn[title="コンソールをクリア"]');
+        await clearButton.click();
+
+        await test.step('1. プレビュー環境(iframe)内で console.table を実行させる', async () => {
+            const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
+            await previewFrame.locator('body').waitFor({ state: 'attached' });
+
+            await previewFrame.locator('body').evaluate(() => {
+                console.table([
+                    { id: 101, name: 'Apple', type: 'Fruit' },
+                    { id: 102, name: 'Carrot', type: 'Vegetable' }
+                ]);
+            });
+
+            // コンソール領域に table.log-table 要素がアタッチされるのを検証
+            await expect(logTable).toBeVisible({ timeout: 10000 });
+        });
+
+        await test.step('2. レンダリングされたテーブルのヘッダーカラム(th)を検証', async () => {
+            const headers = logTable.locator('thead th');
+            await expect(headers).toHaveCount(4); // (index), id, name, type
+            await expect(headers.nth(0)).toHaveText('(index)');
+            await expect(headers.nth(1)).toHaveText('id');
+            await expect(headers.nth(2)).toHaveText('name');
+            await expect(headers.nth(3)).toHaveText('type');
+        });
+
+        await test.step('3. レンダリングされたテーブルのデータ行(td)の内容を検証', async () => {
+            const rows = logTable.locator('tbody tr');
+            await expect(rows).toHaveCount(2);
+
+            // 1行目 (Index 0: Apple)
+            const row1Cols = rows.nth(0).locator('td');
+            await expect(row1Cols.nth(0)).toHaveText('0');
+            await expect(row1Cols.nth(1)).toHaveText('101');
+            await expect(row1Cols.nth(2)).toHaveText('Apple');
+            await expect(row1Cols.nth(3)).toHaveText('Fruit');
+
+            // 2行目 (Index 1: Carrot)
+            const row2Cols = rows.nth(1).locator('td');
+            await expect(row2Cols.nth(0)).toHaveText('1');
+            await expect(row2Cols.nth(1)).toHaveText('102');
+            await expect(row2Cols.nth(2)).toHaveText('Carrot');
+            await expect(row2Cols.nth(3)).toHaveText('Vegetable');
+        });
+    });
+
 });

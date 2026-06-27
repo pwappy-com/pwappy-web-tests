@@ -584,6 +584,67 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
+    test('属性(icon)を追加・編集・削除できる（アイコンピッカーの連動検証）', async ({ editorPage, editorHelper }) => {
+        const attrName = 'icon';
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openAttributeEditor();
+            await editorHelper.addAttributeDefinition({ name: attrName, template: 'input[text]', scope: 'tag' });
+        });
+
+        await test.step('検証: アイコンピッカーを介してアイコンを設定できること', async () => {
+            const propertyContainer = editorHelper.getPropertyContainer();
+            const picker = propertyContainer.locator('attribute-icon-picker[data-attribute-type="icon"]');
+            await expect(picker).toBeVisible();
+
+            // ピッカーのモーダルを開く
+            await picker.locator('.picker-button').click();
+            const modal = picker.locator('.modal-overlay');
+            await expect(modal).toHaveClass(/active/);
+
+            // 検索ワードを入力してフィルタリング
+            const searchInput = modal.locator('.modal-search input');
+            await expect(searchInput).toBeVisible();
+            await searchInput.fill('star');
+
+            const starLabel = modal.locator('.icon-name', { hasText: /^star$/ }).first();
+            await expect(starLabel).toBeVisible({ timeout: 15000 });
+
+            const starItem = starLabel.locator('..');
+            await starItem.click({ force: true });
+
+            // モーダルが閉じて値がインプットとプレビューに反映される
+            await expect(modal).not.toHaveClass(/active/);
+
+            const targetInput = picker.locator('input[data-attribute-type="icon"]');
+            await expect(targetInput).toHaveValue('fa-star');
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: 'fa-star' });
+        });
+
+        await test.step('検証: クリアボタンによる属性の削除', async () => {
+            const propertyContainer = editorHelper.getPropertyContainer();
+            const picker = propertyContainer.locator('attribute-icon-picker[data-attribute-type="icon"]');
+            const targetInput = picker.locator('input[data-attribute-type="icon"]');
+
+            // 「×」クリアボタンをクリック
+            await picker.locator('.clear-button').click();
+            await expect(targetInput).toHaveValue('');
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: attrName, value: null });
+        });
+
+        await test.step('削除: 属性定義自体を削除', async () => {
+            const propertyContainer = editorHelper.getPropertyContainer();
+            const picker = propertyContainer.locator('attribute-icon-picker[data-attribute-type="icon"]');
+
+            await editorHelper.openAttributeEditor();
+            await editorHelper.deleteAttributeDefinition(attrName);
+            await expect(picker).toBeHidden();
+        });
+    });
+
     test('属性(style-flex)を追加・編集・削除できる', async ({ editorPage, editorHelper }) => {
         const attrName = 'style-flex';
         const nodeType = 'sample-flex-tag';

@@ -179,7 +179,7 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
             await expect(previewFrame.locator('ons-button')).toHaveText(testButtonText);
 
             // リロード（beforeunloadイベントをトリガーして自動保存させる）
-            await editorPage.evaluate(() => window.location.reload());
+            await editorPage.reload();
         });
 
         await test.step('2. 起動時の復旧ダイアログで「復元する」を選択', async () => {
@@ -220,7 +220,7 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
         await test.step('1. スナップショットを作成', async () => {
             await editorHelper.addPage();
             // リロードして自動スナップショットを作成させる
-            await editorPage.evaluate(() => window.location.reload());
+            await editorPage.reload();
         });
 
         await test.step('2. 起動時の復旧ダイアログで「破棄」を選択', async () => {
