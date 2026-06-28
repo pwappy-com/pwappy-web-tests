@@ -51,6 +51,7 @@ const test = base.extend<StarterFixtures>({
 test.describe('スターターテンプレート（骨組み）機能の検証', () => {
 
     test('Navigator（基本の画面遷移）の骨組みを適用できる', async ({ editorPage, editorHelper }) => {
+        test.setTimeout(120000); // ロード・処理が重なるため十分な時間を設定します
         const modal = editorPage.locator('starter-template-modal');
         await expect(modal).toBeVisible();
 
@@ -63,7 +64,9 @@ test.describe('スターターテンプレート（骨組み）機能の検証',
             await expect(modal).toBeHidden();
         });
 
-        await test.step('2. 適用後のDOMツリーとテンプレートリストを検証', async () => {
+        let homePageUuid: string | null = null;
+
+        await test.step('2. 適用後のDOMツリーと2つの追加ページ（ホーム・詳細）を検証', async () => {
             await editorHelper.openMoveingHandle('left');
             const domTree = editorHelper.getDomTree();
 
@@ -71,8 +74,48 @@ test.describe('スターターテンプレート（骨組み）機能の検証',
             const navigatorNode = domTree.locator('.node[data-node-type="ons-navigator"]');
             await expect(navigatorNode).toBeVisible();
 
-            // テンプレートリストにホーム画面が存在するか確認
+            // テンプレートリストに「ホーム画面」と新仕様の「詳細画面」が存在するか確認
             await editorHelper.expectPageInTemplateList('ホーム画面');
+            await editorHelper.expectPageInTemplateList('詳細画面');
+
+            // 遷移元ボタンの紐付け状態を確認するため、ホーム画面のUUIDを取得
+            const topContainer = editorPage.locator('.top-container');
+            await topContainer.locator('.select').click();
+            const topTemplateListContainer = editorPage.locator('#top-template-list');
+            await expect(topTemplateListContainer).toBeVisible();
+
+            const homeItem = topTemplateListContainer.locator('div.top-template-item', { hasText: 'ホーム画面' });
+            homePageUuid = await homeItem.getAttribute('data-template-id');
+            if (!homePageUuid) throw new Error('home_page UUID not found');
+
+            await editorPage.keyboard.press('Escape');
+            await expect(topTemplateListContainer).toBeHidden();
+        });
+
+        await test.step('3. 自動生成されたスクリプトおよびボタンイベントのバインド検証', async () => {
+            // ホーム画面テンプレートに切り替え
+            if (homePageUuid) {
+                await editorHelper.switchTopLevelTemplate(homePageUuid);
+            }
+
+            // ホーム画面内の ons-button (push_button) を選択
+            const pushButtonNode = await editorHelper.selectNodeByAttribute('data-node-dom-id', 'push_button');
+            await expect(pushButtonNode).toBeVisible();
+
+            await editorHelper.openMoveingHandle('right');
+            const scriptContainer = editorPage.locator('script-container');
+
+            // スクリプト一覧タブ：pushDetail が登録されていること
+            await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
+            // strict mode violation (重複検知) を回避するため、検索範囲をスクリプト一覧コンテナ (#script-list-container) に限定します
+            const scriptListContainer = scriptContainer.locator('#script-list-container');
+            await expect(scriptListContainer.locator('.editor-row', { hasText: 'pushDetail' })).toBeVisible();
+
+            // イベントタブ：ons-button の click イベントに pushDetail が紐づいていること
+            await editorHelper.switchTabInContainer(scriptContainer, 'イベント');
+            const eventContainer = scriptContainer.locator('event-container');
+            const clickEventRow = eventContainer.locator('.editor-row', { hasText: 'click' });
+            await expect(clickEventRow.locator('.editor-row-right-item', { hasText: 'pushDetail' }).first()).toBeVisible({ timeout: 10000 });
         });
     });
 
