@@ -759,6 +759,54 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
+    test('属性(style-spacing)を編集・クリアできる', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ: ページとボタンを追加', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+        });
+
+        await test.step('検証: 余白(style-spacing)を設定しプレビューに反映されること', async () => {
+            const propertyContainer = editorHelper.getPropertyContainer();
+            const targetInputPanel = editorHelper.getPropertyInput('style-spacing');
+            await expect(targetInputPanel).toBeVisible();
+
+            // 直系子要素のみを指定して margin-top をピンポイントで取得
+            const marginTopInput = targetInputPanel.locator('.margin-box > .top');
+            await expect(marginTopInput).toBeVisible();
+            await expect(marginTopInput).toBeEditable();
+            await marginTopInput.fill('20px');
+            await marginTopInput.blur(); // フォーカスを外して変更を適用・確定
+
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'margin-top', value: '20px' });
+
+            // 直系子要素のみを指定して padding-left をピンポイントで取得
+            const paddingLeftInput = targetInputPanel.locator('.padding-box > .left');
+            await expect(paddingLeftInput).toBeVisible();
+            await expect(paddingLeftInput).toBeEditable();
+            await paddingLeftInput.fill('15px');
+            await paddingLeftInput.blur(); // フォーカスを外して変更を適用・確定
+
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding-left', value: '15px' });
+        });
+
+        await test.step('検証: 入力値を空にして余白設定がクリアされること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-spacing');
+            const marginTopInput = targetInputPanel.locator('.margin-box > .top');
+            const paddingLeftInput = targetInputPanel.locator('.padding-box > .left');
+
+            await marginTopInput.fill('');
+            await marginTopInput.blur();
+            await paddingLeftInput.fill('');
+            await paddingLeftInput.blur();
+
+            // すべての余白設定が解除され、style属性自体が完全に消去されていることを検証
+            await editorHelper.expectPreviewElementAttribute({ selector: previewSelector, attributeName: 'style', value: null });
+        });
+    });
+
     test('トップテンプレートリストをキーボード（上下キー）で移動すると即座にテンプレートが切り替わる', async ({ editorPage, editorHelper }) => {
         let page1Id: string;
         let page2Id: string;
