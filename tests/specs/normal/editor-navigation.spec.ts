@@ -807,6 +807,115 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
+    test('属性(style-spacing)の表示順序はデフォルトで一番下になり、ユーザーが並べ替えると位置が保持される', async ({ editorPage, editorHelper, isMobile }) => {
+        // ドラッグ＆ドロップによる並べ替え操作を含むため、安定したマウス操作が可能なデスクトップ環境でのみ実行
+        test.skip(isMobile, 'ドラッグ＆ドロップ操作が含まれるためデスクトップ環境で実行します。');
+
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        await test.step('検証: デフォルト状態でstyle-spacingが一番下にあること', async () => {
+            const propertyContainer = editorPage.locator('property-container');
+            
+            const attributeTypes = await propertyContainer.locator('[data-attribute-type]').evaluateAll(els => {
+                const types = els.map(el => el.getAttribute('data-attribute-type')).filter(t => t !== null);
+                // 重複を除去してDOM上の出現順に並べる
+                return Array.from(new Set(types));
+            });
+            
+            expect(attributeTypes).toContain('style-spacing');
+            expect(attributeTypes[attributeTypes.length - 1]).toBe('style-spacing');
+        });
+
+        await test.step('操作: 属性編集モーダルを開き、style-spacingをドラッグ＆ドロップで並び替える', async () => {
+            const propertyContainer = editorPage.locator('property-container');
+            
+            const editAttrButton = propertyContainer.getByTitle('属性を編集');
+            await expect(editAttrButton).toBeVisible();
+            await editAttrButton.click();
+
+            const attrList = editorPage.locator('#attributeList');
+            await expect(attrList).toBeVisible();
+
+            const spacingItem = attrList.locator('div.attribute-item', { hasText: 'style-spacing' }).first();
+            await expect(spacingItem).toBeVisible();
+
+            // 要素を一番下までスクロールして表示させる
+            await spacingItem.scrollIntoViewIfNeeded();
+            await editorPage.waitForTimeout(500);
+
+            // 画面外に出てしまう一番上ではなく、同じ画面内に収まっているすぐ上の要素(style-flex)を移動先に指定
+            const targetItem = attrList.locator('div.attribute-item', { hasText: 'style-flex' }).first();
+            await expect(targetItem).toBeVisible();
+
+            const dragSource = spacingItem.locator('.drag-handle').first();
+            const sourceBox = await dragSource.boundingBox();
+            const targetBox = await targetItem.boundingBox();
+
+            if (sourceBox && targetBox) {
+                const startX = sourceBox.x + sourceBox.width / 2;
+                const startY = sourceBox.y + sourceBox.height / 2;
+                const endX = targetBox.x + targetBox.width / 2;
+                const endY = targetBox.y + 5; 
+
+                // マウス制御でドラッグ
+                await editorPage.mouse.move(startX, startY);
+                await editorPage.mouse.down();
+                await editorPage.waitForTimeout(600); // ドラッグ開始の待機
+                
+                await editorPage.mouse.move(endX, endY, { steps: 20 });
+                await editorPage.waitForTimeout(200);
+                await editorPage.mouse.up();
+            }
+            
+            // ドラッグ終了後、安全な位置に戻してマウストラップを解除
+            await editorPage.mouse.move(0, 0);
+            await editorPage.mouse.up().catch(() => {});
+            await editorPage.keyboard.press('Escape'); // ドラッグ操作時の残存フォーカス/キー入力を完全解除
+            await editorPage.waitForTimeout(500); // 状態が落ち着くまで待機
+
+            // モーダルを閉じる：モーダル（#attributeList）の下端よりさらに下にある「コンテナ内空白領域」を動的に計算してクリックします。
+            const attrListBox = await attrList.boundingBox();
+            const propBox = await propertyContainer.boundingBox();
+            
+            if (attrListBox && propBox) {
+                const clickX = propBox.x + 30; // プロパティコンテナの左端から30px（コンテナ内部）
+                // モーダルの下端より50px下の位置。もしそれがコンテナ全体の高さを超える場合は、コンテナの下端から30px上の位置に調整
+                let clickY = attrListBox.y + attrListBox.height + 50;
+                if (clickY >= propBox.y + propBox.height) {
+                    clickY = propBox.y + propBox.height - 30;
+                }
+                await editorPage.mouse.click(clickX, clickY);
+            } else {
+                // 万が一計測に失敗した場合の安全なフォールバッククリック
+                await propertyContainer.click({ position: { x: 5, y: 400 }, force: true });
+            }
+            
+            await editorPage.waitForTimeout(500);
+            
+            await expect(attrList).toBeHidden({ timeout: 5000 });
+            await editorPage.waitForTimeout(300);
+        });
+
+        await test.step('検証: 並び替え後、style-spacingが一番下ではなく移動した位置に保持されていること', async () => {
+            const propertyContainer = editorPage.locator('property-container');
+            
+            const attributeTypes = await propertyContainer.locator('[data-attribute-type]').evaluateAll(els => {
+                const types = els.map(el => el.getAttribute('data-attribute-type')).filter(t => t !== null);
+                return Array.from(new Set(types));
+            });
+            
+            expect(attributeTypes).toContain('style-spacing');
+            // デフォルトの強制最下部が解除されていることを確認
+            expect(attributeTypes[attributeTypes.length - 1]).not.toBe('style-spacing');
+        });
+    });
+
     test('トップテンプレートリストをキーボード（上下キー）で移動すると即座にテンプレートが切り替わる', async ({ editorPage, editorHelper }) => {
         let page1Id: string;
         let page2Id: string;

@@ -42,12 +42,21 @@ export class EditorHelper {
                 const starterModal = this.page.locator('starter-template-modal');
                 // アプリが空でない場合は出現しないため、タイムアウトを短めに設定
                 if (await starterModal.isVisible({ timeout: 5000 }).catch(() => false)) {
-                    // 「閉じて一から自分で作る（スキップ）」ボタンをクリック
-                    const skipBtn = starterModal.locator('.btn-skip');
-                    await skipBtn.click({ force: true });
+                    // クラス名または表示テキストを持つスキップ用のボタンを特定
+                    const skipBtn = starterModal.locator('.btn-skip, button:has-text("閉じて一から自分で作る")').first();
+                    await expect(skipBtn).toBeVisible({ timeout: 3000 });
 
-                    // モーダルが非表示になるのを待つ
-                    await expect(starterModal).toBeHidden({ timeout: 5000 });
+                    // モバイル環境での遅延や誤タップを防ぐため、モーダルが完全に消えるまでリトライを行う
+                    await expect(async () => {
+                        await skipBtn.click({ force: true }).catch(() => { });
+                        if (await starterModal.isVisible()) {
+                            await skipBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
+                        }
+                        await expect(starterModal).toBeHidden({ timeout: 2000 });
+                    }).toPass({
+                        timeout: 10000,
+                        intervals: [1000]
+                    });
 
                     // 処理後の安定化待ち
                     await this.page.waitForTimeout(500);
