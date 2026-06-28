@@ -173,13 +173,34 @@ export class EditorHelper {
      */
     async addComponentAsHtmlTag(htmlTagName: string, targetSelector: string): Promise<Locator> {
         await this.openMoveingHandle('left');
-        this.page.once('dialog', async dialog => {
-            expect(dialog.message()).toBe('追加するタグ名を入れてください');
-            await dialog.accept(htmlTagName);
-        });
 
         const targetLocator = this.page.locator(targetSelector);
+
+        // 1. ドラッグ＆ドロップを実行してダイアログを起動
         await this.page.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
+
+        // 2. カスタムダイアログの表示を待機
+        const templateContainer = this.page.locator('template-container');
+        const dialog = templateContainer.locator('message-box#html-tag-select-dialog');
+        await expect(dialog).toBeVisible({ timeout: 5000 });
+
+        const presetTags = ['div', 'span', 'p', 'img', 'a', 'ul', 'li', 'br', 'h1', 'h2', 'h3', 'strong'];
+        const targetTagLower = htmlTagName.toLowerCase();
+
+        if (presetTags.includes(targetTagLower)) {
+            // プリセットに含まれる場合は、対応するボタンをクリックして自動決定
+            const presetBtn = dialog.locator('button.title-icon-bar-button').filter({ hasText: new RegExp(`^${targetTagLower}$`, 'i') }).first();
+            await presetBtn.click();
+        } else {
+            // プリセットに含まれない場合は、入力欄にテキストを入れてEnterキーで確定
+            const input = dialog.locator('input#custom-tag-input');
+            await expect(input).toBeEditable();
+            await input.fill(htmlTagName);
+            await input.press('Enter');
+        }
+
+        // 3. ダイアログが閉じるのを待機
+        await expect(dialog).toBeHidden();
 
         const newHtmlTagNode = targetLocator.locator(`> .node[data-node-type="${htmlTagName}"]`);
         await expect(newHtmlTagNode).toBeVisible({ timeout: 5000 });
