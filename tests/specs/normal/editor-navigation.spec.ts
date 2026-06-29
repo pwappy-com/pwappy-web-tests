@@ -1198,4 +1198,155 @@ test.describe('エディタ内機能のテスト', () => {
             await expect(radiusInput).toHaveValue('');
         });
     });
+
+    /**
+     * 【正常系テスト】
+     * 属性（style-sizing）「サイズ / 表示制御」の編集、プレビュー反映、および部分クリアが
+     * 正しく機能することを確認します。
+     */
+    test('属性(style-sizing)を編集・クリアできる', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        await test.step('検証: サイズ / 表示制御(style-sizing)を設定しプレビューに反映されること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
+            await expect(targetInputPanel).toBeVisible();
+
+            // 内部実装のID命名差異を避けるため、コンポーネント内のinput要素を順番（インデックス）で特定します。
+            // 1番目のinput: width, 2番目のinput: height
+            const widthInput = targetInputPanel.locator('input').nth(0);
+            const heightInput = targetInputPanel.locator('input').nth(1);
+
+            // LitElementのShadow DOM内部のレンダリング完了をポーリング待機します。
+            await expect(async () => {
+                await expect(widthInput).toBeVisible();
+                await expect(widthInput).toBeEditable();
+            }).toPass({ timeout: 10000, intervals: [500] });
+
+            // 1. 幅(width)の設定と反映検証
+            await widthInput.fill('200px');
+            await widthInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'width', value: '200px' });
+
+            // 2. 高さ(height)の設定と反映検証
+            await expect(heightInput).toBeVisible();
+            await heightInput.fill('100px');
+            await heightInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'height', value: '100px' });
+
+            // 3. 表示制御(overflow)の設定と反映検証
+            // セレクトボックスも同様に、コンポーネント内の最初のselect要素として特定します
+            const overflowSelect = targetInputPanel.locator('select').first();
+            await expect(overflowSelect).toBeVisible();
+            await overflowSelect.selectOption('scroll');
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'overflow', value: 'scroll' });
+        });
+
+        await test.step('検証: 入力値を空にしてサイズ設定が部分的にクリアされること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
+            const widthInput = targetInputPanel.locator('input').nth(0);
+
+            // widthの値を空にする
+            await widthInput.fill('');
+            await widthInput.blur();
+
+            const previewElement = editorHelper.getPreviewElement(previewSelector);
+            await editorPage.waitForTimeout(300);
+            const styleAttr = await previewElement.getAttribute('style') || '';
+
+            // widthプロパティのみがstyle属性から消去され、残りのheightとoverflowが維持されていることを検証
+            expect(styleAttr).not.toContain('width:');
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'height', value: '100px' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'overflow', value: 'scroll' });
+        });
+    });
+
+    /**
+     * 【異常系テスト】
+     * 1. 類似プロパティ名（width / max-width）の競合によるパース干渉が起きないこと
+     * 2. セミコロンがない手動CSS記述があってもシステムがクラッシュしないこと
+     * 3. 無効な文字列が入力されてもエディタが破損しないこと
+     * をそれぞれ検証します。
+     */
+    test('属性(style-sizing)における干渉防止と異常系の解析検証', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ: ページとボタンを追加する', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+        });
+
+        await test.step('異常系1: max-widthが記述されていてもwidthが引きずられないことの干渉検証', async () => {
+            // モバイル環境に備え、まず右側パネルを確実に展開します
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+
+            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+            await expect(styleEditor).toBeVisible();
+
+            // max-widthとmax-heightを設定し、通常のwidth/heightは未設定（空）にします
+            const targetStyle = 'element.style {\n    max-width: 500px;\n    max-height: 400px;\n}';
+            await editorHelper.setMonacoValue(styleEditor, targetStyle);
+
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'max-width', value: '500px' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'max-height', value: '400px' });
+
+            // 属性タブに切り替え、部分一致する通常のwidth/height入力欄に誤って値が解析・反映されていないか検証
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
+            await expect(targetInputPanel).toBeVisible();
+
+            // インデックス指定で各inputを補足します
+            const widthInput = targetInputPanel.locator('input').nth(0);
+            const heightInput = targetInputPanel.locator('input').nth(1);
+
+            // データの解析が落ち着くまで短い同期待機を挟みます
+            await editorPage.waitForTimeout(1000);
+
+            // ルックアハインドによる干渉防止が効き、通常のwidthとheightのフィールドは空（未指定）のままであるべき
+            await expect(widthInput).toHaveValue('');
+            await expect(heightInput).toHaveValue('');
+        });
+
+        await test.step('異常系2: セミコロンが欠落した手動CSSが存在してもシステムがクラッシュしないことの検証', async () => {
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+
+            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+            await expect(styleEditor).toBeVisible();
+
+            // 故意に末尾のセミコロンを省いた手動スタイルを設定
+            const brokenStyle = 'element.style {\n    width: 300px\n}';
+            await editorHelper.setMonacoValue(styleEditor, brokenStyle);
+
+            // 属性タブに切り替えた際、JSエラーで画面が崩壊せず、安全に入力パネルが表示されること
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
+            await expect(targetInputPanel).toBeVisible();
+
+            const widthInput = targetInputPanel.locator('input').nth(0);
+            await expect(widthInput).toBeVisible();
+        });
+
+        await test.step('異常系3: 無効なCSS値が入力されてもエディタが破損せずそのまま適用されることの検証', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
+            const widthInput = targetInputPanel.locator('input').nth(0);
+
+            // 無効な文字列を入力
+            await widthInput.fill('invalid_value_test');
+            await widthInput.blur();
+
+            // エディタ側で例外が発生せず、インラインスタイルにそのまま記述として反映されること
+            const previewElement = editorHelper.getPreviewElement(previewSelector);
+            await expect(previewElement).toHaveAttribute('style', /width:\s*invalid_value_test/);
+        });
+    });
 });
