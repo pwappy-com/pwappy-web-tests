@@ -1,7 +1,7 @@
-import { test as base, expect, Page, Locator, CDPSession } from '@playwright/test';
+import { test as base, expect, Page, Locator, CDPSession, Dialog } from '@playwright/test';
 import 'dotenv/config';
-import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
-import { EditorHelper } from '../../tools/editor-helpers';
+import { createApp, deleteApp, gotoDashboard, openEditor, addVersion } from '../../tools/dashboard-helpers';
+import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';
 import { STORAGE_STATE } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
@@ -9,9 +9,6 @@ const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 let appName: string;
 let appKey: string;
 
-/**
- * テストフィクスチャの設定
- */
 type EditorFixtures = {
     editorPage: Page;
     editorHelper: EditorHelper;
@@ -42,10 +39,9 @@ const test = base.extend<EditorFixtures>({
 test.beforeAll(async ({ browser }) => {
     const reversedTimestamp = Date.now().toString().split('').reverse().join('');
     const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
-    appName = `test-app-struct-${uniqueId}`.slice(0, 30);
-    appKey = `key-struct-${uniqueId}`.slice(0, 30);
+    appName = `ui-basic-${uniqueId}`.slice(0, 30);
+    appKey = `basic-key-${uniqueId}`.slice(0, 30);
 
-    // 認証済みの状態を引き継ぐためのコンテキストを作成（STORAGE_STATE定数を使用）
     const context = await browser.newContext({ storageState: STORAGE_STATE });
     const page = await context.newPage();
 
@@ -55,7 +51,7 @@ test.beforeAll(async ({ browser }) => {
     await context.close();
 });
 
-// すべてのテストが終了した後に、アプリを1回だけ削除する
+// すべてのテストが終了した後に、アプリを削除する
 test.afterAll(async ({ browser }) => {
     if (appKey) {
         const context = await browser.newContext({ storageState: STORAGE_STATE });
@@ -67,6 +63,140 @@ test.afterAll(async ({ browser }) => {
         await context.close();
     }
 });
+
+/**
+ * 共有ヘルパー関数: 指定した入力欄をマウスでドラッグする
+ */
+async function dragInput(editorPage: Page, inputLocator: Locator, deltaX: number, deltaY: number, shiftKey: boolean = false) {
+    const box = await inputLocator.boundingBox();
+    if (!box) throw new Error('Input bounding box not found');
+
+    const startX = box.x + box.width / 2;
+    const startY = box.y + box.height / 2;
+
+    await inputLocator.click();
+    await editorPage.waitForTimeout(100);
+
+    await editorPage.mouse.move(startX, startY);
+
+    if (shiftKey) await editorPage.keyboard.down('Shift');
+    await editorPage.mouse.down();
+
+    let finalDeltaX = deltaX;
+    let finalDeltaY = deltaY;
+    if (deltaX === 0 && deltaY !== 0) {
+        finalDeltaX = -deltaY;
+        finalDeltaY = 0;
+    }
+
+    await editorPage.mouse.move(startX + finalDeltaX, startY + finalDeltaY, { steps: 10 });
+    await editorPage.mouse.up();
+    if (shiftKey) await editorPage.keyboard.up('Shift');
+}
+
+const logTime = (msg: string) => {
+    const now = new Date();
+    console.log(`[TourTest:Time] ${now.toISOString()} - ${msg}`);
+};
+
+// =========================================================================
+// Merged from: tests/specs/normal/editor-events.spec.ts
+// =========================================================================
+
+test.describe('エディタ内イベント＆スクリプト機能のUIテスト（保存なし）', () => {
+
+    test('カスタムイベントを定義できる', async ({ editorPage, editorHelper }) => {
+        const listenerTarget = 'element';
+        const eventName = 'test-event';
+        const comment = 'テストコメント';
+
+        await test.step('1. 新しいイベント定義を追加する', async () => {
+            await editorHelper.addCustomEventDefinition({
+                listenerTarget,
+                eventName,
+                comment,
+            });
+        });
+    });
+
+    test('サービスワーカータブでカスタムイベントを定義できる', async ({ editorPage, editorHelper }) => {
+        const eventName = 'new-serviceworker-event';
+        const comment = '新しいサービスワーカーイベント';
+
+        await test.step('1. 新しいサービスワーカーイベント定義を追加する', async () => {
+            await editorHelper.addCustomServiceWorkerEventDefinition({
+                eventName,
+                comment,
+            });
+        });
+    });
+
+    test('スクリプトエラーがある場合、タブ移動と保存がブロックされる', async ({ editorPage, editorHelper }) => {
+        const scriptName = 'errorScript';
+        const invalidScript = 'const 0a = 1;'; // 不正な変数名
+        const expectedDialogMessage = 'スクリプトのエラーを修正してください';
+
+        await test.step('セットアップ: エラーのあるスクリプトを入力する', async () => {
+            await editorHelper.openMoveingHandle('right');
+            const scriptContainer = editorPage.locator('script-container');
+            await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
+            await editorHelper.addNewScript(scriptName, 'function');
+            // ヘルパーメソッドを使って、保存せずに不正なスクリプトを入力
+            await editorHelper.fillScriptContent(scriptName, invalidScript);
+        });
+
+        await test.step('検証: 他のタブに移動しようとするとダイアログが表示されブロックされる', async () => {
+            const scriptContainer = editorPage.locator('script-container');
+            const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
+            const alertDialog = editorPage.locator('alert-component');
+
+            // テスト対象のタブ（イベント、サービスワーカー）
+            const tabsToTest = ['イベント', 'サービスワーカー'];
+
+            for (const tabName of tabsToTest) {
+                // タブをクリック
+                await scriptContainer.locator('.tab', { hasText: tabName }).click();
+
+                // ダイアログを検証
+                await expect(alertDialog).toBeVisible();
+                await expect(alertDialog).toContainText(expectedDialogMessage);
+                await alertDialog.getByRole('button', { name: '閉じる' }).click();
+                await expect(alertDialog).toBeHidden();
+
+                // エディタ（Monaco）が表示されたままであることを確認
+                await expect(monacoEditor).toBeVisible();
+                // 対応するタブのコンテナが表示されていないことを確認
+                if (tabName === 'イベント') {
+                    await expect(scriptContainer.locator('event-container')).toBeHidden();
+                } else if (tabName === 'サービスワーカー') {
+                    await expect(scriptContainer.locator('service-worker-container')).toBeHidden();
+                }
+            }
+        });
+
+        await test.step('検証: 保存しようとするとダイアログが表示されブロックされる', async () => {
+            const scriptContainer = editorPage.locator('script-container');
+            const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
+            const saveButton = scriptContainer.locator('#fab-save');
+            const alertDialog = editorPage.locator('alert-component');
+
+            // 保存ボタンをクリック
+            await saveButton.click();
+
+            // ダイアログを検証
+            await expect(alertDialog).toBeVisible();
+            await expect(alertDialog).toContainText(expectedDialogMessage);
+            await alertDialog.getByRole('button', { name: '閉じる' }).click();
+            await expect(alertDialog).toBeHidden();
+
+            // エディタ（Monaco）が表示されたままであることを確認
+            await expect(monacoEditor).toBeVisible();
+        });
+    });
+});
+// =========================================================================
+// Merged from: tests/specs/normal/editor-structure.spec.ts
+// =========================================================================
 
 test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 
@@ -476,6 +606,240 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             const finalNodes = editorPage.locator('template-container .node[data-node-type="ons-button"]');
             await expect(finalNodes.nth(0)).toHaveAttribute('data-node-dom-id', 'ons-button1');
             await expect(finalNodes.nth(1)).toHaveAttribute('data-node-dom-id', 'ons-button2');
+        });
+    });
+});
+// =========================================================================
+// Merged from: tests/specs/normal/editor-html-tag-dialog.spec.ts
+// =========================================================================
+
+test.describe('HTMLタグ選択ダイアログ機能のテスト', () => {
+    test.beforeEach(async ({ page }) => {
+        await gotoDashboard(page);
+    });
+
+    test('プリセットボタンからHTMLタグを追加できること', async ({ editorPage, editorHelper }) => {
+        await editorHelper.addPage();
+        const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
+        const targetLocator = editorPage.locator(contentAreaSelector);
+
+        // 1. ドラッグ＆ドロップを実行してダイアログを表示
+        await editorHelper.openMoveingHandle('left');
+        await editorPage.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
+
+        const dialog = editorPage.locator('template-container message-box#html-tag-select-dialog');
+        await expect(dialog).toBeVisible({ timeout: 5000 });
+
+        // 2. プリセットから「span」を選択
+        const spanButton = dialog.locator('button.title-icon-bar-button', { hasText: /^span$/ });
+        await spanButton.click();
+
+        // 3. ダイアログが閉じて、エディタのツリー上に要素が追加されたことを確認
+        await expect(dialog).toBeHidden();
+        const newHtmlTagNode = targetLocator.locator('> .node[data-node-type="span"]');
+        await expect(newHtmlTagNode).toBeVisible();
+
+        // 中身が空のタグは幅や高さが0になり visibility 判定で落ちるため、Attached で検証
+        const previewElement = editorHelper.getPreviewElement('span');
+        await expect(previewElement).toBeAttached();
+    });
+
+    test('手入力欄からカスタムタグを入力して追加できること', async ({ editorPage, editorHelper }) => {
+        await editorHelper.addPage();
+        const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
+        const targetLocator = editorPage.locator(contentAreaSelector);
+
+        await editorHelper.openMoveingHandle('left');
+        await editorPage.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
+
+        const dialog = editorPage.locator('template-container message-box#html-tag-select-dialog');
+        await expect(dialog).toBeVisible();
+
+        // 1. 手入力欄にカスタムタグ「section」を入力してEnterで決定
+        const input = dialog.locator('input#custom-tag-input');
+        await expect(input).toBeEditable();
+        await input.fill('section');
+        await input.press('Enter');
+
+        // 2. ダイアログが閉じて、エディタのツリー上に要素が追加されたことを確認
+        await expect(dialog).toBeHidden();
+        const newHtmlTagNode = targetLocator.locator('> .node[data-node-type="section"]');
+        await expect(newHtmlTagNode).toBeVisible();
+
+        // 中身が空のタグは幅や高さが0になり visibility 判定で落ちるため、Attached で検証
+        const previewElement = editorHelper.getPreviewElement('section');
+        await expect(previewElement).toBeAttached();
+    });
+
+    test('ダイアログでキャンセルボタンを押したとき、タグが追加されないこと', async ({ editorPage, editorHelper }) => {
+        await editorHelper.addPage();
+        const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
+        const targetLocator = editorPage.locator(contentAreaSelector);
+
+        await editorHelper.openMoveingHandle('left');
+        await editorPage.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
+
+        const dialog = editorPage.locator('template-container message-box#html-tag-select-dialog');
+        await expect(dialog).toBeVisible();
+
+        // 1. キャンセルボタンをクリック
+        const cancelBtn = dialog.locator('[slot="cancel-slot"]');
+        await cancelBtn.click();
+
+        // 2. ダイアログが閉じる
+        await expect(dialog).toBeHidden();
+
+        // 3. 要素が追加されていないことを検証
+        const childNodes = targetLocator.locator('> .node');
+        await expect(childNodes).toHaveCount(0);
+    });
+
+    test('不適切なタグ名を入力した際、エラーアラートが表示され追加がブロックされること', async ({ editorPage, editorHelper }) => {
+        await editorHelper.addPage();
+        const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
+        const targetLocator = editorPage.locator(contentAreaSelector);
+
+        await editorHelper.openMoveingHandle('left');
+        await editorPage.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
+
+        const dialog = editorPage.locator('template-container message-box#html-tag-select-dialog');
+        await expect(dialog).toBeVisible();
+
+        // 1. 不適切な文字列（タグ名に使えない記号など）を入力して追加
+        const input = dialog.locator('input#custom-tag-input');
+        await expect(input).toBeEditable();
+        await input.fill('invalid<tag>');
+
+        const okBtn = dialog.locator('[slot="ok-slot"]');
+        await okBtn.click();
+
+        // 2. ダイアログは一旦閉じる
+        await expect(dialog).toBeHidden();
+
+        // 3. バリデーションアラート（alert-component）が立ち上がることを検証
+        const alert = editorPage.locator('alert-component');
+        await expect(alert).toBeVisible();
+        await expect(alert).toContainText('タグとして不適切な文字列です');
+
+        // 4. アラートを閉じる
+        await alert.getByRole('button', { name: '閉じる' }).click();
+        await expect(alert).toBeHidden();
+
+        // 5. タグが追加されていないことを検証
+        const childNodes = targetLocator.locator('> .node');
+        await expect(childNodes).toHaveCount(0);
+    });
+});
+// =========================================================================
+// Merged from: tests/specs/normal/editor-edge-hover.spec.ts
+// =========================================================================
+
+test.describe('画面エッジホバーによるパネル自動開閉テスト（モバイル）', () => {
+
+    test.beforeEach(async ({ isMobile, editorHelper, editorPage }) => {
+        // モバイルのテスト時（isMobile フィクスチャが真）のみ活性化し、PCテスト時は安全にスキップ
+        test.skip(!isMobile, 'This test is exclusive to mobile viewports with side panels.');
+
+        // スタート時点では両方のパネルが閉じている状態にする
+        await editorHelper.closeMoveingHandle();
+
+        // 完全に閉じるまで少し待機
+        await editorPage.waitForTimeout(500);
+    });
+
+    test('要素のドラッグ中に右端にホバーすると右パネルが自動展開される', async ({ editorPage }) => {
+        const appContainer = editorPage.locator('app-container');
+        const rightEdgeTrigger = appContainer.locator('.edge-trigger.right');
+        const scriptContainer = editorPage.locator('script-container');
+
+        await test.step('1. ドラッグの開始状態をシミュレートする', async () => {
+            // AppContainer にドラッグ開始を認識させるため、グローバル変数とイベントを発行
+            await editorPage.evaluate(() => {
+                (window as any).dragItemType = 'node-id';
+                window.dispatchEvent(new CustomEvent('app-drag-start'));
+            });
+
+            // ドラッグ中フラグが立ち、エッジトリガーが active になっているか検証
+            await expect(rightEdgeTrigger).toHaveClass(/active/);
+        });
+
+        await test.step('2. 画面の右端にマウスポインター（タッチ）を移動してホバーする', async () => {
+            const viewport = editorPage.viewportSize();
+            if (!viewport) throw new Error('Viewport size not set');
+
+            // 画面の右端（幅の10px手前）、高さの中央にポインターを移動
+            const targetX = viewport.width - 10;
+            const targetY = viewport.height / 2;
+
+            // マウス移動により handleGlobalDragMove をトリガー
+            await editorPage.mouse.move(targetX, targetY);
+
+            // 右のトリガーが hover 状態になるか検証
+            await expect(rightEdgeTrigger).toHaveClass(/hover/);
+        });
+
+        await test.step('3. ホバーを維持すると右パネル（サブウィンドウ）が展開される', async () => {
+            // AppContainer側のタイマー設定（800ms）を確実に経過させるため1.5秒待機
+            await editorPage.waitForTimeout(1500);
+
+            // 右パネル（script-containerなど）が表示状態になっていることを検証
+            await expect(scriptContainer).toBeVisible();
+        });
+
+        await test.step('4. ドラッグの終了状態をシミュレートする', async () => {
+            await editorPage.evaluate(() => {
+                window.dispatchEvent(new CustomEvent('app-drag-end'));
+                (window as any).dragItemType = '';
+            });
+
+            // エッジトリガーの active 状態が解除されることを検証
+            await expect(rightEdgeTrigger).not.toHaveClass(/active/);
+        });
+    });
+
+    test('要素のドラッグ中に左端にホバーすると左パネルが自動展開される', async ({ editorPage }) => {
+        const appContainer = editorPage.locator('app-container');
+        const leftEdgeTrigger = appContainer.locator('.edge-trigger.left');
+        const templateContainer = editorPage.locator('template-container');
+
+        await test.step('1. ドラッグの開始状態をシミュレートする', async () => {
+            await editorPage.evaluate(() => {
+                (window as any).dragItemType = 'node-id';
+                window.dispatchEvent(new CustomEvent('app-drag-start'));
+            });
+
+            await expect(leftEdgeTrigger).toHaveClass(/active/);
+        });
+
+        await test.step('2. 画面の左端にマウスポインター（タッチ）を移動してホバーする', async () => {
+            const viewport = editorPage.viewportSize();
+            if (!viewport) throw new Error('Viewport size not set');
+
+            // 画面の左端（10px）、高さの中央にポインターを移動
+            const targetX = 10;
+            const targetY = viewport.height / 2;
+
+            await editorPage.mouse.move(targetX, targetY);
+
+            // 左のトリガーが hover 状態になるか検証
+            await expect(leftEdgeTrigger).toHaveClass(/hover/);
+        });
+
+        await test.step('3. ホバーを維持すると左パネル（レイアウトウィンドウ）が展開される', async () => {
+            // タイマー（800ms）を待機
+            await editorPage.waitForTimeout(1500);
+
+            // 左パネルが表示状態になっていることを検証
+            await expect(templateContainer).toBeVisible();
+        });
+
+        await test.step('4. ドラッグの終了状態をシミュレートする', async () => {
+            await editorPage.evaluate(() => {
+                window.dispatchEvent(new CustomEvent('app-drag-end'));
+                (window as any).dragItemType = '';
+            });
+
+            await expect(leftEdgeTrigger).not.toHaveClass(/active/);
         });
     });
 });

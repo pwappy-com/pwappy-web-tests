@@ -1,8 +1,7 @@
-import { test as base, expect, Page, Locator } from '@playwright/test';
+import { test as base, expect, Page, Locator, CDPSession, Dialog } from '@playwright/test';
 import 'dotenv/config';
-
-import { gotoDashboard, openEditor, createApp, deleteApp } from '../../tools/dashboard-helpers';
-import { EditorHelper } from '../../tools/editor-helpers';
+import { createApp, deleteApp, gotoDashboard, openEditor, addVersion } from '../../tools/dashboard-helpers';
+import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';
 import { STORAGE_STATE } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
@@ -18,14 +17,14 @@ type EditorFixtures = {
 const test = base.extend<EditorFixtures>({
     editorPage: async ({ page, context }, use) => {
         await gotoDashboard(page);
+        await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
-        // 作成した共有アプリ詳細画面へ移動
+        // 作成済みの共有アプリ詳細画面へ移動
         const appRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) }).first();
         await expect(appRow).toBeVisible({ timeout: 15000 });
         await appRow.click({ force: true });
         await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
 
-        // エディタを起動
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
         await editorPage.close();
@@ -40,10 +39,9 @@ const test = base.extend<EditorFixtures>({
 test.beforeAll(async ({ browser }) => {
     const reversedTimestamp = Date.now().toString().split('').reverse().join('');
     const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
-    appName = `test-app-${uniqueId}`.slice(0, 30);
-    appKey = `test-key-${uniqueId}`.slice(0, 30);
+    appName = `ui-prop-${uniqueId}`.slice(0, 30);
+    appKey = `prop-key-${uniqueId}`.slice(0, 30);
 
-    // 認証済みの状態を引き継ぐためのコンテキストを作成（STORAGE_STATE定数を使用）
     const context = await browser.newContext({ storageState: STORAGE_STATE });
     const page = await context.newPage();
 
@@ -53,7 +51,7 @@ test.beforeAll(async ({ browser }) => {
     await context.close();
 });
 
-// すべてのテストが終了した後に、アプリを1回だけ削除する
+// すべてのテストが終了した後に、アプリを削除する
 test.afterAll(async ({ browser }) => {
     if (appKey) {
         const context = await browser.newContext({ storageState: STORAGE_STATE });
@@ -67,7 +65,7 @@ test.afterAll(async ({ browser }) => {
 });
 
 /**
- * 指定した入力欄をマウスでドラッグするヘルパー関数
+ * 共有ヘルパー関数: 指定した入力欄をマウスでドラッグする
  */
 async function dragInput(editorPage: Page, inputLocator: Locator, deltaX: number, deltaY: number, shiftKey: boolean = false) {
     const box = await inputLocator.boundingBox();
@@ -96,7 +94,15 @@ async function dragInput(editorPage: Page, inputLocator: Locator, deltaX: number
     if (shiftKey) await editorPage.keyboard.up('Shift');
 }
 
-// --- テストスイート ---
+const logTime = (msg: string) => {
+    const now = new Date();
+    console.log(`[TourTest:Time] ${now.toISOString()} - ${msg}`);
+};
+
+// =========================================================================
+// Merged from: tests/specs/normal/editor-navigation.spec.ts
+// =========================================================================
+
 test.describe('エディタ内機能のテスト', () => {
 
     test('コンポーネントのプロパティを編集できる', async ({ editorPage, editorHelper }) => {
@@ -2082,6 +2088,293 @@ test.describe('エディタ内機能のテスト', () => {
             const previewFrame = editorHelper.getPreviewFrame();
             const selectedBorder = previewFrame.locator('.layout-selected');
             await expect(selectedBorder).toBeVisible({ timeout: 5000 });
+        });
+    });
+});
+
+// =========================================================================
+// Merged from: tests/specs/normal/editor-style-increment.spec.ts
+// =========================================================================
+
+test.describe('CSSエディタ：数値のインテリジェント増減機能のテスト', () => {
+
+    test.beforeEach(async ({ editorPage, editorHelper }) => {
+        // 右ハンドルを展開し、プロパティパネルの「スタイル」タブに切り替え
+        await editorHelper.openMoveingHandle('right');
+        const propertyContainer = editorPage.locator('property-container');
+        await propertyContainer.locator('#tab-style').click();
+        await expect(propertyContainer.locator('#style-container')).toBeVisible();
+    });
+
+    /**
+     * Monaco Editor内での増減操作をシミュレートするヘルパー関数
+     * @param editorPage 
+     * @param css 初期状態のCSS文字列
+     * @param line 操作対象の行番号
+     * @param column 操作対象の列番号（カーソル位置）
+     * @param key 使用するキー ('ArrowUp' | 'ArrowDown')
+     * @param shift Shiftキーを同時押しするか
+     * @returns 操作後のエディタの内容
+     */
+    async function testIncrement(
+        editorPage: Page,
+        initialCSS: string,
+        line: number,
+        column: number,
+        key: 'ArrowUp' | 'ArrowDown',
+        shift: boolean = false
+    ) {
+        console.log(`[StyleInc:DEBUG] styleEditor の初期化完了を計測開始します...`);
+        const startTime = Date.now();
+        let isReady = false;
+
+        // 最大10秒（100ms * 100回）状態を監視
+        for (let i = 0; i < 100; i++) {
+            const check = await editorPage.evaluate(() => {
+                const container = document.querySelector('app-container');
+                const host = container?.shadowRoot?.querySelector('property-container') as any;
+                return !!(host && host.styleEditor);
+            });
+            if (check) {
+                isReady = true;
+                console.log(`[StyleInc:DEBUG] styleEditor の初期化を確認。所要時間: ${Date.now() - startTime}ms`);
+                break;
+            }
+            await editorPage.waitForTimeout(100);
+        }
+
+        if (!isReady) {
+            console.log(`[StyleInc:DEBUG] 10秒待機しても styleEditor は初期化されませんでした。`);
+        }
+
+        // Shadow DOM経由でMonaco Editorのインスタンスに直接アクセスして状態を設定
+        await editorPage.evaluate(({ css }) => {
+            const container = document.querySelector('app-container');
+            const host = container?.shadowRoot?.querySelector('property-container') as any;
+            if (host && host.styleEditor) {
+                host.styleEditor.setValue(css);
+            }
+        }, { css: initialCSS });
+
+        // カーソル位置の設定とエディタへのフォーカス
+        await editorPage.evaluate(({ l, c }) => {
+            const container = document.querySelector('app-container');
+            const host = container?.shadowRoot?.querySelector('property-container') as any;
+            if (host && host.styleEditor) {
+                host.styleEditor.setPosition({ lineNumber: l, column: c });
+                host.styleEditor.focus();
+            }
+        }, { l: line, c: column });
+
+        // キーボード操作のシミュレーション
+        if (shift) await editorPage.keyboard.down('Shift');
+        await editorPage.keyboard.press(key);
+        if (shift) await editorPage.keyboard.up('Shift');
+
+        // エラーを投げる可能性のある箇所
+        return await editorPage.evaluate(() => {
+            const container = document.querySelector('app-container');
+            const host = container?.shadowRoot?.querySelector('property-container') as any;
+            return host ? host.styleEditor.getValue() : '';
+        });
+    }
+
+    test('基本：1px単位の増減 (font-size)', async ({ editorPage }) => {
+        const css = 'element.style {\n    font-size: 16px;\n}';
+        const result = await testIncrement(editorPage, css, 2, 17, 'ArrowUp');
+        expect(result).toContain('font-size: 17px;');
+    });
+
+    test('インテリジェントステップ：0.1単位 (opacity)', async ({ editorPage }) => {
+        const css = 'element.style {\n    opacity: 0.5;\n}';
+        const result = await testIncrement(editorPage, css, 2, 15, 'ArrowUp');
+        expect(result).toContain('opacity: 0.6;');
+    });
+
+    test('インテリジェントステップ：100単位 (font-weight)', async ({ editorPage }) => {
+        const css = 'element.style {\n    font-weight: 400;\n}';
+        const result = await testIncrement(editorPage, css, 2, 18, 'ArrowDown');
+        expect(result).toContain('font-weight: 300;');
+    });
+
+    test('Shiftキーによる加速：1px -> 10px (width)', async ({ editorPage }) => {
+        const css = 'element.style {\n    width: 100px;\n}';
+        const result = await testIncrement(editorPage, css, 2, 13, 'ArrowUp', true);
+        expect(result).toContain('width: 110px;');
+    });
+
+    /**
+     * line-height等の小数を許容するプロパティにおいて、
+     * Shift加速(ステップ1.0)適用時にMath.roundによる整数化が行われる現行仕様の検証。
+     */
+    test('Shiftキーによる加速（小数プロパティ）：0.1 -> 1.0 (line-height)', async ({ editorPage }) => {
+        const css = 'element.style {\n    line-height: 1.2;\n}';
+        const result = await testIncrement(editorPage, css, 2, 18, 'ArrowUp', true);
+        // 現在の実装仕様: 1.2 + 1.0 = 2.2 -> Math.round(2.2) = 2 となる挙動を確認
+        expect(result).toContain('line-height: 2;');
+    });
+
+    test('負の値と単位の維持 (margin-top)', async ({ editorPage }) => {
+        const css = 'element.style {\n    margin-top: -10px;\n}';
+        const result = await testIncrement(editorPage, css, 2, 17, 'ArrowUp');
+        expect(result).toContain('margin-top: -9px;');
+    });
+
+    /**
+     * カーソルが数値上にない場合、カスタムロジックが介入せず
+     * エディタ標準の挙動（この場合は行移動）が維持されることを確認。
+     */
+    test('数値以外の場所では標準の行移動が行われること', async ({ editorPage }) => {
+        console.log(`[StyleInc:DEBUG] 数値以外テスト: styleEditor の初期化完了を計測開始します...`);
+        const startTime = Date.now();
+        let isReady = false;
+
+        for (let i = 0; i < 100; i++) {
+            const check = await editorPage.evaluate(() => {
+                const container = document.querySelector('app-container');
+                const host = container?.shadowRoot?.querySelector('property-container') as any;
+                return !!(host && host.styleEditor);
+            });
+            if (check) {
+                isReady = true;
+                console.log(`[StyleInc:DEBUG] 数値以外テスト: styleEditor の初期化を確認。所要時間: ${Date.now() - startTime}ms`);
+                break;
+            }
+            await editorPage.waitForTimeout(100);
+        }
+
+        await editorPage.evaluate(() => {
+            const container = document.querySelector('app-container');
+            const host = container?.shadowRoot?.querySelector('property-container') as any;
+            if (host && host.styleEditor) {
+                host.styleEditor.setValue('element.style {\n    color: red;\n    display: block;\n}');
+                host.styleEditor.setPosition({ lineNumber: 2, column: 14 }); // 'red'の末尾
+                host.styleEditor.focus();
+            }
+        });
+
+        await editorPage.keyboard.press('ArrowDown');
+
+        const finalPos = await editorPage.evaluate(() => {
+            const container = document.querySelector('app-container');
+            const host = container?.shadowRoot?.querySelector('property-container') as any;
+            return host ? host.styleEditor.getPosition() : { lineNumber: 0 };
+        });
+
+        // 独自の増減処理が走らず、標準の「下の行への移動」が行われたことを検証
+        expect(finalPos.lineNumber).toBe(3);
+    });
+});
+// =========================================================================
+// Merged from: tests/specs/normal/editor-property-parsing.spec.ts
+// =========================================================================
+
+test.describe('JSDocからのプロパティ解析機能のテスト（保存なし）', () => {
+    /**
+     * 各テストの実行前に、認証とダッシュボードへのアクセスを行います。
+     */
+    test.beforeEach(async ({ page, context, isMobile }) => {
+        await gotoDashboard(page);
+    });
+
+    /**
+     * Web ComponentのJSDocに定義された@propertyが、
+     * プロパティパネルで正しいUIとしてレンダリングされるかを検証します。
+     */
+    test('JSDocの@propertyがプロパティパネルに正しく反映される', async ({ editorPage, editorHelper }) => {
+
+        test.setTimeout(120000);
+
+        const scriptName = 'MyTestComponent';
+        const tagName = 'my-test-component';
+
+        // Web Component of JSDoc properties defined
+        const componentScript = `
+/**
+ * @customElement ${tagName}
+ * @property {string} str-prop - 文字列プロパティ
+ * @property {number} num-prop - 数値プロパティ
+ * @property {boolean} bool-prop - ブールプロパティ
+ * @property {("A" | "B" | "C")} select-prop - 選択プロパティ
+ * @property {("A" | "B" | "C")[]} mulselect-prop - 複数選択プロパティ
+ */
+class ${scriptName} extends HTMLElement {
+    constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+        
+        // JSDocのプロパティに対応するデフォルト値を設定
+        this['str-prop'] = 'default string';
+        this['num-prop'] = 123;
+        this['bool-prop'] = false;
+        this['select-prop'] = 'A';
+        this['mulselect-prop'] = [];
+    }
+
+    connectedCallback() {
+        this.render();
+    }
+
+    // observedAttributesとattributeChangedCallbackを定義して属性の変更を監視
+    static get observedAttributes() {
+        return ['str-prop', 'num-prop', 'bool-prop', 'select-prop', 'mulselect-prop'];
+    }
+
+    attributeChangedCallback(name, oldValue, newValue) {
+        // 必要に応じてプロパティを更新するロジックを追加
+    }
+
+    render() {
+        if (this.shadowRoot) {
+            this.shadowRoot.innerHTML = \`<div>Test Component Content</div>\`;
+        }
+    }
+}
+customElements.define('${tagName}', ${scriptName});
+        `;
+
+        await test.step('1. Web Componentのスクリプトを作成・編集する', async () => {
+            // スクリプトタブに切り替える
+            await editorHelper.openMoveingHandle('right');
+            const scriptContainer = editorPage.locator('script-container');
+            await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
+
+            // 新しいクラスタイプのスクリプトを追加
+            await editorHelper.addNewScript(scriptName, 'class');
+
+            // 作成したスクリプトをWeb Componentのコードに書き換える
+            await editorHelper.editScriptContent(scriptName, componentScript);
+        });
+
+        await test.step('2. 作成したコンポーネントを配置し、プロパティパネルを検証する', async () => {
+            // appノードを取得
+            const appNode = editorPage.locator('#dom-tree > div[data-node-type="app"]');
+
+            // ツールボックスから作成したコンポーネントをappノードに追加
+            const componentNode = await editorHelper.addComponent(tagName, appNode);
+
+            // 追加したコンポーネントを選択
+            await editorHelper.selectNodeInDomTree(componentNode);
+
+            // プロパティコンテナを取得
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorHelper.getPropertyContainer();
+            await expect(propertyContainer).toBeVisible();
+
+            // 各プロパティに対応する入力UIが存在し、正しいタイプであることを検証
+            await expect(propertyContainer.locator('attribute-input[data-attribute-type="str-prop"]')).toBeVisible();
+            await expect(propertyContainer.locator('attribute-input[data-attribute-type="num-prop"]')).toBeVisible();
+            await expect(propertyContainer.locator('input[type="checkbox"][data-attribute-type="bool-prop"]')).toBeVisible();
+
+            // selectプロパティの検証
+            const selectProp = propertyContainer.locator('attribute-select[data-attribute-type="select-prop"]');
+            await expect(selectProp).toBeVisible();
+            await expect(selectProp).not.toHaveAttribute('multiple'); // multiple属性がないことを確認
+
+            // multiselectプロパティの検証
+            const multiSelectProp = propertyContainer.locator('attribute-select[data-attribute-type="mulselect-prop"]');
+            await expect(multiSelectProp).toBeVisible();
+            await expect(multiSelectProp).toHaveAttribute('multiple'); // multiple属性があることを確認
         });
     });
 });
