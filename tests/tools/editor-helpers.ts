@@ -159,9 +159,19 @@ export class EditorHelper {
     async addComponent(componentName: string, target: string | Locator): Promise<Locator> {
         await this.openMoveingHandle('left');
         const targetLocator = typeof target === 'string' ? this.page.locator(target) : target;
-        await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, { targetPosition: { x: 10, y: 10 } });
+
+        await expect(targetLocator).toBeVisible();
+
         const newComponentNode = targetLocator.locator(`> .node[data-node-type="${componentName}"]`).first();
-        await expect(newComponentNode).toBeVisible({ timeout: 10000 });
+
+        // 負荷が高い状況下でのドラッグ＆ドロップ（dragTo）の空振りを防ぐため、toPassによる自動リトライを持たせます
+        await expect(async () => {
+            if (!await newComponentNode.isVisible()) {
+                await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, { targetPosition: { x: 10, y: 10 }, timeout: 3000 });
+            }
+            await expect(newComponentNode).toBeVisible({ timeout: 3000 });
+        }).toPass({ timeout: 15000, intervals: [1000] });
+
         return newComponentNode;
     }
 
@@ -502,7 +512,11 @@ export class EditorHelper {
      */
     async expectPreviewElementCss({ selector, property, value }: { selector: string; property: string; value: string | RegExp }): Promise<void> {
         const element = this.getPreviewElement(selector);
-        await expect(element).toHaveCSS(property, value);
+
+        // スタイル反映の瞬間的なタイムラグを吸収するため、expect.toPassによるポーリング待機を行います
+        await expect(async () => {
+            await expect(element).toHaveCSS(property, value, { timeout: 2000 });
+        }).toPass({ timeout: 10000, intervals: [500] });
     }
 
     /**

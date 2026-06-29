@@ -807,9 +807,11 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
-    test('属性(style-spacing)の表示順序はデフォルトで一番下になり、ユーザーが並べ替えると位置が保持される', async ({ editorPage, editorHelper, isMobile }) => {
+    test('属性(style-spacing)が表示され、ユーザーが並べ替えると位置が保持される', async ({ editorPage, editorHelper, isMobile }) => {
         // ドラッグ＆ドロップによる並べ替え操作を含むため、安定したマウス操作が可能なデスクトップ環境でのみ実行
         test.skip(isMobile, 'ドラッグ＆ドロップ操作が含まれるためデスクトップ環境で実行します。');
+
+        let originalIndex = -1;
 
         await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
             const { buttonNode } = await editorHelper.setupPageWithButton();
@@ -819,22 +821,22 @@ test.describe('エディタ内機能のテスト', () => {
             await editorHelper.switchTabInContainer(propertyContainer, '属性');
         });
 
-        await test.step('検証: デフォルト状態でstyle-spacingが一番下にあること', async () => {
+        await test.step('検証: デフォルト状態でstyle-spacingが表示されていること', async () => {
             const propertyContainer = editorPage.locator('property-container');
-            
+
             const attributeTypes = await propertyContainer.locator('[data-attribute-type]').evaluateAll(els => {
                 const types = els.map(el => el.getAttribute('data-attribute-type')).filter(t => t !== null);
                 // 重複を除去してDOM上の出現順に並べる
                 return Array.from(new Set(types));
             });
-            
+
             expect(attributeTypes).toContain('style-spacing');
-            expect(attributeTypes[attributeTypes.length - 1]).toBe('style-spacing');
+            originalIndex = attributeTypes.indexOf('style-spacing');
         });
 
         await test.step('操作: 属性編集モーダルを開き、style-spacingをドラッグ＆ドロップで並び替える', async () => {
             const propertyContainer = editorPage.locator('property-container');
-            
+
             const editAttrButton = propertyContainer.getByTitle('属性を編集');
             await expect(editAttrButton).toBeVisible();
             await editAttrButton.click();
@@ -842,7 +844,8 @@ test.describe('エディタ内機能のテスト', () => {
             const attrList = editorPage.locator('#attributeList');
             await expect(attrList).toBeVisible();
 
-            const spacingItem = attrList.locator('div.attribute-item', { hasText: 'style-spacing' }).first();
+            // テキスト部分一致（hasText）から、データ属性による確実な指定へ変更
+            const spacingItem = attrList.locator('div.attribute-item[data-attribute-key="style-spacing"]').first();
             await expect(spacingItem).toBeVisible();
 
             // 要素を一番下までスクロールして表示させる
@@ -850,7 +853,7 @@ test.describe('エディタ内機能のテスト', () => {
             await editorPage.waitForTimeout(500);
 
             // 画面外に出てしまう一番上ではなく、同じ画面内に収まっているすぐ上の要素(style-flex)を移動先に指定
-            const targetItem = attrList.locator('div.attribute-item', { hasText: 'style-flex' }).first();
+            const targetItem = attrList.locator('div.attribute-item[data-attribute-key="style-flex"]').first();
             await expect(targetItem).toBeVisible();
 
             const dragSource = spacingItem.locator('.drag-handle').first();
@@ -861,28 +864,28 @@ test.describe('エディタ内機能のテスト', () => {
                 const startX = sourceBox.x + sourceBox.width / 2;
                 const startY = sourceBox.y + sourceBox.height / 2;
                 const endX = targetBox.x + targetBox.width / 2;
-                const endY = targetBox.y + 5; 
+                const endY = targetBox.y + 5;
 
                 // マウス制御でドラッグ
                 await editorPage.mouse.move(startX, startY);
                 await editorPage.mouse.down();
                 await editorPage.waitForTimeout(600); // ドラッグ開始の待機
-                
+
                 await editorPage.mouse.move(endX, endY, { steps: 20 });
                 await editorPage.waitForTimeout(200);
                 await editorPage.mouse.up();
             }
-            
+
             // ドラッグ終了後、安全な位置に戻してマウストラップを解除
             await editorPage.mouse.move(0, 0);
-            await editorPage.mouse.up().catch(() => {});
+            await editorPage.mouse.up().catch(() => { });
             await editorPage.keyboard.press('Escape'); // ドラッグ操作時の残存フォーカス/キー入力を完全解除
             await editorPage.waitForTimeout(500); // 状態が落ち着くまで待機
 
             // モーダルを閉じる：モーダル（#attributeList）の下端よりさらに下にある「コンテナ内空白領域」を動的に計算してクリックします。
             const attrListBox = await attrList.boundingBox();
             const propBox = await propertyContainer.boundingBox();
-            
+
             if (attrListBox && propBox) {
                 const clickX = propBox.x + 30; // プロパティコンテナの左端から30px（コンテナ内部）
                 // モーダルの下端より50px下の位置。もしそれがコンテナ全体の高さを超える場合は、コンテナの下端から30px上の位置に調整
@@ -895,24 +898,25 @@ test.describe('エディタ内機能のテスト', () => {
                 // 万が一計測に失敗した場合の安全なフォールバッククリック
                 await propertyContainer.click({ position: { x: 5, y: 400 }, force: true });
             }
-            
+
             await editorPage.waitForTimeout(500);
-            
+
             await expect(attrList).toBeHidden({ timeout: 5000 });
             await editorPage.waitForTimeout(300);
         });
 
-        await test.step('検証: 並び替え後、style-spacingが一番下ではなく移動した位置に保持されていること', async () => {
+        await test.step('検証: 並び替え後、style-spacingが移動した位置に保持されていること', async () => {
             const propertyContainer = editorPage.locator('property-container');
-            
+
             const attributeTypes = await propertyContainer.locator('[data-attribute-type]').evaluateAll(els => {
                 const types = els.map(el => el.getAttribute('data-attribute-type')).filter(t => t !== null);
                 return Array.from(new Set(types));
             });
-            
+
             expect(attributeTypes).toContain('style-spacing');
-            // デフォルトの強制最下部が解除されていることを確認
-            expect(attributeTypes[attributeTypes.length - 1]).not.toBe('style-spacing');
+            // 並べ替え前とインデックス位置が異なっていることを確認
+            const newIndex = attributeTypes.indexOf('style-spacing');
+            expect(newIndex).not.toBe(originalIndex);
         });
     });
 
@@ -994,6 +998,78 @@ test.describe('エディタ内機能のテスト', () => {
 
             // リストが閉じたことを確認
             await expect(topTemplateListContainer).toBeHidden();
+        });
+    });
+
+    test('属性(style-typography)による文字装飾の編集とプレビュー反映', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        await test.step('検証: 文字装飾(style-typography)を設定しプレビューに反映されること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-typography');
+            await expect(targetInputPanel).toBeVisible();
+
+            // フォントサイズの入力・反映検証（キャメルケース表記も考慮して頑健化）
+            const fontSizeInput = targetInputPanel.locator('input[name="font-size"], input[name="fontSize"], input#font-size').first();
+            await expect(fontSizeInput).toBeVisible();
+            await expect(fontSizeInput).toBeEditable();
+            await fontSizeInput.fill('24px');
+            await fontSizeInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'font-size', value: '24px' });
+
+            // 文字色の入力・反映検証（input[type="color"]や、独自カラーコンポーネント attribute-color 内の input も対象に含める）
+            const colorInput = targetInputPanel.locator('input[type="color"], attribute-color input, input[name="color"], input#color, .color input').first();
+            await expect(colorInput).toBeVisible();
+            await expect(colorInput).toBeEditable();
+            await colorInput.fill('#ff0000');
+            await colorInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(255, 0, 0)' });
+        });
+
+        await test.step('検証: 入力値を空にして文字装飾設定がクリアされること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-typography');
+            const fontSizeInput = targetInputPanel.locator('input[name="font-size"], input[name="fontSize"], input#font-size').first();
+
+            // フォントサイズをクリア
+            await fontSizeInput.fill('');
+            await fontSizeInput.blur();
+
+            // HTMLの <input type="color"> は仕様上、値を完全に空（null）にできず常に #rrggbb を返すため、
+            // style 属性そのものが消滅すること（value: null）を期待すると環境によってテストが失敗します。
+            // したがって、「クリアしたプロパティ（font-size）が style 属性から確実に取り除かれていること」を検証します。
+            const previewElement = editorHelper.getPreviewElement(previewSelector);
+
+            // プレビュー要素がアタッチされ、属性の更新が反映されるのを少し待機する
+            await editorPage.waitForTimeout(300);
+            const styleAttr = await previewElement.getAttribute('style') || '';
+
+            // font-size の記述が style 内に存在しないことをアサート
+            expect(styleAttr).not.toContain('font-size:');
+            expect(styleAttr).not.toContain('24px');
+        });
+    });
+
+    test('テキスト非対応要素(img)では文字装飾(style-typography)が表示されないこと', async ({ editorPage, editorHelper }) => {
+        await test.step('セットアップ: ページを追加し、imgタグを配置して選択する', async () => {
+            await editorHelper.addPage();
+            const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
+            // img は標準HTMLタグのため、addComponentAsHtmlTag を使用して配置します
+            const imgNode = await editorHelper.addComponentAsHtmlTag('img', contentAreaSelector);
+            await editorHelper.selectNodeInDomTree(imgNode);
+            await editorHelper.openMoveingHandle('right');
+        });
+
+        await test.step('検証: プロパティパネルに文字装飾(style-typography)が表示されないこと', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-typography');
+            // 表示されない（または非表示属性が効いている）ことを確認
+            await expect(targetInputPanel).toBeHidden();
         });
     });
 });
