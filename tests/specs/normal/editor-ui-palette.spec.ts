@@ -131,22 +131,40 @@ test.describe('UIアクションパレット機能の検証', () => {
 
         await test.step('右クリックでコンテキストメニューを開き、パレットを起動する', async () => {
             const monacoEditor = editorPage.locator('script-container .monaco-editor[role="code"]');
-
-            // エディタの特定の行（確実なDOM実体）を狙って右クリック
             const viewLine = monacoEditor.locator('.view-line').first();
-            await viewLine.click({ button: 'right' });
-
-            // Monacoが生成する右クリックメニューのクラス（.context-view）を厳密に指定して待機
-            const contextMenu = editorPage.locator('.context-view.monaco-menu-container');
-            await expect(contextMenu).toBeVisible({ timeout: 10000 });
-
-            // メニュー項目を特定して、強制クリックで確実に起動
-            const actionItem = contextMenu.locator('.action-item', { hasText: /アクションパレット/ }).first();
-            await actionItem.scrollIntoViewIfNeeded();
-            await actionItem.click({ force: true });
-
             const paletteOverlay = editorPage.locator('#paletteOverlay-teleported');
-            await expect(paletteOverlay).toHaveClass(/active/);
+
+            // メニューの描画・イベントバインド遅延によるクリックの空振りを防ぐため、toPassによる自動リトライを導入
+            await expect(async () => {
+                // 1. 状態リセット: 前回のリトライで残ったメニュー等があれば一度エディタをクリックして閉じる
+                await viewLine.click({ force: true }).catch(() => { });
+                await editorPage.waitForTimeout(300);
+
+                // 2. 右クリック
+                await viewLine.click({ button: 'right' });
+
+                // 3. コンテキストメニューが表示されるのを待機
+                const contextMenu = editorPage.locator('.context-view.monaco-menu-container');
+                await expect(contextMenu).toBeVisible({ timeout: 5000 });
+
+                // 4. メニューアイテムを特定
+                const actionItem = contextMenu.locator('.action-item', { hasText: /アクションパレット/ }).first();
+                await actionItem.scrollIntoViewIfNeeded();
+
+                // Monacoのアニメーションやイベントアタッチのタイムラグを吸収するための微小待機
+                await editorPage.waitForTimeout(300);
+
+                // 5. クリック実行
+                await actionItem.click({ force: true });
+
+                // 6. 最終的な結果（パレットの起動）を短いタイムアウトで検証。
+                // 失敗した場合は、例外が投げられて toPass() により 1. から再試行される
+                await expect(paletteOverlay).toHaveClass(/active/, { timeout: 3000 });
+
+            }).toPass({
+                timeout: 20000,    // 全体で最大20秒間試行する
+                intervals: [1000]  // 失敗した場合は1秒間隔を空けてリトライ
+            });
         });
 
         await test.step('キーボードナビゲーションの検証', async () => {

@@ -40,22 +40,23 @@ export class EditorHelper {
         try {
             await test.step('スターターテンプレートモーダルのチェックとスキップ', async () => {
                 const starterModal = this.page.locator('starter-template-modal');
-                // アプリが空でない場合は出現しないため、タイムアウトを短めに設定
-                if (await starterModal.isVisible({ timeout: 5000 }).catch(() => false)) {
-                    // クラス名または表示テキストを持つスキップ用のボタンを特定
+
+                // アプリのロード遅延を考慮し、タイムアウトを10秒に設定して待機
+                if (await starterModal.isVisible({ timeout: 10000 }).catch(() => false)) {
                     const skipBtn = starterModal.locator('.btn-skip, button:has-text("閉じて一から自分で作る")').first();
                     await expect(skipBtn).toBeVisible({ timeout: 3000 });
 
-                    // モバイル環境での遅延や誤タップを防ぐため、モーダルが完全に消えるまでリトライを行う
+                    // 完全に消えるまでリトライを行う
                     await expect(async () => {
-                        await skipBtn.click({ force: true }).catch(() => { });
-                        if (await starterModal.isVisible()) {
-                            await skipBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
-                        }
-                        await expect(starterModal).toBeHidden({ timeout: 2000 });
+                        // 1. JSクリックのみを実行（待機ブロッキングが発生しません）
+                        await skipBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
+
+                        // 2. モーダルの visible 属性が消え、非表示になるのを待つ
+                        await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 1500 });
+                        await expect(starterModal).toBeHidden({ timeout: 1500 });
                     }).toPass({
-                        timeout: 10000,
-                        intervals: [1000]
+                        timeout: 8000,
+                        intervals: [500] // リトライ間隔を短くして高速化
                     });
 
                     // 処理後の安定化待ち
@@ -63,7 +64,6 @@ export class EditorHelper {
                 }
             });
         } catch (e) {
-            // 万が一要素が見つからない等の例外が起きても、テスト全体を落とさないようにキャッチ
             console.log('[EditorHelper] handleStarterTemplateModal skipped or failed:', e);
         }
     }

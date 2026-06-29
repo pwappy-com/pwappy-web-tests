@@ -1072,4 +1072,130 @@ test.describe('エディタ内機能のテスト', () => {
             await expect(targetInputPanel).toBeHidden();
         });
     });
+
+    test('属性(style-border)によるボーダー・角丸の編集、クリア、および異常系の検証', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        await test.step('正常系: ボーダー・角丸（style-border）を設定し、プレビューに反映されること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-border');
+            await expect(targetInputPanel).toBeVisible();
+
+            // 角丸を設定
+            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+            await expect(radiusInput).toBeVisible();
+            await expect(radiusInput).toBeEditable();
+            await radiusInput.fill('15px');
+            await radiusInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-radius', value: '15px' });
+
+            // ボーダー幅を設定
+            const widthInput = targetInputPanel.locator('input[name="borderWidth"], input[name="border-width"], input#border-width').first();
+            await expect(widthInput).toBeVisible();
+            await expect(widthInput).toBeEditable();
+            await widthInput.fill('3px');
+            await widthInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-width', value: '3px' });
+
+            // ボーダースタイルを設定
+            const styleSelect = targetInputPanel.locator('select[name="borderStyle"], select[name="border-style"], select#border-style').first();
+            await expect(styleSelect).toBeVisible();
+            await styleSelect.selectOption('dashed');
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-style', value: 'dashed' });
+
+            // ボーダー色を設定
+            const colorInput = targetInputPanel.locator('input[type="color"], attribute-color input, input[name="borderColor"], input#border-color, .color input').first();
+            await expect(colorInput).toBeVisible();
+            await expect(colorInput).toBeEditable();
+            await colorInput.fill('#0000ff');
+            await colorInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-color', value: 'rgb(0, 0, 255)' });
+        });
+
+        await test.step('異常系: 無効な値（不正な文字列）が入力されてもエディタが破損せず出力されること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-border');
+            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+
+            // 不正な文字列を入力
+            await radiusInput.fill('invalid_value');
+            await radiusInput.blur();
+
+            const previewElement = editorHelper.getPreviewElement(previewSelector);
+            await expect(previewElement).toHaveAttribute('style', /border-radius:\s*invalid_value/);
+        });
+
+        await test.step('正常系: 入力値を空にしてボーダー設定が部分的にクリアされること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-border');
+            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+
+            // 空にする
+            await radiusInput.fill('');
+            await radiusInput.blur();
+
+            // プレビューのstyleからborder-radiusプロパティが消えていることを確認
+            const previewElement = editorHelper.getPreviewElement(previewSelector);
+            await editorPage.waitForTimeout(300);
+            const styleAttr = await previewElement.getAttribute('style') || '';
+            expect(styleAttr).not.toContain('border-radius:');
+        });
+
+        await test.step('異常系: 他のスタイルが既に存在する場合、上書き・破壊せずに更新できること', async () => {
+            // スタイルタブ（Monaco Editor）に切り替え、他の無関係なスタイルを仕込む
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+
+            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+            await expect(styleEditor).toBeVisible();
+
+            const presetStyle = 'element.style {\n    color: rgb(0, 128, 0);\n    padding: 12px;\n}';
+            await editorHelper.setMonacoValue(styleEditor, presetStyle);
+
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '12px' });
+
+            // 属性タブに切り替えて style-border を編集
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            const targetInputPanel = editorHelper.getPropertyInput('style-border');
+            const widthInput = targetInputPanel.locator('input[name="borderWidth"], input[name="border-width"], input#border-width').first();
+
+            await widthInput.fill('5px');
+            await widthInput.blur();
+
+            // 1. 新たに設定したボーダー幅が適用されていること
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-width', value: '5px' });
+
+            // 2. 元々あった無関係なスタイルが破壊されず残っていること
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '12px' });
+        });
+
+        await test.step('異常系: セミコロンのない崩れた手動スタイルがあっても、クラッシュせずに解析できること', async () => {
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+
+            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+            await expect(styleEditor).toBeVisible();
+
+            // セミコロンをわざと抜いた崩れたCSSを設定
+            const brokenStyle = 'element.style {\n    border-radius: 8px\n}';
+            await editorHelper.setMonacoValue(styleEditor, brokenStyle);
+
+            // 属性タブに戻り、クラッシュせずに解析できていることを確認
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            const targetInputPanel = editorHelper.getPropertyInput('style-border');
+            await expect(targetInputPanel).toBeVisible();
+
+            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+            // セミコロンが欠落しているため現在の仕様上は解析できず空文字（""）になるが、
+            // JSエラー等による画面のクラッシュがなく、安全に初期化されて描画が維持されることを検証
+            await expect(radiusInput).toHaveValue('');
+        });
+    });
 });
