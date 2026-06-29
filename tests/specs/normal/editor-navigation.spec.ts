@@ -2447,4 +2447,50 @@ test.describe('エディタ内機能のテスト', () => {
             });
         }
     });
+
+    test('選択枠（ハイライト）の表示・非表示の切り替え（showHighlight）機能を検証する', async ({ editorPage, editorHelper }) => {
+        await test.step('1. セットアップ: ページとボタンを追加し、ボタンを選択状態にする', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+        });
+
+        await test.step('2. プレビューの iframe 内に選択枠（.layout-selected）が表示されていることを検証', async () => {
+            const previewFrame = editorHelper.getPreviewFrame();
+            const selectedBorder = previewFrame.locator('.layout-selected');
+            await expect(selectedBorder).toBeVisible({ timeout: 5000 });
+        });
+
+        await test.step('3. 目ボタンをクリックして選択枠を非表示にする', async () => {
+            // モバイル環境での要素の重なりを防ぐため、移動ハンドルを閉じる
+            await editorHelper.closeMoveingHandle();
+
+            const platformSwitcher = editorPage.locator('platform-switcher');
+            const toggleHighlightBtn = platformSwitcher.locator('button[title*="選択枠を非表示にする"]');
+            await expect(toggleHighlightBtn).toBeVisible();
+            // 重なりによるインターセプトを防ぐため force: true を指定
+            await toggleHighlightBtn.click({ force: true });
+        });
+
+        await test.step('4. プレビュー内の選択枠（.layout-selected）が消えていることを検証', async () => {
+            const previewFrame = editorHelper.getPreviewFrame();
+            const selectedBorder = previewFrame.locator('.layout-selected');
+            await expect(selectedBorder).toBeHidden({ timeout: 5000 });
+        });
+
+        await test.step('5. 再び目ボタンをクリックして選択枠を再表示にする', async () => {
+            // 移動ハンドルを念のため閉じる
+            await editorHelper.closeMoveingHandle();
+
+            const platformSwitcher = editorPage.locator('platform-switcher');
+            const toggleHighlightBtn = platformSwitcher.locator('button[title*="選択枠を表示する"]');
+            await expect(toggleHighlightBtn).toBeVisible();
+            await toggleHighlightBtn.click({ force: true });
+        });
+
+        await test.step('6. 選択枠が再表示されることを検証', async () => {
+            const previewFrame = editorHelper.getPreviewFrame();
+            const selectedBorder = previewFrame.locator('.layout-selected');
+            await expect(selectedBorder).toBeVisible({ timeout: 5000 });
+        });
+    });
 });
