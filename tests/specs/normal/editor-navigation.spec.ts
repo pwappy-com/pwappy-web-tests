@@ -1349,4 +1349,112 @@ test.describe('エディタ内機能のテスト', () => {
             await expect(previewElement).toHaveAttribute('style', /width:\s*invalid_value_test/);
         });
     });
+
+    test('属性(style-shadow)によるシャドウ・奥行きの編集、既存スタイル競合防止、およびクリアの検証', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('1. セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        await test.step('2. 正常系: シャドウ・奥行き（style-shadow）を設定し、プレビューに反映されること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-shadow');
+            await expect(targetInputPanel).toBeVisible();
+
+            // 内部UIの実装に依存しないよう、コンポーネントから直接変更イベントをディスパッチ
+            await targetInputPanel.evaluate((el) => {
+                el.dispatchEvent(new CustomEvent('change', {
+                    detail: {
+                        boxShadow: '3px 3px 6px rgb(0, 0, 0)',
+                        textShadow: '1px 1px 2px rgb(255, 0, 0)'
+                    }
+                }));
+            });
+
+            // プレビューにおけるCSSの反映を確認
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'box-shadow', value: 'rgb(0, 0, 0) 3px 3px 6px 0px' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'text-shadow', value: 'rgb(255, 0, 0) 1px 1px 2px' });
+        });
+
+        await test.step('3. 正常系: 既存のスタイル設定と競合せず、追記・維持されること', async () => {
+            const propertyContainer = editorPage.locator('property-container');
+
+            // スタイルタブ（Monaco Editor）に切り替え、他の無関係なスタイル（color, padding）を事前に登録
+            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+            await expect(styleEditor).toBeVisible();
+
+            const presetStyle = 'element.style {\n    color: rgb(0, 128, 0);\n    padding: 15px;\n}';
+            await editorHelper.setMonacoValue(styleEditor, presetStyle);
+
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '15px' });
+
+            // 属性タブに戻り、シャドウを更新設定
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            const targetInputPanel = editorHelper.getPropertyInput('style-shadow');
+            await expect(targetInputPanel).toBeVisible();
+
+            await targetInputPanel.evaluate((el) => {
+                el.dispatchEvent(new CustomEvent('change', {
+                    detail: {
+                        boxShadow: '4px 4px 8px rgb(0, 0, 255)',
+                        textShadow: ''
+                    }
+                }));
+            });
+
+            // 既存のスタイル（color, padding）が破壊されず維持されたまま、シャドウが正しく更新されていることを検証
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '15px' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'box-shadow', value: 'rgb(0, 0, 255) 4px 4px 8px 0px' });
+        });
+
+        await test.step('4. 正常系: 値を空に更新した際、対象のシャドウスタイルのみが削除され、他は残ること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-shadow');
+            await expect(targetInputPanel).toBeVisible();
+
+            // 値を空にしてイベントを送信
+            await targetInputPanel.evaluate((el) => {
+                el.dispatchEvent(new CustomEvent('change', {
+                    detail: {
+                        boxShadow: '',
+                        textShadow: ''
+                    }
+                }));
+            });
+
+            // プレビューのインラインスタイル属性からシャドウのみが除去されていることを確認
+            const previewElement = editorHelper.getPreviewElement(previewSelector);
+            await editorPage.waitForTimeout(500);
+            const styleAttr = await previewElement.getAttribute('style') || '';
+            expect(styleAttr).not.toContain('box-shadow:');
+            expect(styleAttr).not.toContain('text-shadow:');
+
+            // 既存の他のスタイル（color, padding）は残っていること
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '15px' });
+        });
+
+        await test.step('5. 異常系: セミコロンのない崩れた手動スタイルが存在しても、クラッシュせずに解析・描画されること', async () => {
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+
+            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+            await expect(styleEditor).toBeVisible();
+
+            // セミコロンをわざと抜いた崩れたCSSを設定
+            const brokenStyle = 'element.style {\n    box-shadow: 2px 2px 2px black\n}';
+            await editorHelper.setMonacoValue(styleEditor, brokenStyle);
+
+            // 属性タブに戻り、解析中にクラッシュせず安全に入力パネルが描画されることを検証
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            const targetInputPanel = editorHelper.getPropertyInput('style-shadow');
+            await expect(targetInputPanel).toBeVisible();
+        });
+    });
 });
