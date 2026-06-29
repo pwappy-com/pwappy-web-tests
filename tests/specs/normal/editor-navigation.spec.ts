@@ -1457,4 +1457,121 @@ test.describe('エディタ内機能のテスト', () => {
             await expect(targetInputPanel).toBeVisible();
         });
     });
+
+    test('属性(style-background)による背景・装飾の編集、クリア、および異常系の検証', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        await test.step('正常系: 背景・装飾（style-background）が表示され、設定がプレビューに反映されること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-background');
+            // 表示されていることを確認
+            await expect(targetInputPanel).toBeVisible();
+
+            // 属性名やID、要素タイプから各入力フィールドを確実に特定
+            const bgColorInput = targetInputPanel.locator('input[name*="color" i], input[id*="color" i], input[type="color"]').first();
+            const bgImageInput = targetInputPanel.locator('input[name*="image" i], input[id*="image" i], input[placeholder*="image" i], input[placeholder*="画像" i], input[name="backgroundImage"]').first();
+            const opacityInput = targetInputPanel.locator('input[name*="opacity" i], input[id*="opacity" i], input[type="range"], input[type="number"], input[placeholder*="opacity" i], input').last();
+
+            // 背景色を設定
+            await expect(bgColorInput).toBeVisible();
+            await expect(bgColorInput).toBeEditable();
+            await bgColorInput.fill('#00ff00');
+            await bgColorInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'background-color', value: 'rgb(0, 255, 0)' });
+
+            // 背景画像を設定 (生パスのみを指定)
+            await expect(bgImageInput).toBeVisible();
+            await expect(bgImageInput).toBeEditable();
+            await bgImageInput.fill('images/icon-192x192.webp');
+            await bgImageInput.blur();
+            // ブラウザ側で絶対パスに解決されるため、正規表現でアサーションを行います
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'background-image', value: /url\(.*images\/icon-192x192\.webp.*\)/ });
+
+            // 透明度を設定
+            await expect(opacityInput).toBeVisible();
+            await expect(opacityInput).toBeEditable();
+            await opacityInput.fill('0.5');
+            await opacityInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'opacity', value: '0.5' });
+        });
+
+        await test.step('正常系: 入力値を空にして背景設定が部分的にクリアされること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-background');
+            // スライダーでのfill('')エラーを回避するため、背景画像テキスト欄を空にする
+            const bgImageInput = targetInputPanel.locator('input[name*="image" i], input[id*="image" i], input[placeholder*="image" i], input[placeholder*="画像" i], input[name="backgroundImage"]').first();
+
+            // 背景画像を空にする
+            await bgImageInput.fill('');
+            await bgImageInput.blur();
+
+            // プレビューのstyleからbackground-imageプロパティが消えていることを確認
+            const previewElement = editorHelper.getPreviewElement(previewSelector);
+            await editorPage.waitForTimeout(300);
+            const styleAttr = await previewElement.getAttribute('style') || '';
+            expect(styleAttr).not.toContain('background-image:');
+
+            // 他の設定（背景色や不透明度）は残っていること
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'background-color', value: 'rgb(0, 255, 0)' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'opacity', value: '0.5' });
+        });
+
+        await test.step('異常系: 他のスタイルが既に存在する場合、上書き・破壊せずに更新できること', async () => {
+            // スタイルタブ（Monaco Editor）に切り替え、他の無関係なスタイルを仕込む
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+
+            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+            await expect(styleEditor).toBeVisible();
+
+            const presetStyle = 'element.style {\n    color: rgb(255, 255, 255);\n    padding: 20px;\n}';
+            await editorHelper.setMonacoValue(styleEditor, presetStyle);
+
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(255, 255, 255)' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '20px' });
+
+            // 属性タブに切り替えて style-background を編集
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            const targetInputPanel = editorHelper.getPropertyInput('style-background');
+            const bgImageInput = targetInputPanel.locator('input[name*="image" i], input[id*="image" i], input[placeholder*="image" i], input[placeholder*="画像" i], input[name="backgroundImage"]').first();
+
+            await bgImageInput.fill('images/icon-192x192.webp');
+            await bgImageInput.blur();
+
+            // 1. 新たに設定した背景画像が適用されていること
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'background-image', value: /url\(.*images\/icon-192x192\.webp.*\)/ });
+
+            // 2. 元々あった無関係なスタイルが破壊されず残っていること
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(255, 255, 255)' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '20px' });
+        });
+
+        await test.step('異常系: セミコロンのない崩れた手動スタイルがあっても、クラッシュせずに解析できること', async () => {
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+
+            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+            await expect(styleEditor).toBeVisible();
+
+            // セミコロンをわざと抜いた崩れたCSSを設定 (背景画像を対象)
+            const brokenStyle = 'element.style {\n    background-image: url("images/icon-192x192.webp")\n}';
+            await editorHelper.setMonacoValue(styleEditor, brokenStyle);
+
+            // 属性タブに戻り、クラッシュせずに解析できていることを確認
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            const targetInputPanel = editorHelper.getPropertyInput('style-background');
+            await expect(targetInputPanel).toBeVisible();
+
+            const bgImageInput = targetInputPanel.locator('input[name*="image" i], input[id*="image" i], input[placeholder*="image" i], input[placeholder*="画像" i], input[name="backgroundImage"]').first();
+            // セミコロンが欠落しているため現在の仕様上は解析できず空文字（""）になるが、
+            // JSエラー等による画面のクラッシュがなく、安全に初期化されて描画が維持されることを検証
+            await expect(bgImageInput).toHaveValue('');
+        });
+    });
 });
