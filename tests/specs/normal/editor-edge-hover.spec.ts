@@ -2,38 +2,20 @@ import { test as base, expect, Page } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
+import { STORAGE_STATE } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
+let appName: string;
+let appKey: string;
+
 type EditorFixtures = {
     editorPage: Page;
-    appName: string;
-    appKey: string;
     editorHelper: EditorHelper;
 };
 
 const test = base.extend<EditorFixtures>({
-    appName: async ({ isMobile }, use) => {
-        if (!isMobile) {
-            await use('');
-            return;
-        }
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        await use(`starter-${uniqueId}`.slice(0, 30));
-    },
-    appKey: async ({ isMobile }, use) => {
-        if (!isMobile) {
-            await use('');
-            return;
-        }
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        await use(`str-key-${uniqueId}`.slice(0, 30));
-    },
-    editorPage: async ({ page, context, appName, appKey, isMobile }, use) => {
+    editorPage: async ({ page, context, isMobile }, use) => {
         if (!isMobile) {
             await use(null as any);
             return;
@@ -42,14 +24,16 @@ const test = base.extend<EditorFixtures>({
         await gotoDashboard(page);
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
-        await createApp(page, appName, appKey);
-        
+        // 作成済みの共有アプリ詳細画面へ移動
+        const appRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) }).first();
+        await expect(appRow).toBeVisible({ timeout: 15000 });
+        await appRow.click({ force: true });
+        await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
+
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
-        
+
         await editorPage.close();
-        await page.bringToFront();
-        await deleteApp(page, appKey);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
         if (!isMobile) {
@@ -59,6 +43,39 @@ const test = base.extend<EditorFixtures>({
         const helper = new EditorHelper(editorPage, isMobile);
         await use(helper);
     },
+});
+
+// テスト全体の開始前に、モバイル時のみアプリを1回だけ作成する
+test.beforeAll(async ({ browser }, workerInfo) => {
+    const isMobile = workerInfo.project.use.isMobile;
+    if (!isMobile) return;
+
+    const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+    const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+    appName = `starter-${uniqueId}`.slice(0, 30);
+    appKey = `str-key-${uniqueId}`.slice(0, 30);
+
+    const context = await browser.newContext({ storageState: STORAGE_STATE });
+    const page = await context.newPage();
+
+    await gotoDashboard(page);
+    await createApp(page, appName, appKey);
+
+    await context.close();
+});
+
+// すべてのテストが終了した後に、モバイル時のみアプリを1回だけ削除する
+test.afterAll(async ({ browser }, workerInfo) => {
+    const isMobile = workerInfo.project.use.isMobile;
+    if (!isMobile || !appKey) return;
+
+    const context = await browser.newContext({ storageState: STORAGE_STATE });
+    const page = await context.newPage();
+
+    await gotoDashboard(page);
+    await deleteApp(page, appKey);
+
+    await context.close();
 });
 
 test.describe('画面エッジホバーによるパネル自動開閉テスト（モバイル）', () => {

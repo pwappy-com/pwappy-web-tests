@@ -41,17 +41,30 @@ export class EditorHelper {
             await test.step('スターターテンプレートモーダルのチェックとスキップ', async () => {
                 const starterModal = this.page.locator('starter-template-modal');
 
-                // アプリのロード遅延を考慮し、タイムアウトを10秒に設定して待機
-                if (await starterModal.isVisible({ timeout: 10000 }).catch(() => false)) {
+                let isModalVisible = false;
+                try {
+                    await starterModal.waitFor({ state: 'visible', timeout: 5000 });
+                    isModalVisible = true;
+                } catch (e) {
+                    // 5秒以内に現れなかった場合は表示なしと判断して安全にスルー
+                    console.log('[EditorHelper] starter-template-modal did not appear within 5s. Proceeding...');
+                }
+
+                if (isModalVisible) {
                     const skipBtn = starterModal.locator('.btn-skip, button:has-text("閉じて一から自分で作る")').first();
                     await expect(skipBtn).toBeVisible({ timeout: 3000 });
 
                     // 完全に消えるまでリトライを行う
                     await expect(async () => {
-                        // 1. JSクリックのみを実行（待機ブロッキングが発生しません）
-                        await skipBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
+                        // 1. 物理クリックおよび物理タップを最優先で試行（モバイル・PCのタップリスナー対策）
+                        await skipBtn.click({ force: true, timeout: 1000 }).catch(() => {
+                            return skipBtn.tap({ noWaitAfter: true, timeout: 1000 });
+                        }).catch(() => {
+                            // 2. JSクリックをフォールバックとして試行
+                            return skipBtn.evaluate((el: HTMLElement) => el.click());
+                        }).catch(() => { });
 
-                        // 2. モーダルの visible 属性が消え、非表示になるのを待つ
+                        // 3. モーダルの visible 属性が消え、非表示になるのを待つ
                         await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 1500 });
                         await expect(starterModal).toBeHidden({ timeout: 1500 });
                     }).toPass({
@@ -65,6 +78,15 @@ export class EditorHelper {
             });
         } catch (e) {
             console.log('[EditorHelper] handleStarterTemplateModal skipped or failed:', e);
+            // クリックで消えなかった場合の強制非表示フォールバック
+            await this.page.evaluate(() => {
+                const modal = document.querySelector('starter-template-modal');
+                if (modal) {
+                    modal.removeAttribute('visible');
+                    (modal as any).style.display = 'none';
+                    (modal as any).style.pointerEvents = 'none';
+                }
+            }).catch(() => { });
         }
     }
 

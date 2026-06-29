@@ -2,40 +2,70 @@ import { test as base, expect, Page, Locator, CDPSession } from '@playwright/tes
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
+import { STORAGE_STATE } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
+
+let appName: string;
+let appKey: string;
 
 /**
  * テストフィクスチャの設定
  */
 type EditorFixtures = {
     editorPage: Page;
-    appName: string;
     editorHelper: EditorHelper;
 };
 
 const test = base.extend<EditorFixtures>({
-    appName: async ({ }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        await use(`test-app-struct-${uniqueId}`.slice(0, 30));
-    },
-    editorPage: async ({ page, context, appName }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        const appKey = `key-struct-${uniqueId}`.slice(0, 30);
-        await createApp(page, appName, appKey);
+    editorPage: async ({ page, context }, use) => {
+        await gotoDashboard(page);
+        await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
+
+        // 作成済みの共有アプリ詳細画面へ移動
+        const appRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) }).first();
+        await expect(appRow).toBeVisible({ timeout: 15000 });
+        await appRow.click({ force: true });
+        await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
+
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
         await editorPage.close();
-        await deleteApp(page, appKey);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
         await use(helper);
     },
+});
+
+// テスト全体の開始前に、アプリを1回だけ作成する
+test.beforeAll(async ({ browser }) => {
+    const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+    const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+    appName = `test-app-struct-${uniqueId}`.slice(0, 30);
+    appKey = `key-struct-${uniqueId}`.slice(0, 30);
+
+    // 認証済みの状態を引き継ぐためのコンテキストを作成（STORAGE_STATE定数を使用）
+    const context = await browser.newContext({ storageState: STORAGE_STATE });
+    const page = await context.newPage();
+
+    await gotoDashboard(page);
+    await createApp(page, appName, appKey);
+
+    await context.close();
+});
+
+// すべてのテストが終了した後に、アプリを1回だけ削除する
+test.afterAll(async ({ browser }) => {
+    if (appKey) {
+        const context = await browser.newContext({ storageState: STORAGE_STATE });
+        const page = await context.newPage();
+
+        await gotoDashboard(page);
+        await deleteApp(page, appKey);
+
+        await context.close();
+    }
 });
 
 test.describe('エディタ内：UI構造操作の高度なテスト', () => {
@@ -152,7 +182,6 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                     }
 
                     // 3. ボタンが表示されるのを待ってクリック
-                    // （タイムアウトを短く設定し、ダメなら catch させて再試行させる）
                     await expect(emptyButton).toBeVisible({ timeout: 2000 });
                     await emptyButton.click({ timeout: 2000 });
 
@@ -165,7 +194,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 });
 
             } finally {
-                // リスナーを解除（他のテストに影響させないため）
+                // リスナーを解除
                 editorPage.off('dialog', dialogHandler);
             }
 
@@ -270,7 +299,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                     } else {
                         await editorPage.mouse.move(currentX, currentY);
                     }
-                    await editorPage.waitForTimeout(20); // 少し待機してイベントを処理させる
+                    await editorPage.waitForTimeout(20);
                 }
             },
             up: async (x?: number, y?: number) => {
@@ -310,7 +339,6 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                         const containerTop = containerBox.y;
                         const containerBottom = containerBox.y + containerBox.height;
 
-                        // 判定の緩和
                         const isInView = (itemCenterY >= containerTop + 5) && (itemCenterY <= containerBottom - 5);
 
                         if (isInView) {
@@ -335,13 +363,10 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 
             await pointerAction.down(startX, startY);
 
-            // アプリ側の長押し判定 (300ms) を確実に超える待機
             await editorPage.waitForTimeout(600);
 
-            // ゴーストの出現確認
             const ghostExists = await editorPage.evaluate(() => !!document.querySelector('.custom-drag-image'));
 
-            // --- ターゲットへの追尾移動 ---
             let currentX = startX;
             let currentY = startY;
 
@@ -353,22 +378,18 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 const destX = tBox.x + 20;
                 const destY = tBox.y + 15;
 
-                // ターゲットがパネルの30px圏内（スクロール発火エリア）の外にいるか
                 const isTargetVisible = destY > pBox.y + 30 && destY < pBox.y + pBox.height - 30;
 
                 if (isTargetVisible) {
                     await pointerAction.move(currentX, currentY, destX, destY, 15);
                     currentX = destX;
                     currentY = destY;
-                    // 座標が目的地に到達したのでループ終了
                     break;
                 } else {
-                    // ターゲットが隠れている場合、パネルの端（スクロール発火エリア）にポインターを置く
                     const hoverY = destY >= pBox.y + pBox.height - 30 ? pBox.y + pBox.height - 15 : pBox.y + 15;
                     await pointerAction.move(currentX, currentY, destX, hoverY, 10);
                     currentX = destX;
                     currentY = hoverY;
-                    // アプリ側のスクロールタイマー (setInterval 100ms) が動くのを待つ
                     await editorPage.waitForTimeout(200);
                 }
             }
@@ -414,7 +435,6 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             await pointerAction.down(startBox.x + startBox.width / 2, startBox.y + startBox.height / 2);
             await editorPage.waitForTimeout(600);
 
-            // ターゲット追尾
             let currentX = startBox.x + startBox.width / 2;
             let currentY = startBox.y + startBox.height / 2;
 
@@ -424,7 +444,6 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 if (!pBox || !tBox) break;
 
                 const destX = tBox.x + tBox.width / 2;
-                // btnBottom の下半分（下から5pxのあたり）を狙って、下側インサートポイントを確実に発火させる
                 const destY = tBox.y + tBox.height - 5;
 
                 const isTargetVisible = destY > pBox.y + 30 && destY < pBox.y + pBox.height - 30;
@@ -454,7 +473,6 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             await pointerAction.up(finalBox?.x, finalBox?.y);
             await editorPage.waitForTimeout(500);
 
-            // 検証
             const finalNodes = editorPage.locator('template-container .node[data-node-type="ons-button"]');
             await expect(finalNodes.nth(0)).toHaveAttribute('data-node-dom-id', 'ons-button1');
             await expect(finalNodes.nth(1)).toHaveAttribute('data-node-dom-id', 'ons-button2');

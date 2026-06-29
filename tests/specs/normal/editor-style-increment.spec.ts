@@ -2,6 +2,7 @@ import { test as base, expect, Page } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
+import { STORAGE_STATE } from '../../constants';
 
 /**
  * プロパティコンテナ内のCSSエディタにおける数値操作機能の検証テスト。
@@ -11,34 +12,64 @@ import { EditorHelper } from '../../tools/editor-helpers';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
+let appName: string;
+let appKey: string;
+
 type EditorFixtures = {
     editorPage: Page;
-    appName: string;
     editorHelper: EditorHelper;
 };
 
-// 各テスト実行前にアプリケーションの作成とエディタの起動を自動で行うフィクスチャ
+// 各テスト実行前にエディタの起動を自動で行うフィクスチャ
 const test = base.extend<EditorFixtures>({
-    appName: async ({ }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${Date.now()}`;
-        await use(`style-inc-test-${uniqueId}`.slice(0, 30));
-    },
-    editorPage: async ({ page, context, appName }, use) => {
+    editorPage: async ({ page, context }, use) => {
         await gotoDashboard(page);
+        await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
-        const appKey = `inc-key-${Date.now().toString().slice(-6)}`;
-        await createApp(page, appName, appKey);
+        // 作成済みの共有アプリ詳細画面へ移動
+        const appRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) }).first();
+        await expect(appRow).toBeVisible({ timeout: 15000 });
+        await appRow.click({ force: true });
+        await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
+
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
         await editorPage.close();
-        await page.bringToFront();
-        await deleteApp(page, appKey);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
         await use(helper);
     },
+});
+
+// テスト全体の開始前に、アプリを1回だけ作成する
+test.beforeAll(async ({ browser }) => {
+    const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+    const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+    appName = `style-inc-test-${uniqueId}`.slice(0, 30);
+    appKey = `inc-key-${uniqueId}`.slice(0, 30);
+
+    // 認証済みの状態を引き継ぐためのコンテキストを作成（STORAGE_STATE定数を使用）
+    const context = await browser.newContext({ storageState: STORAGE_STATE });
+    const page = await context.newPage();
+
+    await gotoDashboard(page);
+    await createApp(page, appName, appKey);
+
+    await context.close();
+});
+
+// すべてのテストが終了した後に、アプリを1回だけ削除する
+test.afterAll(async ({ browser }) => {
+    if (appKey) {
+        const context = await browser.newContext({ storageState: STORAGE_STATE });
+        const page = await context.newPage();
+
+        await gotoDashboard(page);
+        await deleteApp(page, appKey);
+
+        await context.close();
+    }
 });
 
 test.describe('CSSエディタ：数値のインテリジェント増減機能のテスト', () => {

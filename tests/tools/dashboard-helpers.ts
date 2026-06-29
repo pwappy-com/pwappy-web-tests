@@ -155,6 +155,24 @@ export async function openEditor(
     });
 
     await editorPage.waitForLoadState('domcontentloaded');
+
+    // 開発用オーバーレイによるポインタ遮断を防ぐスタイルを注入
+    await editorPage.evaluate(() => {
+        const style = document.createElement('style');
+        style.id = 'webpack-overlay-bypass';
+        style.innerHTML = `
+           #webpack-dev-server-client-overlay,
+           iframe[src*="blank"] {
+               display: none !important;
+               pointer-events: none !important;
+               width: 0 !important;
+               height: 0 !important;
+               opacity: 0 !important;
+           }
+       `;
+        document.head.appendChild(style);
+    }).catch(() => { });
+
     const tempHelper = new EditorHelper(editorPage, false);
 
     // スナップショット復元ダイアログのスキップ

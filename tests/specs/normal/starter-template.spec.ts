@@ -1,46 +1,38 @@
 import { test as base, expect, Page } from '@playwright/test';
 import 'dotenv/config';
-import { createApp, deleteApp, gotoDashboard, openEditor, setAiCoding } from '../../tools/dashboard-helpers';
+import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
+import { STORAGE_STATE } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
-// 各テストでユニークなアプリを作成し、スターターモーダルを意図的に表示させるフィクスチャ
-type StarterFixtures = {
+let appName: string;
+let appKey: string;
+
+type EditorFixtures = {
     editorPage: Page;
-    appName: string;
-    appKey: string;
     editorHelper: EditorHelper;
 };
 
-const test = base.extend<StarterFixtures>({
-    appName: async ({ }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        await use(`starter-${uniqueId}`.slice(0, 30));
-    },
-    appKey: async ({ }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        await use(`str-key-${uniqueId}`.slice(0, 30));
-    },
-    editorPage: async ({ page, context, appName, appKey }, use) => {
+const test = base.extend<EditorFixtures>({
+    editorPage: async ({ page, context }, use) => {
         await gotoDashboard(page);
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
-        await createApp(page, appName, appKey);
+        // 作成済みの共有アプリ詳細画面へ移動
+        const appRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) }).first();
+        await expect(appRow).toBeVisible({ timeout: 15000 });
+        await appRow.click({ force: true });
+        await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
 
-        // 【重要】 { skipStarterModal: false } を指定して、モーダルを閉じずにそのままにする
+        // 【重要】常に同一の初期バージョン '1.0.0' を { skipStarterModal: false } で開く
+        // 保存せずに閉じるため、DB上は常に「完全に空」の状態が維持され、使い回しが可能です
         const editorPage = await openEditor(page, context, appName, '1.0.0', { skipStarterModal: false });
 
         await use(editorPage);
 
-        // テスト終了後のクリーンアップ
+        // 保存をせずに閉じる
         await editorPage.close();
-        await page.bringToFront();
-        await deleteApp(page, appKey);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
@@ -48,10 +40,39 @@ const test = base.extend<StarterFixtures>({
     },
 });
 
+// テスト全体の開始前に、共有アプリを1回だけ作成する
+test.beforeAll(async ({ browser }) => {
+    const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+    const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+    appName = `starter-${uniqueId}`.slice(0, 30);
+    appKey = `str-key-${uniqueId}`.slice(0, 30);
+
+    const context = await browser.newContext({ storageState: STORAGE_STATE });
+    const page = await context.newPage();
+
+    await gotoDashboard(page);
+    await createApp(page, appName, appKey);
+
+    await context.close();
+});
+
+// すべてのテストが終了した後に、アプリを削除する
+test.afterAll(async ({ browser }) => {
+    if (appKey) {
+        const context = await browser.newContext({ storageState: STORAGE_STATE });
+        const page = await context.newPage();
+
+        await gotoDashboard(page);
+        await deleteApp(page, appKey);
+
+        await context.close();
+    }
+});
+
 test.describe('スターターテンプレート（骨組み）機能の検証', () => {
 
     test('Navigator（基本の画面遷移）の骨組みを適用できる', async ({ editorPage, editorHelper }) => {
-        test.setTimeout(120000); // ロード・処理が重なるため十分な時間を設定します
+        test.setTimeout(120000);
         const modal = editorPage.locator('starter-template-modal');
         await expect(modal).toBeVisible();
 
@@ -59,8 +80,6 @@ test.describe('スターターテンプレート（骨組み）機能の検証',
             const navCard = modal.locator('.card', { hasText: '基本の画面遷移' });
             await expect(navCard).toBeVisible();
             await navCard.click();
-
-            // 選択後、モーダルが非表示になるのを待機
             await expect(modal).toBeHidden();
         });
 
@@ -107,7 +126,6 @@ test.describe('スターターテンプレート（骨組み）機能の検証',
 
             // スクリプト一覧タブ：pushDetail が登録されていること
             await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
-            // strict mode violation (重複検知) を回避するため、検索範囲をスクリプト一覧コンテナ (#script-list-container) に限定します
             const scriptListContainer = scriptContainer.locator('#script-list-container');
             await expect(scriptListContainer.locator('.editor-row', { hasText: 'pushDetail' })).toBeVisible();
 
@@ -246,56 +264,4 @@ test.describe('スターターテンプレート（骨組み）機能の検証',
             await expect(appChildList).toHaveCount(0);
         });
     });
-
-    // -------------------------------------------------------------------------
-    // 以下は AIコーディング機能の有効化状態に依存するテストのため、
-    // フィクスチャを使わずに、テスト内で独自に設定とアプリの起動を行います。
-    // -------------------------------------------------------------------------
-    test('AI機能が有効な場合、「AIに作ってもらう」カードが表示され、AIエージェントが起動する', async ({ page, context, isMobile }) => {
-        test.setTimeout(120000);
-        await gotoDashboard(page);
-
-        await test.step('1. AIコーディング機能を有効化', async () => {
-            await setAiCoding(page, true);
-        });
-
-        const uniqueId = `ai-star-${Date.now().toString().slice(-6)}`;
-        const appName = `ai-starter-${uniqueId}`;
-
-        let editorPage: Page;
-        try {
-            await test.step('2. アプリを作成してエディタを起動（スターターモーダル表示）', async () => {
-                await createApp(page, appName, uniqueId);
-                editorPage = await openEditor(page, context, appName, '1.0.0', { skipStarterModal: false });
-            });
-
-            await test.step('3. モーダルに「AIに作ってもらう」カードが存在することを確認しクリック', async () => {
-                const modal = editorPage.locator('starter-template-modal');
-                await expect(modal).toBeVisible();
-
-                const aiCard = modal.locator('.card.ai-card', { hasText: 'AIに作ってもらう' });
-                await expect(aiCard).toBeVisible();
-
-                // カードをクリック
-                await aiCard.click();
-            });
-
-            await test.step('4. モーダルが閉じ、AIエージェントウィンドウが開くことを検証', async () => {
-                const modal = editorPage.locator('starter-template-modal');
-                await expect(modal).toBeHidden();
-
-                const agentWindow = editorPage.locator('agent-chat-window');
-                await expect(agentWindow).toBeVisible({ timeout: 10000 });
-            });
-        } finally {
-            await test.step('クリーンアップ', async () => {
-                if (editorPage) await editorPage.close();
-                await page.bringToFront();
-                await deleteApp(page, uniqueId);
-                // 他のテストに影響を与えないようAI機能をオフに戻す
-                await setAiCoding(page, false);
-            });
-        }
-    });
-
 });

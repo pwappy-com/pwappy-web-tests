@@ -2,38 +2,67 @@ import { test as base, expect, Page } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
+import { STORAGE_STATE } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
+let appName: string;
+let appKey: string;
+
 type EditorFixtures = {
     editorPage: Page;
-    appName: string;
     editorHelper: EditorHelper;
 };
 
 const test = base.extend<EditorFixtures>({
-    appName: async ({ }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        await use(`test-auto-${uniqueId}`.slice(0, 30));
-    },
-    editorPage: async ({ page, context, appName }, use) => {
+    editorPage: async ({ page, context }, use) => {
         await gotoDashboard(page);
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
-        const appKey = `test-auto-key-${Date.now().toString().slice(-6)}`;
-        await createApp(page, appName, appKey);
+        // 作成済みの共有アプリ詳細画面へ移動
+        const appRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) }).first();
+        await expect(appRow).toBeVisible({ timeout: 15000 });
+        await appRow.click({ force: true });
+        await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
+
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
         await editorPage.close();
-        await page.bringToFront();
-        await deleteApp(page, appKey);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
         await use(helper);
     },
+});
+
+// テスト全体の開始前に、アプリを1回だけ作成する
+test.beforeAll(async ({ browser }) => {
+    const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+    const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+    appName = `test-auto-${uniqueId}`.slice(0, 30);
+    appKey = `test-auto-key-${uniqueId}`.slice(0, 30);
+
+    // 認証済みの状態を引き継ぐためのコンテキストを作成（STORAGE_STATE定数を使用）
+    const context = await browser.newContext({ storageState: STORAGE_STATE });
+    const page = await context.newPage();
+
+    await gotoDashboard(page);
+    await createApp(page, appName, appKey);
+
+    await context.close();
+});
+
+// すべてのテストが終了した後に、アプリを1回だけ削除する
+test.afterAll(async ({ browser }) => {
+    if (appKey) {
+        const context = await browser.newContext({ storageState: STORAGE_STATE });
+        const page = await context.newPage();
+
+        await gotoDashboard(page);
+        await deleteApp(page, appKey);
+
+        await context.close();
+    }
 });
 
 test.describe('エディタ内：テスト自動化（テストシナリオとAPIモック）の検証', () => {
@@ -118,34 +147,32 @@ test.describe('エディタ内：テスト自動化（テストシナリオとAP
 
         await test.step('1. APIモックタブへ切り替え', async () => {
             await testContainer.locator('.tab', { hasText: 'APIモック' }).click();
-            // モバイル対応: クラスセレクタで存在確認
+            // モバイル対応: クラスセレクタでの要素存在確認
             await expect(testContainer.locator('.add-btn')).toBeVisible();
         });
 
-        await test.step('2. モックの追加', async () => {
-            // モバイル対応: クラスセレクタでクリック
+        await test.step('2. APIモックの追加', async () => {
             await testContainer.locator('.add-btn').click();
 
             const modal = testContainer.locator('.modal-dialog');
             await expect(modal).toBeVisible();
 
-            const mockPathInput = modal.locator('#mock-path');
-            const mockPatternInput = modal.locator('#mock-pattern');
-            const mockResponseInput = modal.locator('#mock-response');
-            await expect(mockPathInput).toBeEditable();
-            await expect(mockPatternInput).toBeEditable();
-            await expect(mockResponseInput).toBeEditable();
-            await mockPathInput.fill(mockPath);
-            await mockPatternInput.fill(mockName);
-            await mockResponseInput.fill('{ "status": "ok" }');
+            const pathInput = modal.locator('#mock-path');
+            const patternInput = modal.locator('#mock-pattern');
+            const responseInput = modal.locator('#mock-response');
+            await expect(pathInput).toBeEditable();
+            await expect(patternInput).toBeEditable();
+            await expect(responseInput).toBeEditable();
+
+            await pathInput.fill(mockPath);
+            await patternInput.fill(mockName);
+            await responseInput.fill(JSON.stringify({ status: 'success', data: [] }));
 
             await modal.getByRole('button', { name: '設定を保存' }).click();
             await expect(modal).toBeHidden();
 
-            // 一覧に追加されたか確認
-            const mockGroup = testContainer.locator('.mock-group', { hasText: mockPath });
-            await expect(mockGroup).toBeVisible();
-            await expect(mockGroup.locator('.mock-item', { hasText: mockName })).toBeVisible();
+            const mockItem = testContainer.locator('.mock-item', { hasText: mockName });
+            await expect(mockItem).toBeVisible();
         });
 
         await test.step('3. モックのON/OFFトグル', async () => {
@@ -163,14 +190,13 @@ test.describe('エディタ内：テスト自動化（テストシナリオとAP
             await expect(toggleInput).toBeChecked();
         });
 
-        await test.step('4. モックの削除', async () => {
+        await test.step('4. APIモックの削除', async () => {
             const mockItem = testContainer.locator('.mock-item', { hasText: mockName });
-
             // 削除アイコンをクリックし、確認ダイアログをOKする
             editorPage.once('dialog', dialog => dialog.accept());
             await mockItem.locator('.action-icon.delete').click();
 
-            await expect(testContainer.locator('.mock-group', { hasText: mockPath })).toBeHidden();
+            await expect(mockItem).toBeHidden();
         });
     });
 });

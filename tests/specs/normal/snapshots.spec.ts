@@ -2,6 +2,7 @@ import { test as base, expect, Page, Locator } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
+import { STORAGE_STATE } from '../../constants';
 
 /**
  * テスト実行ごとに一意の識別子を生成するための定数。
@@ -9,42 +10,67 @@ import { EditorHelper } from '../../tools/editor-helpers';
  */
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
+let appName: string;
+let appKey: string;
+
 /**
  * Playwrightのテストフィクスチャを拡張し、各テストで独立したアプリケーション名と
  * エディタ操作ヘルパーを提供します。
  */
 type EditorFixtures = {
     editorPage: Page;
-    appName: string;
     editorHelper: EditorHelper;
 };
 
 const test = base.extend<EditorFixtures>({
-    appName: async ({ }, use) => {
-        // 時刻を逆順にした文字列とサフィックスを組み合わせ、重複しにくいアプリ名を作成
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        await use(`snap-test-app-${uniqueId}`.slice(0, 30));
-    },
-    editorPage: async ({ page, context, appName }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        const appKey = `snap-key-${uniqueId}`.slice(0, 30);
+    editorPage: async ({ page, context }, use) => {
+        await gotoDashboard(page);
+        await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
-        await createApp(page, appName, appKey);
+        // 作成済みの共有アプリ詳細画面へ移動
+        const appRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) }).first();
+        await expect(appRow).toBeVisible({ timeout: 15000 });
+        await appRow.click({ force: true });
+        await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
+
         const editorPage = await openEditor(page, context, appName);
-
         await use(editorPage);
-
         await editorPage.close();
-        await deleteApp(page, appKey);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
         await use(helper);
     },
+});
+
+// テスト全体の開始前に、アプリを1回だけ作成する
+test.beforeAll(async ({ browser }) => {
+    const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+    const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+    appName = `snap-test-app-${uniqueId}`.slice(0, 30);
+    appKey = `snap-key-${uniqueId}`.slice(0, 30);
+
+    // 認証済みの状態を引き継ぐためのコンテキストを作成（STORAGE_STATE定数を使用）
+    const context = await browser.newContext({ storageState: STORAGE_STATE });
+    const page = await context.newPage();
+
+    await gotoDashboard(page);
+    await createApp(page, appName, appKey);
+
+    await context.close();
+});
+
+// すべてのテストが終了した後に、アプリを1回だけ削除する
+test.afterAll(async ({ browser }) => {
+    if (appKey) {
+        const context = await browser.newContext({ storageState: STORAGE_STATE });
+        const page = await context.newPage();
+
+        await gotoDashboard(page);
+        await deleteApp(page, appKey);
+
+        await context.close();
+    }
 });
 
 /**
@@ -64,17 +90,9 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
     });
 
     /**
-     * 各テスト実行後の共通処理。
-     */
-    test.afterEach(async ({ page }) => {
-
-    });
-
-    /**
      * 手動でのスナップショット作成、変更、および復元フローを検証します。
-     * （旧 snapshots.spec.ts より）
      */
-    test('スナップショットの作成と復元ができる', async ({ editorPage, isMobile, appName, editorHelper }) => {
+    test('スナップショットの作成と復元ができる', async ({ editorPage, isMobile, editorHelper }) => {
         const uniqueSnapshotName = `test-snapshot-${Date.now()}`;
 
         // 手動保存・復元のフロー
