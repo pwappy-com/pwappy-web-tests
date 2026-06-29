@@ -1574,4 +1574,86 @@ test.describe('エディタ内機能のテスト', () => {
             await expect(bgImageInput).toHaveValue('');
         });
     });
+
+    test('属性(style-background)のグラデーション設定時の要素切り替えによるアコーディオン展開状態の同期検証', async ({ editorPage, editorHelper }) => {
+        let buttonId: string;
+        let contentNodeId: string;
+
+        const propertyContainer = editorHelper.getPropertyContainer();
+
+        await test.step('セットアップ: ページとボタンを追加し、各ノードのIDを取得する', async () => {
+            await editorHelper.addPage();
+            const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
+            const contentNode = editorPage.locator(contentAreaSelector);
+
+            // 切り替え対象となるコンテンツエリア（親ノード）のIDを取得
+            contentNodeId = await contentNode.getAttribute('data-node-id') as string;
+
+            // グラデーションを設定するボタンノードを追加してIDを取得
+            const buttonNode = await editorHelper.addComponent('ons-button', contentAreaSelector);
+            buttonId = await buttonNode.getAttribute('data-node-id') as string;
+        });
+
+        await test.step('1. ボタンを選択し、グラデーションを有効にする', async () => {
+            // ボタンを選択
+            await editorHelper.selectNodeByAttribute('data-node-id', buttonId);
+
+            // モバイル用に右パネルを展開し、属性タブへ移動
+            await editorHelper.openMoveingHandle('right');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+
+            const targetInputPanel = editorHelper.getPropertyInput('style-background');
+            await expect(targetInputPanel).toBeVisible();
+
+            // 「グラデーションを使用する」チェックボックスをONにする
+            const gradientCheckbox = targetInputPanel.locator('.accordion-header input[type="checkbox"]');
+            await expect(gradientCheckbox).toBeVisible();
+            await gradientCheckbox.check();
+
+            // アコーディオンのコンテンツエリアが展開表示（expandedクラスを保持）されていることを確認
+            const accordionContent = targetInputPanel.locator('.accordion-content');
+            await expect(accordionContent).toHaveClass(/expanded/);
+        });
+
+        await test.step('2. コンテンツエリア（非グラデーション要素）に選択を切り替える', async () => {
+            // 親のコンテンツエリアに選択を切り替え
+            await editorHelper.selectNodeByAttribute('data-node-id', contentNodeId);
+
+            // 要素切り替えによって閉じられた右パネルをモバイル環境向けに再展開
+            await editorHelper.openMoveingHandle('right');
+
+            const targetInputPanel = editorHelper.getPropertyInput('style-background');
+            await expect(targetInputPanel).toBeVisible();
+
+            // Litの再描画ラグを考慮し、チェックが外れ、アコーディオンが閉じていることをポーリング待機して検証
+            await expect(async () => {
+                const gradientCheckbox = targetInputPanel.locator('.accordion-header input[type="checkbox"]');
+                await expect(gradientCheckbox).not.toBeChecked();
+
+                const accordionContent = targetInputPanel.locator('.accordion-content');
+                await expect(accordionContent).not.toHaveClass(/expanded/);
+            }).toPass({ timeout: 5000, intervals: [500] });
+        });
+
+        await test.step('3. 再びボタンを選択し、グラデーションセクションが自動で展開されることを確認', async () => {
+            // 左パネルを開いて、再度グラデーション設定済みのボタンを選択
+            await editorHelper.openMoveingHandle('left');
+            await editorHelper.selectNodeByAttribute('data-node-id', buttonId);
+
+            // 右パネルを展開
+            await editorHelper.openMoveingHandle('right');
+
+            const targetInputPanel = editorHelper.getPropertyInput('style-background');
+            await expect(targetInputPanel).toBeVisible();
+
+            // 【不具合修正の検証】再びアコーディオンが自動で展開状態に戻っていることを検証
+            await expect(async () => {
+                const gradientCheckbox = targetInputPanel.locator('.accordion-header input[type="checkbox"]');
+                await expect(gradientCheckbox).toBeChecked();
+
+                const accordionContent = targetInputPanel.locator('.accordion-content');
+                await expect(accordionContent).toHaveClass(/expanded/);
+            }).toPass({ timeout: 5000, intervals: [500] });
+        });
+    });
 });
