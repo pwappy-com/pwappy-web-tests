@@ -45,8 +45,8 @@ const test = base.extend<EditorFixtures>({
 });
 
 /**
-    * 指定した入力欄をマウスでドラッグするヘルパー関数
-    */
+ * 指定した入力欄をマウスでドラッグするヘルパー関数
+ */
 async function dragInput(editorPage: Page, inputLocator: Locator, deltaX: number, deltaY: number, shiftKey: boolean = false) {
     const box = await inputLocator.boundingBox();
     if (!box) throw new Error('Input bounding box not found');
@@ -54,13 +54,26 @@ async function dragInput(editorPage: Page, inputLocator: Locator, deltaX: number
     const startX = box.x + box.width / 2;
     const startY = box.y + box.height / 2;
 
+    // 製品の新仕様（フォーカス時のみドラッグを受け付ける）に合わせ、事前にクリックしてフォーカスを取得
+    await inputLocator.click();
+    await editorPage.waitForTimeout(100);
+
     await editorPage.mouse.move(startX, startY);
 
     if (shiftKey) await editorPage.keyboard.down('Shift');
     await editorPage.mouse.down();
 
-    // スマートドラッグの閾値判定を通過させつつ、なめらかに移動する
-    await editorPage.mouse.move(startX + deltaX, startY + deltaY, { steps: 10 });
+    // 新仕様に沿ってドラッグ方向を調整
+    // Y軸（縦）方向のみの入力だった場合は、縦スワイプによるキャンセルを避けるため自動的にX軸（横）方向の動きに補正します
+    let finalDeltaX = deltaX;
+    let finalDeltaY = deltaY;
+    if (deltaX === 0 && deltaY !== 0) {
+        finalDeltaX = -deltaY; // 上方向へのスライド（deltaY < 0）を右スライド（finalDeltaX > 0）に変換
+        finalDeltaY = 0;
+    }
+
+    // 遊び（10px）の閾値判定を通過させつつ、なめらかに移動する
+    await editorPage.mouse.move(startX + finalDeltaX, startY + finalDeltaY, { steps: 10 });
     await editorPage.mouse.up();
     if (shiftKey) await editorPage.keyboard.up('Shift');
 }
@@ -1514,14 +1527,14 @@ test.describe('エディタ内機能のテスト', () => {
 
         await test.step('3. バッジの初期表示とツールチップの検証', async () => {
             await expect(dragBadge).toBeVisible();
-            await expect(dragBadge).toHaveAttribute('title', '上下スワイプで微調整できます');
+            await expect(dragBadge).toHaveAttribute('title', '左右スワイプで微調整できます');
 
             // ポーリングを挟んで確実に初期値が 50% に更新されるのを待つ
             await expect(dragBadge).toHaveText(/50%/, { timeout: 5000 });
         });
 
         await test.step('4. マウスの上方向ドラッグで不透明度が増加すること', async () => {
-            // 要素に対して直接マウスイベントを連続送信（上方向へ 60px 移動 = +40%）
+            // 右方向へ 60px スライド移動 (startX + 60)
             await dragBadge.evaluate((badgeEl) => {
                 const rect = badgeEl.getBoundingClientRect();
                 const startX = rect.left + rect.width / 2;
@@ -1529,18 +1542,16 @@ test.describe('エディタ内機能のテスト', () => {
 
                 // mousedown
                 badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
-                // mousemove
-                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 60 }));
+                // mousemove (左右方向スライドへ統合されたため、clientX を変化させる)
+                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX + 60, clientY: startY }));
                 // mouseup
-                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 60 }));
+                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX + 60, clientY: startY }));
             });
 
-            // LitのDOM再描画と同期するまでポーリング（toPass）で検証
             await expect(async () => {
                 const text = await dragBadge.innerText();
                 const val = parseInt(text.replace('%', ''), 10);
 
-                // 初期値 50% から確実に増えており、かつ100%未満（理論値：90%）であることを確認
                 expect(val).toBeGreaterThan(50);
                 expect(val).toBeLessThan(100);
             }).toPass({ timeout: 5000, intervals: [100, 200] });
@@ -1555,63 +1566,64 @@ test.describe('エディタ内機能のテスト', () => {
             // 次の検証のために 50% にリセット
             await targetInputPanel.evaluate((el) => {
                 el.dispatchEvent(new CustomEvent('change', {
-                    detail: { boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.5)', textShadow: '' }
+                    detail: {
+                        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.5)',
+                        textShadow: ''
+                    }
                 }));
             });
             await expect(dragBadge).toHaveText(/50%/, { timeout: 5000 });
         });
 
-        await test.step('5. Shiftキー押下時の加速効果の検証', async () => {
-            // Shiftキーを有効にしたMouseEventを送信（上へ 30px 移動、3倍加速で +60% となりカンスト付近になる）
+        await test.step('5. Shiftキー併用時の加速効果の検証', async () => {
+            // 右方向へ 30px スライド移動 (startX + 30)
             await dragBadge.evaluate((badgeEl) => {
                 const rect = badgeEl.getBoundingClientRect();
                 const startX = rect.left + rect.width / 2;
                 const startY = rect.top + rect.height / 2;
 
                 badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
-                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 30, shiftKey: true }));
-                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 30, shiftKey: true }));
+                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX + 30, clientY: startY, shiftKey: true }));
+                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX + 30, clientY: startY, shiftKey: true }));
             });
 
             await expect(async () => {
                 const text = await dragBadge.innerText();
                 const valWithShift = parseInt(text.replace('%', ''), 10);
 
-                // 通常時よりも大幅に不透明度が上がっていることを検証
                 expect(valWithShift).toBeGreaterThan(75);
             }).toPass({ timeout: 5000, intervals: [100, 200] });
         });
 
         await test.step('6. 0%未満、100%超への境界値（クランプ）処理の検証', async () => {
-            // 上方向へ過剰にドラッグ（300px上へ移動） -> 100% で制限されること
+            // 右方向へ過剰にドラッグ (startX + 300) -> 100% でクランプされること
             await dragBadge.evaluate((badgeEl) => {
                 const rect = badgeEl.getBoundingClientRect();
                 const startX = rect.left + rect.width / 2;
                 const startY = rect.top + rect.height / 2;
 
                 badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
-                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 300 }));
-                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 300 }));
+                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX + 300, clientY: startY }));
+                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX + 300, clientY: startY }));
             });
             await expect(async () => {
                 await expect(dragBadge).toHaveText(/100%/);
             }).toPass({ timeout: 5000 });
 
-            // 下方向へ過剰にドラッグ（300px下へ移動） -> 0% で制限されること
+            // 左方向へ過剰にドラッグ (startX - 300) -> 0% でクランプされること
             await dragBadge.evaluate((badgeEl) => {
                 const rect = badgeEl.getBoundingClientRect();
                 const startX = rect.left + rect.width / 2;
                 const startY = rect.top + rect.height / 2;
 
                 badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
-                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX, clientY: startY + 300 }));
-                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX, clientY: startY + 300 }));
+                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX - 300, clientY: startY }));
+                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX - 300, clientY: startY }));
             });
             await expect(async () => {
                 await expect(dragBadge).toHaveText(/0%/);
             }).toPass({ timeout: 5000 });
 
-            // ドラッグ終了後のクラス解除も再確認
             await expect(dragBadge).not.toHaveClass(/dragging/);
         });
     });
@@ -1927,8 +1939,8 @@ test.describe('エディタ内機能のテスト', () => {
             await fontSizeInput.fill('15px');
             await fontSizeInput.blur();
 
-            // 横方向に50px、縦方向に4pxの移動（縦の移動量が5px未満、かつ横移動の方が大きい）
-            await dragInput(editorPage, fontSizeInput, 50, 4, false);
+            // 新仕様：横方向（X軸）に 5px の微小な移動（遊び 10px 未満のためドラッグが開始されず値が変化しない）
+            await dragInput(editorPage, fontSizeInput, 5, 0, false);
 
             // ドラッグ操作として判定されず、値が変化しないことを検証
             await expect(fontSizeInput).toHaveValue('15px');
@@ -1956,12 +1968,15 @@ test.describe('エディタ内機能のテスト', () => {
 
             // evaluate を介してタッチジェスチャーのイベントシーケンスを直接ディスパッチ
             await fontSizeInput.evaluate((el: HTMLInputElement) => {
+                // タッチ開始前に、対象の要素に確実にフォーカスを当てる
+                el.focus();
+
                 const touchStart = new Event('touchstart', { bubbles: true, cancelable: true });
                 Object.defineProperty(touchStart, 'touches', { value: [{ clientX: 100, clientY: 200 }] });
                 el.dispatchEvent(touchStart);
 
                 const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
-                // 右方向へ50pxドラッグをシミュレート（clientXを 100 から 150 に増やす）
+                // clientXを 100 から 150 に増やす（右方向への横スライドによるインクリメント）
                 Object.defineProperty(touchMove, 'touches', { value: [{ clientX: 150, clientY: 200 }] });
                 window.dispatchEvent(touchMove);
 
@@ -2198,8 +2213,15 @@ test.describe('エディタ内機能のテスト', () => {
                 await radiusInput.fill('10px');
                 await radiusInput.blur();
 
-                // 右方向へ50pxスライドさせて値を増やす（座標は自動計算）
+                // 安定化待機をしてからクリックしてフォーカス
+                await editorPage.waitForTimeout(300);
+                await radiusInput.click({ force: true });
+                await editorPage.waitForTimeout(200);
+
+                // 右方向へ50pxスライドさせて値を増やす
                 await radiusInput.evaluate((el: HTMLInputElement) => {
+                    el.focus(); // 内部でも重ねてフォーカスを確定
+
                     const rect = el.getBoundingClientRect();
                     const startX = rect.left + rect.width / 2;
                     const startY = rect.top + rect.height / 2;
@@ -2219,11 +2241,18 @@ test.describe('エディタ内機能のテスト', () => {
                 const rVal = parseInt(await radiusInput.inputValue(), 10);
                 expect(rVal).toBeGreaterThan(10);
 
-                // 太さも同様に右方向へスライドして増やす（座標は自動計算）
+                // 太さも同様に右方向へスライドして増やす
                 await widthInput.fill('2px');
                 await widthInput.blur();
 
+                // DOM状態とスクロールが落ち着くまで 300ms 待機し、確実にフォーカスを確定
+                await editorPage.waitForTimeout(300);
+                await widthInput.click({ force: true });
+                await editorPage.waitForTimeout(200);
+
                 await widthInput.evaluate((el: HTMLInputElement) => {
+                    el.focus(); // 内部でも重ねてフォーカスを確定
+
                     const rect = el.getBoundingClientRect();
                     const startX = rect.left + rect.width / 2;
                     const startY = rect.top + rect.height / 2;
@@ -2339,8 +2368,15 @@ test.describe('エディタ内機能のテスト', () => {
                 await widthInput.fill('100px');
                 await widthInput.blur();
 
-                // 右方向へ50pxスライド（座標は自動計算）
+                // 1. スクロールとDOMを落ち着かせてから確実にフォーカス
+                await editorPage.waitForTimeout(300);
+                await widthInput.click({ force: true });
+                await editorPage.waitForTimeout(200);
+
+                // 右方向へ50pxスライド
                 await widthInput.evaluate((el: HTMLInputElement) => {
+                    el.focus(); // 重ねてフォーカスを確定
+
                     const rect = el.getBoundingClientRect();
                     const startX = rect.left + rect.width / 2;
                     const startY = rect.top + rect.height / 2;
@@ -2364,8 +2400,15 @@ test.describe('エディタ内機能のテスト', () => {
                 await heightInput.fill('50px');
                 await heightInput.blur();
 
-                // 高さを右スライドで増やす（座標は自動計算）
+                // 2. 幅操作の描画更新が落ち着くまで 300ms 待機し、確実にフォーカス
+                await editorPage.waitForTimeout(300);
+                await heightInput.click({ force: true });
+                await editorPage.waitForTimeout(200);
+
+                // 高さを右スライド
                 await heightInput.evaluate((el: HTMLInputElement) => {
+                    el.focus(); // 重ねてフォーカスを確定
+
                     const rect = el.getBoundingClientRect();
                     const startX = rect.left + rect.width / 2;
                     const startY = rect.top + rect.height / 2;
