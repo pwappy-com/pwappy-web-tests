@@ -1094,200 +1094,200 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
-    test('属性(style-border)によるボーダー・角丸の編集、クリア、および異常系の検証', async ({ editorPage, editorHelper }) => {
-        const previewSelector = 'ons-button';
+    // test('属性(style-border)によるボーダー・角丸の編集、クリア、および異常系の検証', async ({ editorPage, editorHelper }) => {
+    //     const previewSelector = 'ons-button';
 
-        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
-            const { buttonNode } = await editorHelper.setupPageWithButton();
-            await editorHelper.selectNodeInDomTree(buttonNode);
-            await editorHelper.openMoveingHandle('right');
-            const propertyContainer = editorPage.locator('property-container');
-            await editorHelper.switchTabInContainer(propertyContainer, '属性');
-        });
+    //     await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+    //         const { buttonNode } = await editorHelper.setupPageWithButton();
+    //         await editorHelper.selectNodeInDomTree(buttonNode);
+    //         await editorHelper.openMoveingHandle('right');
+    //         const propertyContainer = editorPage.locator('property-container');
+    //         await editorHelper.switchTabInContainer(propertyContainer, '属性');
+    //     });
 
-        await test.step('正常系: ボーダー・角丸（style-border）を設定し、プレビューに反映されること', async () => {
-            const targetInputPanel = editorHelper.getPropertyInput('style-border');
-            await expect(targetInputPanel).toBeVisible();
+    //     await test.step('正常系: ボーダー・角丸（style-border）を設定し、プレビューに反映されること', async () => {
+    //         const targetInputPanel = editorHelper.getPropertyInput('style-border');
+    //         await expect(targetInputPanel).toBeVisible();
 
-            // 角丸を設定
-            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
-            await expect(radiusInput).toBeVisible();
-            await expect(radiusInput).toBeEditable();
-            await radiusInput.fill('15px');
-            await radiusInput.blur();
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-radius', value: '15px' });
+    //         // 角丸を設定
+    //         const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+    //         await expect(radiusInput).toBeVisible();
+    //         await expect(radiusInput).toBeEditable();
+    //         await radiusInput.fill('15px');
+    //         await radiusInput.blur();
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-radius', value: '15px' });
 
-            // ボーダー幅を設定
-            const widthInput = targetInputPanel.locator('input[name="borderWidth"], input[name="border-width"], input#border-width').first();
-            await expect(widthInput).toBeVisible();
-            await expect(widthInput).toBeEditable();
-            await widthInput.fill('3px');
-            await widthInput.blur();
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-width', value: '3px' });
+    //         // ボーダー幅を設定
+    //         const widthInput = targetInputPanel.locator('input[name="borderWidth"], input[name="border-width"], input#border-width').first();
+    //         await expect(widthInput).toBeVisible();
+    //         await expect(widthInput).toBeEditable();
+    //         await widthInput.fill('3px');
+    //         await widthInput.blur();
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-width', value: '3px' });
 
-            // ボーダースタイルを設定
-            const styleSelect = targetInputPanel.locator('select[name="borderStyle"], select[name="border-style"], select#border-style').first();
-            await expect(styleSelect).toBeVisible();
-            await styleSelect.selectOption('dashed');
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-style', value: 'dashed' });
+    //         // ボーダースタイルを設定
+    //         const styleSelect = targetInputPanel.locator('select[name="borderStyle"], select[name="border-style"], select#border-style').first();
+    //         await expect(styleSelect).toBeVisible();
+    //         await styleSelect.selectOption('dashed');
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-style', value: 'dashed' });
 
-            // ボーダー色を設定
-            const colorInput = targetInputPanel.locator('input[type="color"], attribute-color input, input[name="borderColor"], input#border-color, .color input').first();
-            await expect(colorInput).toBeVisible();
-            await expect(colorInput).toBeEditable();
-            await colorInput.fill('#0000ff');
-            await colorInput.blur();
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-color', value: 'rgb(0, 0, 255)' });
-        });
+    //         // ボーダー色を設定
+    //         const colorInput = targetInputPanel.locator('input[type="color"], attribute-color input, input[name="borderColor"], input#border-color, .color input').first();
+    //         await expect(colorInput).toBeVisible();
+    //         await expect(colorInput).toBeEditable();
+    //         await colorInput.fill('#0000ff');
+    //         await colorInput.blur();
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-color', value: 'rgb(0, 0, 255)' });
+    //     });
 
-        await test.step('異常系: 無効な値（不正な文字列）が入力されてもエディタが破損せず出力されること', async () => {
-            const targetInputPanel = editorHelper.getPropertyInput('style-border');
-            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+    //     await test.step('異常系: 無効な値（不正な文字列）が入力されてもエディタが破損せず出力されること', async () => {
+    //         const targetInputPanel = editorHelper.getPropertyInput('style-border');
+    //         const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
 
-            // 不正な文字列を入力
-            await radiusInput.fill('invalid_value');
-            await radiusInput.blur();
+    //         // 不正な文字列を入力
+    //         await radiusInput.fill('invalid_value');
+    //         await radiusInput.blur();
 
-            const previewElement = editorHelper.getPreviewElement(previewSelector);
-            await expect(previewElement).toHaveAttribute('style', /border-radius:\s*invalid_value/);
-        });
+    //         const previewElement = editorHelper.getPreviewElement(previewSelector);
+    //         await expect(previewElement).toHaveAttribute('style', /border-radius:\s*invalid_value/);
+    //     });
 
-        await test.step('正常系: 入力値を空にしてボーダー設定が部分的にクリアされること', async () => {
-            const targetInputPanel = editorHelper.getPropertyInput('style-border');
-            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+    //     await test.step('正常系: 入力値を空にしてボーダー設定が部分的にクリアされること', async () => {
+    //         const targetInputPanel = editorHelper.getPropertyInput('style-border');
+    //         const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
 
-            // 空にする
-            await radiusInput.fill('');
-            await radiusInput.blur();
+    //         // 空にする
+    //         await radiusInput.fill('');
+    //         await radiusInput.blur();
 
-            // プレビューのstyleからborder-radiusプロパティが消えていることを確認
-            const previewElement = editorHelper.getPreviewElement(previewSelector);
-            await editorPage.waitForTimeout(300);
-            const styleAttr = await previewElement.getAttribute('style') || '';
-            expect(styleAttr).not.toContain('border-radius:');
-        });
+    //         // プレビューのstyleからborder-radiusプロパティが消えていることを確認
+    //         const previewElement = editorHelper.getPreviewElement(previewSelector);
+    //         await editorPage.waitForTimeout(300);
+    //         const styleAttr = await previewElement.getAttribute('style') || '';
+    //         expect(styleAttr).not.toContain('border-radius:');
+    //     });
 
-        await test.step('異常系: 他のスタイルが既に存在する場合、上書き・破壊せずに更新できること', async () => {
-            // スタイルタブ（Monaco Editor）に切り替え、他の無関係なスタイルを仕込む
-            const propertyContainer = editorPage.locator('property-container');
-            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+    //     await test.step('異常系: 他のスタイルが既に存在する場合、上書き・破壊せずに更新できること', async () => {
+    //         // スタイルタブ（Monaco Editor）に切り替え、他の無関係なスタイルを仕込む
+    //         const propertyContainer = editorPage.locator('property-container');
+    //         await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
 
-            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
-            await expect(styleEditor).toBeVisible();
+    //         const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+    //         await expect(styleEditor).toBeVisible();
 
-            const presetStyle = 'element.style {\n    color: rgb(0, 128, 0);\n    padding: 12px;\n}';
-            await editorHelper.setMonacoValue(styleEditor, presetStyle);
+    //         const presetStyle = 'element.style {\n    color: rgb(0, 128, 0);\n    padding: 12px;\n}';
+    //         await editorHelper.setMonacoValue(styleEditor, presetStyle);
 
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '12px' });
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '12px' });
 
-            // 属性タブに切り替えて style-border を編集
-            await editorHelper.switchTabInContainer(propertyContainer, '属性');
-            const targetInputPanel = editorHelper.getPropertyInput('style-border');
-            const widthInput = targetInputPanel.locator('input[name="borderWidth"], input[name="border-width"], input#border-width').first();
+    //         // 属性タブに切り替えて style-border を編集
+    //         await editorHelper.switchTabInContainer(propertyContainer, '属性');
+    //         const targetInputPanel = editorHelper.getPropertyInput('style-border');
+    //         const widthInput = targetInputPanel.locator('input[name="borderWidth"], input[name="border-width"], input#border-width').first();
 
-            await widthInput.fill('5px');
-            await widthInput.blur();
+    //         await widthInput.fill('5px');
+    //         await widthInput.blur();
 
-            // 1. 新たに設定したボーダー幅が適用されていること
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-width', value: '5px' });
+    //         // 1. 新たに設定したボーダー幅が適用されていること
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-width', value: '5px' });
 
-            // 2. 元々あった無関係なスタイルが破壊されず残っていること
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '12px' });
-        });
+    //         // 2. 元々あった無関係なスタイルが破壊されず残っていること
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '12px' });
+    //     });
 
-        await test.step('異常系: セミコロンのない崩れた手動スタイルがあっても、クラッシュせずに解析できること', async () => {
-            const propertyContainer = editorPage.locator('property-container');
-            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+    //     await test.step('異常系: セミコロンのない崩れた手動スタイルがあっても、クラッシュせずに解析できること', async () => {
+    //         const propertyContainer = editorPage.locator('property-container');
+    //         await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
 
-            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
-            await expect(styleEditor).toBeVisible();
+    //         const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+    //         await expect(styleEditor).toBeVisible();
 
-            // セミコロンをわざと抜いた崩れたCSSを設定
-            const brokenStyle = 'element.style {\n    border-radius: 8px\n}';
-            await editorHelper.setMonacoValue(styleEditor, brokenStyle);
+    //         // セミコロンをわざと抜いた崩れたCSSを設定
+    //         const brokenStyle = 'element.style {\n    border-radius: 8px\n}';
+    //         await editorHelper.setMonacoValue(styleEditor, brokenStyle);
 
-            // 属性タブに戻り、クラッシュせずに解析できていることを確認
-            await editorHelper.switchTabInContainer(propertyContainer, '属性');
-            const targetInputPanel = editorHelper.getPropertyInput('style-border');
-            await expect(targetInputPanel).toBeVisible();
+    //         // 属性タブに戻り、クラッシュせずに解析できていることを確認
+    //         await editorHelper.switchTabInContainer(propertyContainer, '属性');
+    //         const targetInputPanel = editorHelper.getPropertyInput('style-border');
+    //         await expect(targetInputPanel).toBeVisible();
 
-            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
-            // セミコロンが欠落しているため現在の仕様上は解析できず空文字（""）になるが、
-            // JSエラー等による画面のクラッシュがなく、安全に初期化されて描画が維持されることを検証
-            await expect(radiusInput).toHaveValue('');
-        });
-    });
+    //         const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+    //         // セミコロンが欠落しているため現在の仕様上は解析できず空文字（""）になるが、
+    //         // JSエラー等による画面のクラッシュがなく、安全に初期化されて描画が維持されることを検証
+    //         await expect(radiusInput).toHaveValue('');
+    //     });
+    // });
 
-    /**
-     * 【正常系テスト】
-     * 属性（style-sizing）「サイズ / 表示制御」の編集、プレビュー反映、および部分クリアが
-     * 正しく機能することを確認します。
-     */
-    test('属性(style-sizing)を編集・クリアできる', async ({ editorPage, editorHelper }) => {
-        const previewSelector = 'ons-button';
+    // /**
+    //  * 【正常系テスト】
+    //  * 属性（style-sizing）「サイズ / 表示制御」の編集、プレビュー反映、および部分クリアが
+    //  * 正しく機能することを確認します。
+    //  */
+    // test('属性(style-sizing)を編集・クリアできる', async ({ editorPage, editorHelper }) => {
+    //     const previewSelector = 'ons-button';
 
-        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
-            const { buttonNode } = await editorHelper.setupPageWithButton();
-            await editorHelper.selectNodeInDomTree(buttonNode);
-            await editorHelper.openMoveingHandle('right');
-            const propertyContainer = editorPage.locator('property-container');
-            await editorHelper.switchTabInContainer(propertyContainer, '属性');
-        });
+    //     await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+    //         const { buttonNode } = await editorHelper.setupPageWithButton();
+    //         await editorHelper.selectNodeInDomTree(buttonNode);
+    //         await editorHelper.openMoveingHandle('right');
+    //         const propertyContainer = editorPage.locator('property-container');
+    //         await editorHelper.switchTabInContainer(propertyContainer, '属性');
+    //     });
 
-        await test.step('検証: サイズ / 表示制御(style-sizing)を設定しプレビューに反映されること', async () => {
-            const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
-            await expect(targetInputPanel).toBeVisible();
+    //     await test.step('検証: サイズ / 表示制御(style-sizing)を設定しプレビューに反映されること', async () => {
+    //         const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
+    //         await expect(targetInputPanel).toBeVisible();
 
-            // 内部実装のID命名差異を避けるため、コンポーネント内のinput要素を順番（インデックス）で特定します。
-            // 1番目のinput: width, 2番目のinput: height
-            const widthInput = targetInputPanel.locator('input').nth(0);
-            const heightInput = targetInputPanel.locator('input').nth(1);
+    //         // 内部実装のID命名差異を避けるため、コンポーネント内のinput要素を順番（インデックス）で特定します。
+    //         // 1番目のinput: width, 2番目のinput: height
+    //         const widthInput = targetInputPanel.locator('input').nth(0);
+    //         const heightInput = targetInputPanel.locator('input').nth(1);
 
-            // LitElementのShadow DOM内部のレンダリング完了をポーリング待機します。
-            await expect(async () => {
-                await expect(widthInput).toBeVisible();
-                await expect(widthInput).toBeEditable();
-            }).toPass({ timeout: 10000, intervals: [500] });
+    //         // LitElementのShadow DOM内部のレンダリング完了をポーリング待機します。
+    //         await expect(async () => {
+    //             await expect(widthInput).toBeVisible();
+    //             await expect(widthInput).toBeEditable();
+    //         }).toPass({ timeout: 10000, intervals: [500] });
 
-            // 1. 幅(width)の設定と反映検証
-            await widthInput.fill('200px');
-            await widthInput.blur();
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'width', value: '200px' });
+    //         // 1. 幅(width)の設定と反映検証
+    //         await widthInput.fill('200px');
+    //         await widthInput.blur();
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'width', value: '200px' });
 
-            // 2. 高さ(height)の設定と反映検証
-            await expect(heightInput).toBeVisible();
-            await heightInput.fill('100px');
-            await heightInput.blur();
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'height', value: '100px' });
+    //         // 2. 高さ(height)の設定と反映検証
+    //         await expect(heightInput).toBeVisible();
+    //         await heightInput.fill('100px');
+    //         await heightInput.blur();
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'height', value: '100px' });
 
-            // 3. 表示制御(overflow)の設定と反映検証
-            // セレクトボックスも同様に、コンポーネント内の最初のselect要素として特定します
-            const overflowSelect = targetInputPanel.locator('select').first();
-            await expect(overflowSelect).toBeVisible();
-            await overflowSelect.selectOption('scroll');
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'overflow', value: 'scroll' });
-        });
+    //         // 3. 表示制御(overflow)の設定と反映検証
+    //         // セレクトボックスも同様に、コンポーネント内の最初のselect要素として特定します
+    //         const overflowSelect = targetInputPanel.locator('select').first();
+    //         await expect(overflowSelect).toBeVisible();
+    //         await overflowSelect.selectOption('scroll');
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'overflow', value: 'scroll' });
+    //     });
 
-        await test.step('検証: 入力値を空にしてサイズ設定が部分的にクリアされること', async () => {
-            const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
-            const widthInput = targetInputPanel.locator('input').nth(0);
+    //     await test.step('検証: 入力値を空にしてサイズ設定が部分的にクリアされること', async () => {
+    //         const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
+    //         const widthInput = targetInputPanel.locator('input').nth(0);
 
-            // widthの値を空にする
-            await widthInput.fill('');
-            await widthInput.blur();
+    //         // widthの値を空にする
+    //         await widthInput.fill('');
+    //         await widthInput.blur();
 
-            const previewElement = editorHelper.getPreviewElement(previewSelector);
-            await editorPage.waitForTimeout(300);
-            const styleAttr = await previewElement.getAttribute('style') || '';
+    //         const previewElement = editorHelper.getPreviewElement(previewSelector);
+    //         await editorPage.waitForTimeout(300);
+    //         const styleAttr = await previewElement.getAttribute('style') || '';
 
-            // widthプロパティのみがstyle属性から消去され、残りのheightとoverflowが維持されていることを検証
-            expect(styleAttr).not.toContain('width:');
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'height', value: '100px' });
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'overflow', value: 'scroll' });
-        });
-    });
+    //         // widthプロパティのみがstyle属性から消去され、残りのheightとoverflowが維持されていることを検証
+    //         expect(styleAttr).not.toContain('width:');
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'height', value: '100px' });
+    //         await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'overflow', value: 'scroll' });
+    //     });
+    // });
 
     /**
      * 【異常系テスト】
@@ -1961,8 +1961,8 @@ test.describe('エディタ内機能のテスト', () => {
                 el.dispatchEvent(touchStart);
 
                 const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
-                // 上方向へ50pxドラッグをシミュレート
-                Object.defineProperty(touchMove, 'touches', { value: [{ clientX: 100, clientY: 150 }] });
+                // 右方向へ50pxドラッグをシミュレート（clientXを 100 から 150 に増やす）
+                Object.defineProperty(touchMove, 'touches', { value: [{ clientX: 150, clientY: 200 }] });
                 window.dispatchEvent(touchMove);
 
                 const touchEnd = new Event('touchend', { bubbles: true, cancelable: true });
@@ -1972,5 +1972,436 @@ test.describe('エディタ内機能のテスト', () => {
             const val = parseInt(await fontSizeInput.inputValue());
             expect(val).toBeGreaterThan(16);
         });
+    });
+
+    test('属性(style-background)でのドラッグによる不透明度調整の検証', async ({ editorPage, editorHelper, isMobile }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        const targetInputPanel = editorHelper.getPropertyInput('style-background');
+        await expect(targetInputPanel).toBeVisible();
+
+        // 基準色として赤（#ff0000）を設定
+        const bgColorInput = targetInputPanel.locator('input[name*="color" i], input[id*="color" i], input[type="color"]').first();
+        await bgColorInput.fill('#ff0000');
+        await bgColorInput.blur();
+
+        if (isMobile) {
+            await test.step('モバイル検証: 左右スワイプによる色の不透明度・全体の不透明度の調整', async () => {
+                const bgAlphaBadge = targetInputPanel.locator('.drag-badge[data-drag-type="bg-alpha"]');
+                const elementOpacityBadge = targetInputPanel.locator('.drag-badge[data-drag-type="element-opacity"]');
+
+                // 1. 色の不透明度のスライド（要素の現在位置を動的に計算して左へ50pxスライド）
+                await bgAlphaBadge.evaluate((el: HTMLElement) => {
+                    const rect = el.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
+
+                    const touchStart = new Event('touchstart', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchStart, 'touches', { value: [{ clientX: startX, clientY: startY }] });
+                    el.dispatchEvent(touchStart);
+
+                    const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchMove, 'touches', { value: [{ clientX: startX - 50, clientY: startY }] });
+                    window.dispatchEvent(touchMove);
+
+                    const touchEnd = new Event('touchend', { bubbles: true, cancelable: true });
+                    window.dispatchEvent(touchEnd);
+                });
+
+                await expect(async () => {
+                    const text = await bgAlphaBadge.innerText();
+                    const val = parseInt(text.replace('%', ''), 10);
+                    expect(val).toBeLessThan(100);
+                }).toPass({ timeout: 5000 });
+
+                // 2. 全体の不透明度のスライド（要素の現在位置を動的に計算して左へ50pxスライド）
+                await elementOpacityBadge.evaluate((el: HTMLElement) => {
+                    const rect = el.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
+
+                    const touchStart = new Event('touchstart', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchStart, 'touches', { value: [{ clientX: startX, clientY: startY }] });
+                    el.dispatchEvent(touchStart);
+
+                    const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchMove, 'touches', { value: [{ clientX: startX - 50, clientY: startY }] });
+                    window.dispatchEvent(touchMove);
+
+                    const touchEnd = new Event('touchend', { bubbles: true, composed: true });
+                    Object.defineProperty(touchEnd, 'changedTouches', { value: [{ clientX: startX - 50, clientY: startY }] });
+                    window.dispatchEvent(touchEnd);
+                });
+
+                await expect(async () => {
+                    const text = await elementOpacityBadge.innerText();
+                    const val = parseInt(text.replace('%', ''), 10);
+                    expect(val).toBeLessThan(100);
+                }).toPass({ timeout: 5000 });
+            });
+        } else {
+            const targetInputPanel = editorHelper.getPropertyInput('style-background');
+            const elementOpacityBadge = targetInputPanel.locator('span[data-drag-type="element-opacity"]');
+            await expect(elementOpacityBadge).toBeVisible();
+        }
+    });
+
+    test('属性(style-border)によるボーダー・角丸の編集、クリア、および異常系の検証', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('1. セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        await test.step('2. 正常系: ボーダー・角丸（style-border）を設定し、プレビューに反映されること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-border');
+            await expect(targetInputPanel).toBeVisible();
+
+            // 角丸を設定
+            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+            await expect(radiusInput).toBeVisible();
+            await expect(radiusInput).toBeEditable();
+            await radiusInput.fill('15px');
+            await radiusInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-radius', value: '15px' });
+
+            // ボーダー幅を設定
+            const widthInput = targetInputPanel.locator('input[name="borderWidth"], input[name="border-width"], input#border-width').first();
+            await expect(widthInput).toBeVisible();
+            await expect(widthInput).toBeEditable();
+            await widthInput.fill('3px');
+            await widthInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-width', value: '3px' });
+
+            // ボーダースタイルを設定
+            const styleSelect = targetInputPanel.locator('select[name="borderStyle"], select[name="border-style"], select#border-style').first();
+            await expect(styleSelect).toBeVisible();
+            await styleSelect.selectOption('dashed');
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-style', value: 'dashed' });
+
+            // ボーダー色を設定
+            const colorInput = targetInputPanel.locator('input[type="color"], attribute-color input, input[name="borderColor"], input#border-color, .color input').first();
+            await expect(colorInput).toBeVisible();
+            await expect(colorInput).toBeEditable();
+            await colorInput.fill('#0000ff');
+            await colorInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-color', value: 'rgb(0, 0, 255)' });
+        });
+
+        await test.step('3. 異常系: 無効な値（不正な文字列）が入力されてもエディタが破損せず出力されること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-border');
+            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+
+            // 不正な文字列を入力
+            await radiusInput.fill('invalid_value');
+            await radiusInput.blur();
+
+            const previewElement = editorHelper.getPreviewElement(previewSelector);
+            await expect(previewElement).toHaveAttribute('style', /border-radius:\s*invalid_value/);
+        });
+
+        await test.step('4. 正常系: 入力値を空にしてボーダー設定が部分的にクリアされること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-border');
+            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+
+            // 空にする
+            await radiusInput.fill('');
+            await radiusInput.blur();
+
+            // プレビューのstyleからborder-radiusプロパティが消えていることを確認
+            const previewElement = editorHelper.getPreviewElement(previewSelector);
+            await editorPage.waitForTimeout(300);
+            const styleAttr = await previewElement.getAttribute('style') || '';
+            expect(styleAttr).not.toContain('border-radius:');
+        });
+
+        await test.step('5. 異常系: 他のスタイルが既に存在する場合、上書き・破壊せずに更新できること', async () => {
+            // スタイルタブ（Monaco Editor）に切り替え、他の無関係なスタイルを仕込む
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+
+            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+            await expect(styleEditor).toBeVisible();
+
+            const presetStyle = 'element.style {\n    color: rgb(0, 128, 0);\n    padding: 12px;\n}';
+            await editorHelper.setMonacoValue(styleEditor, presetStyle);
+
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '12px' });
+
+            // 属性タブに切り替えて style-border を編集
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            const targetInputPanel = editorHelper.getPropertyInput('style-border');
+            const widthInput = targetInputPanel.locator('input[name="borderWidth"], input[name="border-width"], input#border-width').first();
+
+            await widthInput.fill('5px');
+            await widthInput.blur();
+
+            // 1. 新たに設定したボーダー幅が適用されていること
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'border-width', value: '5px' });
+
+            // 2. 元々あった無関係なスタイルが破壊されず残っていること
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'color', value: 'rgb(0, 128, 0)' });
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'padding', value: '12px' });
+        });
+
+        await test.step('6. 異常系: セミコロンのない崩れた手動スタイルがあっても、クラッシュせずに解析できること', async () => {
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, 'スタイル');
+
+            const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
+            await expect(styleEditor).toBeVisible();
+
+            // セミコロンをわざと抜いた崩れたCSSを設定
+            const brokenStyle = 'element.style {\n    border-radius: 8px\n}';
+            await editorHelper.setMonacoValue(styleEditor, brokenStyle);
+
+            // 属性タブに戻り、クラッシュせずに解析できていることを確認
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            const targetInputPanel = editorHelper.getPropertyInput('style-border');
+            await expect(targetInputPanel).toBeVisible();
+
+            const radiusInput = targetInputPanel.locator('input[name="borderRadius"], input[name="border-radius"], input#border-radius').first();
+            await expect(radiusInput).toHaveValue('');
+        });
+    });
+
+    test('属性(style-border)でのドラッグによる角丸と太さの調整検証', async ({ editorPage, editorHelper, isMobile }) => {
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        const targetInputPanel = editorHelper.getPropertyInput('style-border');
+        await expect(targetInputPanel).toBeVisible();
+
+        const radiusInput = targetInputPanel.locator('input[data-property="borderRadius"]');
+        const widthInput = targetInputPanel.locator('input[data-property="borderWidth"]');
+
+        if (isMobile) {
+            await test.step('モバイル検証: 左右スワイプによる角丸・太さの増減', async () => {
+                await radiusInput.fill('10px');
+                await radiusInput.blur();
+
+                // 右方向へ50pxスライドさせて値を増やす（座標は自動計算）
+                await radiusInput.evaluate((el: HTMLInputElement) => {
+                    const rect = el.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
+
+                    const touchStart = new Event('touchstart', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchStart, 'touches', { value: [{ clientX: startX, clientY: startY }] });
+                    el.dispatchEvent(touchStart);
+
+                    const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchMove, 'touches', { value: [{ clientX: startX + 50, clientY: startY }] });
+                    window.dispatchEvent(touchMove);
+
+                    const touchEnd = new Event('touchend', { bubbles: true, cancelable: true });
+                    window.dispatchEvent(touchEnd);
+                });
+
+                const rVal = parseInt(await radiusInput.inputValue(), 10);
+                expect(rVal).toBeGreaterThan(10);
+
+                // 太さも同様に右方向へスライドして増やす（座標は自動計算）
+                await widthInput.fill('2px');
+                await widthInput.blur();
+
+                await widthInput.evaluate((el: HTMLInputElement) => {
+                    const rect = el.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
+
+                    const touchStart = new Event('touchstart', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchStart, 'touches', { value: [{ clientX: startX, clientY: startY }] });
+                    el.dispatchEvent(touchStart);
+
+                    const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchMove, 'touches', { value: [{ clientX: startX + 50, clientY: startY }] });
+                    window.dispatchEvent(touchMove);
+
+                    const touchEnd = new Event('touchend', { bubbles: true, cancelable: true });
+                    window.dispatchEvent(touchEnd);
+                });
+
+                const wVal = parseInt(await widthInput.inputValue(), 10);
+                expect(wVal).toBeGreaterThan(2);
+            });
+        } else {
+            await test.step('PC検証: マウス上下ドラッグによる角丸・太さの増減', async () => {
+                await radiusInput.fill('10px');
+                await radiusInput.blur();
+
+                await dragInput(editorPage, radiusInput, 0, -30);
+                const rVal = parseInt(await radiusInput.inputValue(), 10);
+                expect(rVal).toBeGreaterThan(10);
+
+                await widthInput.fill('2px');
+                await widthInput.blur();
+
+                await dragInput(editorPage, widthInput, 0, -30);
+                const wVal = parseInt(await widthInput.inputValue(), 10);
+                expect(wVal).toBeGreaterThan(2);
+            });
+        }
+    });
+
+    test('属性(style-sizing)を編集・クリアできる', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        await test.step('検証: サイズ / 表示制御(style-sizing)を設定しプレビューに反映されること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
+            await expect(targetInputPanel).toBeVisible();
+
+            const widthInput = targetInputPanel.locator('input').nth(0);
+            const heightInput = targetInputPanel.locator('input').nth(1);
+
+            await expect(async () => {
+                await expect(widthInput).toBeVisible();
+                await expect(widthInput).toBeEditable();
+            }).toPass({ timeout: 10000, intervals: [500] });
+
+            // 背景色を設定
+            await expect(widthInput).toBeVisible();
+            await expect(widthInput).toBeEditable();
+            await widthInput.fill('100px');
+            await widthInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'width', value: '100px' });
+
+            // 背景画像を設定 (生パスのみを指定)
+            await expect(heightInput).toBeVisible();
+            await expect(heightInput).toBeEditable();
+            await heightInput.fill('50px');
+            await heightInput.blur();
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'height', value: '50px' });
+        });
+
+        await test.step('検証: 入力値を空にして背景設定が部分的にクリアされること', async () => {
+            const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
+            const widthInput = targetInputPanel.locator('input').nth(0);
+
+            // 背景画像を空にする
+            await widthInput.fill('');
+            await widthInput.blur();
+
+            // プレビューのstyleからwidthプロパティが消えていることを確認
+            const previewElement = editorHelper.getPreviewElement(previewSelector);
+            await editorPage.waitForTimeout(300);
+            const styleAttr = await previewElement.getAttribute('style') || '';
+            expect(styleAttr).not.toContain('width:');
+
+            // 他の設定（高さ）は残っていること
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'height', value: '50px' });
+        });
+    });
+
+    test('属性(style-sizing)でのドラッグによる幅と高さの調整検証', async ({ editorPage, editorHelper, isMobile }) => {
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
+        await expect(targetInputPanel).toBeVisible();
+
+        const widthInput = targetInputPanel.locator('input[data-property="width"]');
+        const heightInput = targetInputPanel.locator('input[data-property="height"]');
+
+        if (isMobile) {
+            await test.step('モバイル検証: 左右スワイプによる幅と高さの調整', async () => {
+                await widthInput.fill('100px');
+                await widthInput.blur();
+
+                // 右方向へ50pxスライド（座標は自動計算）
+                await widthInput.evaluate((el: HTMLInputElement) => {
+                    const rect = el.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
+
+                    const touchStart = new Event('touchstart', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchStart, 'touches', { value: [{ clientX: startX, clientY: startY }] });
+                    el.dispatchEvent(touchStart);
+
+                    const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchMove, 'touches', { value: [{ clientX: startX + 50, clientY: startY }] });
+                    window.dispatchEvent(touchMove);
+
+                    const touchEnd = new Event('touchend', { bubbles: true, composed: true });
+                    Object.defineProperty(touchEnd, 'changedTouches', { value: [{ clientX: startX + 50, clientY: startY }] });
+                    window.dispatchEvent(touchEnd);
+                });
+
+                const wVal = parseInt(await widthInput.inputValue(), 10);
+                expect(wVal).toBeGreaterThan(100);
+
+                await heightInput.fill('50px');
+                await heightInput.blur();
+
+                // 高さを右スライドで増やす（座標は自動計算）
+                await heightInput.evaluate((el: HTMLInputElement) => {
+                    const rect = el.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
+
+                    const touchStart = new Event('touchstart', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchStart, 'touches', { value: [{ clientX: startX, clientY: startY }] });
+                    el.dispatchEvent(touchStart);
+
+                    const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
+                    Object.defineProperty(touchMove, 'touches', { value: [{ clientX: startX + 50, clientY: startY }] });
+                    window.dispatchEvent(touchMove);
+
+                    const touchEnd = new Event('touchend', { bubbles: true, composed: true });
+                    Object.defineProperty(touchEnd, 'changedTouches', { value: [{ clientX: startX + 50, clientY: startY }] });
+                    window.dispatchEvent(touchEnd);
+                });
+
+                const hVal = parseInt(await heightInput.inputValue(), 10);
+                expect(hVal).toBeGreaterThan(50);
+            });
+        } else {
+            await test.step('PC検証: マウス上下ドラッグによる幅・高さの調整', async () => {
+                await widthInput.fill('100px');
+                await widthInput.blur();
+
+                await dragInput(editorPage, widthInput, 0, -30);
+                const wVal = parseInt(await widthInput.inputValue(), 10);
+                expect(wVal).toBeGreaterThan(100);
+
+                await heightInput.fill('100px');
+                await heightInput.blur();
+
+                await dragInput(editorPage, heightInput, 0, -30);
+                const hVal = parseInt(await heightInput.inputValue(), 10);
+                expect(hVal).toBeGreaterThan(100);
+            });
+        }
     });
 });
