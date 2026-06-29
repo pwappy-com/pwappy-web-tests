@@ -1479,6 +1479,143 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
+    test('属性(style-shadow)での不透明度ドラッグバッジによる微調整とShift加速の検証', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('1. セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        const targetInputPanel = editorHelper.getPropertyInput('style-shadow');
+        const dragBadge = targetInputPanel.locator('.drag-badge').first();
+
+        await test.step('2. ボックスシャドウを展開し、初期値を設定する', async () => {
+            await expect(targetInputPanel).toBeVisible();
+
+            // アコーディオンを開く
+            const accordionHeader = targetInputPanel.locator('.accordion-header').first();
+            await accordionHeader.click();
+            await expect(targetInputPanel.locator('.accordion-content').first()).toHaveClass(/expanded/);
+
+            // 内部UIに依存せず、changeイベントで初期シャドウ（不透明度 50%）を適用
+            await targetInputPanel.evaluate((el) => {
+                el.dispatchEvent(new CustomEvent('change', {
+                    detail: {
+                        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.5)',
+                        textShadow: ''
+                    }
+                }));
+            });
+        });
+
+        await test.step('3. バッジの初期表示とツールチップの検証', async () => {
+            await expect(dragBadge).toBeVisible();
+            await expect(dragBadge).toHaveAttribute('title', '上下スワイプで微調整できます');
+
+            // ポーリングを挟んで確実に初期値が 50% に更新されるのを待つ
+            await expect(dragBadge).toHaveText(/50%/, { timeout: 5000 });
+        });
+
+        await test.step('4. マウスの上方向ドラッグで不透明度が増加すること', async () => {
+            // 要素に対して直接マウスイベントを連続送信（上方向へ 60px 移動 = +40%）
+            await dragBadge.evaluate((badgeEl) => {
+                const rect = badgeEl.getBoundingClientRect();
+                const startX = rect.left + rect.width / 2;
+                const startY = rect.top + rect.height / 2;
+
+                // mousedown
+                badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
+                // mousemove
+                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 60 }));
+                // mouseup
+                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 60 }));
+            });
+
+            // LitのDOM再描画と同期するまでポーリング（toPass）で検証
+            await expect(async () => {
+                const text = await dragBadge.innerText();
+                const val = parseInt(text.replace('%', ''), 10);
+
+                // 初期値 50% から確実に増えており、かつ100%未満（理論値：90%）であることを確認
+                expect(val).toBeGreaterThan(50);
+                expect(val).toBeLessThan(100);
+            }).toPass({ timeout: 5000, intervals: [100, 200] });
+
+            // ドラッグ終了後に .dragging クラスが外れていること
+            await expect(dragBadge).not.toHaveClass(/dragging/);
+
+            // プレビューの style 属性のアルファ値が増加していることを検証
+            const styleAttr = await editorHelper.getPreviewElement(previewSelector).getAttribute('style') || '';
+            expect(styleAttr).toMatch(/box-shadow:.*rgba?\(0,\s*0,\s*0,\s*0\.[6-9]\d*\)/);
+
+            // 次の検証のために 50% にリセット
+            await targetInputPanel.evaluate((el) => {
+                el.dispatchEvent(new CustomEvent('change', {
+                    detail: { boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.5)', textShadow: '' }
+                }));
+            });
+            await expect(dragBadge).toHaveText(/50%/, { timeout: 5000 });
+        });
+
+        await test.step('5. Shiftキー押下時の加速効果の検証', async () => {
+            // Shiftキーを有効にしたMouseEventを送信（上へ 30px 移動、3倍加速で +60% となりカンスト付近になる）
+            await dragBadge.evaluate((badgeEl) => {
+                const rect = badgeEl.getBoundingClientRect();
+                const startX = rect.left + rect.width / 2;
+                const startY = rect.top + rect.height / 2;
+
+                badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
+                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 30, shiftKey: true }));
+                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 30, shiftKey: true }));
+            });
+
+            await expect(async () => {
+                const text = await dragBadge.innerText();
+                const valWithShift = parseInt(text.replace('%', ''), 10);
+
+                // 通常時よりも大幅に不透明度が上がっていることを検証
+                expect(valWithShift).toBeGreaterThan(75);
+            }).toPass({ timeout: 5000, intervals: [100, 200] });
+        });
+
+        await test.step('6. 0%未満、100%超への境界値（クランプ）処理の検証', async () => {
+            // 上方向へ過剰にドラッグ（300px上へ移動） -> 100% で制限されること
+            await dragBadge.evaluate((badgeEl) => {
+                const rect = badgeEl.getBoundingClientRect();
+                const startX = rect.left + rect.width / 2;
+                const startY = rect.top + rect.height / 2;
+
+                badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
+                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 300 }));
+                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX, clientY: startY - 300 }));
+            });
+            await expect(async () => {
+                await expect(dragBadge).toHaveText(/100%/);
+            }).toPass({ timeout: 5000 });
+
+            // 下方向へ過剰にドラッグ（300px下へ移動） -> 0% で制限されること
+            await dragBadge.evaluate((badgeEl) => {
+                const rect = badgeEl.getBoundingClientRect();
+                const startX = rect.left + rect.width / 2;
+                const startY = rect.top + rect.height / 2;
+
+                badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
+                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX, clientY: startY + 300 }));
+                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX, clientY: startY + 300 }));
+            });
+            await expect(async () => {
+                await expect(dragBadge).toHaveText(/0%/);
+            }).toPass({ timeout: 5000 });
+
+            // ドラッグ終了後のクラス解除も再確認
+            await expect(dragBadge).not.toHaveClass(/dragging/);
+        });
+    });
+
     test('属性(style-background)による背景・装飾の編集、クリア、および異常系の検証', async ({ editorPage, editorHelper }) => {
         const previewSelector = 'ons-button';
 
