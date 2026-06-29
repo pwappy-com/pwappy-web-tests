@@ -74,7 +74,8 @@ async function dragInput(editorPage: Page, inputLocator: Locator, deltaX: number
     const startX = box.x + box.width / 2;
     const startY = box.y + box.height / 2;
 
-    await inputLocator.click();
+    // WebKit環境のShadow DOMにおける誤検知（インターセプト判定）を回避するため、force: true を適用します
+    await inputLocator.click({ force: true });
     await editorPage.waitForTimeout(100);
 
     await editorPage.mouse.move(startX, startY);
