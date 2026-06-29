@@ -44,6 +44,27 @@ const test = base.extend<EditorFixtures>({
     },
 });
 
+/**
+    * 指定した入力欄をマウスでドラッグするヘルパー関数
+    */
+async function dragInput(editorPage: Page, inputLocator: Locator, deltaX: number, deltaY: number, shiftKey: boolean = false) {
+    const box = await inputLocator.boundingBox();
+    if (!box) throw new Error('Input bounding box not found');
+
+    const startX = box.x + box.width / 2;
+    const startY = box.y + box.height / 2;
+
+    await editorPage.mouse.move(startX, startY);
+
+    if (shiftKey) await editorPage.keyboard.down('Shift');
+    await editorPage.mouse.down();
+
+    // スマートドラッグの閾値判定を通過させつつ、なめらかに移動する
+    await editorPage.mouse.move(startX + deltaX, startY + deltaY, { steps: 10 });
+    await editorPage.mouse.up();
+    if (shiftKey) await editorPage.keyboard.up('Shift');
+}
+
 // --- テストスイート ---
 test.describe('エディタ内機能のテスト', () => {
     /**
@@ -1654,6 +1675,165 @@ test.describe('エディタ内機能のテスト', () => {
                 const accordionContent = targetInputPanel.locator('.accordion-content');
                 await expect(accordionContent).toHaveClass(/expanded/);
             }).toPass({ timeout: 5000, intervals: [500] });
+        });
+    });
+
+    test('属性(style-typography)でのマウスドラッグによる数値増減とクランプ処理の検証', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        const targetInputPanel = editorHelper.getPropertyInput('style-typography');
+        const fontSizeInput = targetInputPanel.locator('input[name="font-size"], input[name="fontSize"], input#font-size').first();
+
+        await test.step('検証: マウスの上方向ドラッグでフォントサイズが増加すること', async () => {
+            await fontSizeInput.fill('16px');
+            await fontSizeInput.blur();
+
+            // 上方向へ50pxドラッグ (Y軸マイナス方向)
+            await dragInput(editorPage, fontSizeInput, 0, -50);
+
+            const val = parseInt(await fontSizeInput.inputValue());
+            expect(val).toBeGreaterThan(16);
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'font-size', value: `${val}px` });
+        });
+
+        await test.step('検証: マウスの下方向ドラッグによる減少と、0未満へのクランプ処理', async () => {
+            // 下方向へ大きくドラッグして負の値の領域に持っていく
+            await dragInput(editorPage, fontSizeInput, 0, 150);
+
+            // フォントサイズは0未満にならない（0pxに留まる）設計を検証
+            await expect(fontSizeInput).toHaveValue('0px');
+            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'font-size', value: '0px' });
+        });
+    });
+
+    test('属性(style-typography)での小数ステップ（行高）と負の値許容（文字間隔）のドラッグ検証', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        const targetInputPanel = editorHelper.getPropertyInput('style-typography');
+        const lineHeightInput = targetInputPanel.locator('input#line-height').first();
+        const letterSpacingInput = targetInputPanel.locator('input#letter-spacing').first();
+
+        await test.step('検証: 行高（line-height）の小数ステップの増減', async () => {
+            await lineHeightInput.fill('1.5');
+            await lineHeightInput.blur();
+
+            // 上へドラッグして増やす
+            await dragInput(editorPage, lineHeightInput, 0, -30);
+            const val = parseFloat(await lineHeightInput.inputValue());
+
+            // 1.5より増加し、かつ小数の増減（例: 2.1など）になっているか検証
+            expect(val).toBeGreaterThan(1.5);
+            expect(val % 1).not.toBe(0);
+        });
+
+        await test.step('検証: 文字間隔（letter-spacing）の負の値の許容', async () => {
+            await letterSpacingInput.fill('0px');
+            await letterSpacingInput.blur();
+
+            // 下へドラッグして減らす
+            await dragInput(editorPage, letterSpacingInput, 0, 50);
+            const val = parseFloat(await letterSpacingInput.inputValue());
+
+            // 負の値（マイナス）に到達していることを検証
+            expect(val).toBeLessThan(0);
+        });
+    });
+
+    test('属性(style-typography)でのShiftキー併用加速とデッドゾーン誤検知防止の検証', async ({ editorPage, editorHelper }) => {
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        const targetInputPanel = editorHelper.getPropertyInput('style-typography');
+        const fontSizeInput = targetInputPanel.locator('input[name="font-size"], input[name="fontSize"], input#font-size').first();
+
+        await test.step('検証: Shiftキー押下時の変化量の加速効果', async () => {
+            await fontSizeInput.fill('10px');
+            await fontSizeInput.blur();
+
+            // 通常のドラッグ（上へ20px）
+            await dragInput(editorPage, fontSizeInput, 0, -20, false);
+            const normalDiff = parseInt(await fontSizeInput.inputValue()) - 10;
+
+            await fontSizeInput.fill('10px');
+            await fontSizeInput.blur();
+
+            // Shiftキーを押しながらのドラッグ（上へ20px）
+            await dragInput(editorPage, fontSizeInput, 0, -20, true);
+            const shiftDiff = parseInt(await fontSizeInput.inputValue()) - 10;
+
+            // 加速により、通常時の変化量より大幅に大きくなっていることを検証
+            expect(shiftDiff).toBeGreaterThan(normalDiff * 5);
+        });
+
+        await test.step('検証: 横ブレや微小な動き（デッドゾーン）による誤検知防止', async () => {
+            await fontSizeInput.fill('15px');
+            await fontSizeInput.blur();
+
+            // 横方向に50px、縦方向に4pxの移動（縦の移動量が5px未満、かつ横移動の方が大きい）
+            await dragInput(editorPage, fontSizeInput, 50, 4, false);
+
+            // ドラッグ操作として判定されず、値が変化しないことを検証
+            await expect(fontSizeInput).toHaveValue('15px');
+        });
+    });
+
+    test('属性(style-typography)でのタッチイベントによるドラッグ検証（モバイル環境用）', async ({ editorPage, editorHelper, isMobile }) => {
+        // モバイルビューポートでのテスト時のみ活性化
+        test.skip(!isMobile, 'This test is exclusive to mobile browser environments.');
+
+        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        const targetInputPanel = editorHelper.getPropertyInput('style-typography');
+        const fontSizeInput = targetInputPanel.locator('input[name="font-size"], input[name="fontSize"], input#font-size').first();
+
+        await test.step('検証: touchstart/touchmove/touchend イベントによるフォントサイズの増減', async () => {
+            await fontSizeInput.fill('16px');
+            await fontSizeInput.blur();
+
+            // evaluate を介してタッチジェスチャーのイベントシーケンスを直接ディスパッチ
+            await fontSizeInput.evaluate((el: HTMLInputElement) => {
+                const touchStart = new Event('touchstart', { bubbles: true, cancelable: true });
+                Object.defineProperty(touchStart, 'touches', { value: [{ clientX: 100, clientY: 200 }] });
+                el.dispatchEvent(touchStart);
+
+                const touchMove = new Event('touchmove', { bubbles: true, cancelable: true });
+                // 上方向へ50pxドラッグをシミュレート
+                Object.defineProperty(touchMove, 'touches', { value: [{ clientX: 100, clientY: 150 }] });
+                window.dispatchEvent(touchMove);
+
+                const touchEnd = new Event('touchend', { bubbles: true, cancelable: true });
+                window.dispatchEvent(touchEnd);
+            });
+
+            const val = parseInt(await fontSizeInput.inputValue());
+            expect(val).toBeGreaterThan(16);
         });
     });
 });
