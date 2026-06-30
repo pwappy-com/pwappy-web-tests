@@ -372,10 +372,20 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
             const restoreDialog = editorPage.locator('message-box', { hasText: '前回正常に終了されなかった可能性' });
             await expect(restoreDialog).toBeVisible({ timeout: 20000 });
 
-            await restoreDialog.getByRole('button', { name: '復元する' }).click({ force: true });
+            const restoreBtn = restoreDialog.getByRole('button', { name: '復元する' });
+            await expect(async () => {
+                const jsClicked = await restoreBtn.evaluate((el: HTMLElement) => {
+                    if (el) { el.click(); return true; }
+                    return false;
+                }).catch(() => false);
 
-            // 復旧ダイアログが完全に消えるのを待つ
-            await expect(restoreDialog).toBeHidden({ timeout: 10000 });
+                if (!jsClicked) {
+                    await restoreBtn.click({ force: true, timeout: 1000 }).catch(async () => {
+                        await restoreBtn.tap({ noWaitAfter: true, timeout: 1000 }).catch(() => { });
+                    });
+                }
+                await expect(restoreDialog).toBeHidden({ timeout: 2000 });
+            }).toPass({ timeout: 10000, intervals: [500] });
 
             // リロード後の復元フローで表示される可能性のあるモーダルをスキップ
             await editorHelper.handleStarterTemplateModal();
@@ -412,7 +422,21 @@ test.describe('スナップショットと自動復旧機能の統合テスト',
             const restoreDialog = editorPage.locator('message-box', { hasText: '前回正常に終了されなかった可能性' });
             await expect(restoreDialog).toBeVisible({ timeout: 20000 });
 
-            await restoreDialog.getByRole('button', { name: '破棄する' }).click({ force: true });
+            const destroyBtn = restoreDialog.getByRole('button', { name: '破棄する' });
+            await expect(async () => {
+                const jsClicked = await destroyBtn.evaluate((el: HTMLElement) => {
+                    if (el) { el.click(); return true; }
+                    return false;
+                }).catch(() => false);
+
+                if (!jsClicked) {
+                    await destroyBtn.click({ force: true, timeout: 1000 }).catch(async () => {
+                        await destroyBtn.tap({ noWaitAfter: true, timeout: 1000 }).catch(() => { });
+                    });
+                }
+                await expect(restoreDialog).toBeHidden({ timeout: 2000 });
+            }).toPass({ timeout: 10000, intervals: [500] });
+
 
             // 確認ダイアログ
             const discardConfirm = editorPage.locator('message-box', { hasText: 'すべてのスナップショットを破棄しますか？' });

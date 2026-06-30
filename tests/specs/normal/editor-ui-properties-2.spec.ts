@@ -360,7 +360,9 @@ test.describe('エディタ内機能のテスト (後半)', () => {
         });
     });
 
-    test('属性(style-shadow)での不透明度ドラッグバッジによる微調整とShift加速の検証', async ({ editorPage, editorHelper }) => {
+    test('属性(style-shadow)での不透明度ドラッグバッジによる微調整とShift加速の検証', async ({ editorPage, editorHelper, isMobile }) => {
+        // モバイル環境（MouseEventが動作しない環境）ではスキップ
+        test.skip(isMobile, 'マウスドラッグ操作はデスクトップ環境専用のためスキップします。');
         const previewSelector = 'ons-button';
 
         await test.step('1. セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {

@@ -252,7 +252,9 @@ test.describe('エディタ内機能のテスト (前半)', () => {
             const clearButton = targetInput.locator('+ .clear-button');
             await expect(clearButton).toBeEnabled();
             await clearButton.click();
-            await expect(previewButton).not.toHaveAttribute(attrName);
+            await expect(async () => {
+                await expect(previewButton).not.toHaveAttribute(attrName);
+            }).toPass({ timeout: 5000, intervals: [500] });
             await expect(targetInput).toBeHidden();
         });
 
@@ -332,7 +334,9 @@ test.describe('エディタ内機能のテスト (前半)', () => {
             const clearButton = targetInput.locator('+ .clear-button');
             await expect(clearButton).toBeEnabled();
             await clearButton.click();
-            await expect(previewButton).not.toHaveAttribute(attrName);
+            await expect(async () => {
+                await expect(previewButton).not.toHaveAttribute(attrName);
+            }).toPass({ timeout: 5000, intervals: [500] });
             await expect(targetInput).toHaveValue('');
             await expect(targetInput).toBeVisible();
         });
@@ -470,7 +474,9 @@ test.describe('エディタ内機能のテスト (前半)', () => {
         await targetInput.check();
         await expect(previewButton).toHaveAttribute(attrName, '');
         await targetInput.uncheck();
-        await expect(previewButton).not.toHaveAttribute(attrName);
+        await expect(async () => {
+            await expect(previewButton).not.toHaveAttribute(attrName);
+        }).toPass({ timeout: 5000, intervals: [500] });
     });
 
     test('属性(select[])を追加・編集・削除できる', async ({ editorPage, editorHelper }) => {
