@@ -531,7 +531,7 @@ jobs:
         env:
           DEBUG: pw:*
 
-      # クリーンアップスクリプトを、全アカウント候補（OS × ブラウザ × ワーカー）に対してループ実行します
+      # 既存のクリーンアップスクリプトを、全アカウント候補（OS × ブラウザ × ワーカー）に対してループ実行します
       - name: Run Cleanup Script for All Test Accounts
         shell: bash
         run: |
@@ -575,8 +575,8 @@ jobs:
                   # 既存の削除スクリプト（a0-cleanup-all-apps.spec.ts）を、何一つコードを変更せずにそのまま呼び出し
                   npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=chromium
                 fi
-              done
-             forage
+              done 
+            done
           done
         env:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
@@ -584,11 +584,3 @@ jobs:
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
-
-      - name: Check upstream job status
-        if: |
-          (needs.e2e-normal.result == 'failure') || 
-          (needs.e2e-premium.result == 'failure')
-        run: |
-          echo "One or more upstream test jobs reported failure. Propagating status."
-          exit 1
