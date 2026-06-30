@@ -4,34 +4,37 @@ import { test as base, expect, Page } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
+import { STORAGE_STATE } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
+let appName: string;
+let appKey: string;
+
 type EditorFixtures = {
     editorPage: Page;
-    appName: string;
     editorHelper: EditorHelper;
 };
 
 const test = base.extend<EditorFixtures>({
-    appName: async ({ }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        await use(`fe-test-${uniqueId}`.slice(0, 30));
-    },
-    editorPage: async ({ page, context, appName }, use) => {
-        const workerIndex = test.info().workerIndex;
-        const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-        const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
-        const appKey = `fe-key-${uniqueId}`.slice(0, 30);
+    editorPage: async ({ page, context, browserName }, use) => {
+        // Chromium環境向けにクリップボード操作の権限を付与
+        if (browserName === 'chromium') {
+            await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+        }
 
-        // ここで page がダッシュボードにいる必要があるため、beforeEach の goto が必須
-        await createApp(page, appName, appKey);
+        await gotoDashboard(page);
+        await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
+
+        // 作成済みの共有アプリ詳細画面へ移動
+        const appRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) }).first();
+        await expect(appRow).toBeVisible({ timeout: 15000 });
+        await appRow.click({ force: true });
+        await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
+
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
         await editorPage.close();
-        await deleteApp(page, appKey);
     },
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
@@ -39,21 +42,38 @@ const test = base.extend<EditorFixtures>({
     },
 });
 
-test.describe('ファイルエクスプローラー操作テスト', () => {
+test.describe.configure({ mode: 'serial' });
 
-    test.beforeEach(async ({ page, context, browserName }) => {
-        if (browserName === 'chromium') {
-            await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-        }
+// テスト全体の開始前に、共有アプリを1回だけ作成する
+test.beforeAll(async ({ browser }) => {
+    const reversedTimestamp = Date.now().toString().split('').reverse().join('');
+    const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
+    appName = `fe-test-${uniqueId}`.slice(0, 30);
+    appKey = `fe-key-${uniqueId}`.slice(0, 30);
 
-        // 2. サイトへ移動
+    const context = await browser.newContext({ storageState: STORAGE_STATE });
+    const page = await context.newPage();
+
+    await gotoDashboard(page);
+    await createApp(page, appName, appKey);
+
+    await context.close();
+});
+
+// すべてのテストが終了した後に、アプリを削除する
+test.afterAll(async ({ browser }) => {
+    if (appKey) {
+        const context = await browser.newContext({ storageState: STORAGE_STATE });
+        const page = await context.newPage();
+
         await gotoDashboard(page);
+        await deleteApp(page, appKey);
 
-        // 3. ダッシュボードの初期ローディング（「処理中」）が消えるのを待つ
-        // これをしないと、createApp 内の「アプリケーションの追加」ボタンがクリックできません
-        const loadingOverlay = page.locator('dashboard-main-content > dashboard-loading-overlay');
-        await expect(loadingOverlay).toBeHidden({ timeout: 30000 });
-    });
+        await context.close();
+    }
+});
+
+test.describe('ファイルエクスプローラー操作テスト', () => {
 
     test('ディレクトリのコピー＆ペーストができる', async ({ editorPage, editorHelper }) => {
         const srcDir = 'CopySrc';
@@ -76,7 +96,6 @@ test.describe('ファイルエクスプローラー操作テスト', () => {
         });
 
         await test.step('4. 貼り付けられたディレクトリが存在することを確認', async () => {
-            // editorPage 内の file-explorer を探す
             const pastedItem = editorPage.locator('file-explorer .directory', { hasText: srcDir });
             await expect(pastedItem).toBeVisible();
         });
@@ -119,9 +138,6 @@ test.describe('ファイルエクスプローラー操作テスト', () => {
 
         await test.step('5. 元の場所からディレクトリが消えていることを確認', async () => {
             await editorHelper.goBackToRoot();
-
-            // goBackToRoot 内で waitForFileExplorerLoading を呼んでいるため、
-            // ここでは即座に確認しても大丈夫だが、念のため locator を再取得する
             const originalItem = editorPage.locator('file-explorer .directory', { hasText: moveTargetDir });
             await expect(originalItem).toBeHidden();
         });
@@ -227,7 +243,6 @@ test.describe('ファイルエクスプローラー操作テスト', () => {
         });
 
         await test.step('2. パスをコピー', async () => {
-            // クリップボード権限を許可（ブラウザコンテキスト設定が必要な場合があるが、まずはトーストで検証）
             await editorHelper.performFileOperation('パスをコピー');
             await editorHelper.expectToastMessage('パスをコピーしました');
         });
@@ -250,9 +265,6 @@ test.describe('ファイルエクスプローラー操作テスト', () => {
             // アイテムを選択
             await editorHelper.selectFileExplorerItem(fileName);
 
-            // 【重要】ダウンロードボタンが有効化されるのを待つステップを明示的に入れる
-            // editorHelper.downloadSelectedItems 内でチェックしているが、
-            // テストステップとしても「選択状態」が反映されるのを待つ意味がある
             const downloadBtn = editorPage.locator('file-explorer .sidebar-icon').filter({ hasText: 'ダウンロード' });
             await expect(downloadBtn).not.toHaveClass(/sidebar-icon-disable/);
 
