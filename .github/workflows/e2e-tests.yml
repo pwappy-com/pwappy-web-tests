@@ -41,6 +41,12 @@ on:
           - ubuntu-latest
           - windows-latest
           - macos-latest
+      # 手動実行時のワーカー数を指定（デフォルトは 2）
+      workers:
+        description: "実行ワーカー数 (手動用)"
+        required: true
+        default: "2"
+        type: string
 
 # ワークフローを構成するジョブを定義
 jobs:
@@ -59,9 +65,50 @@ jobs:
         id: set-matrix
         shell: bash
         run: |
-          # 全OS実行か個別OS実行かに基づいてマトリックスJSONを生成
-          # 複数行のJSONを出力するために EOF デリミタを使用
-          if [[ "${{ github.event_name }}" == "schedule" || "${{ github.event.inputs.os }}" == "all" ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            # 毎日0時のスケジュール（Premiumテスト用）の場合は全OSを実行
+            if [[ "${{ github.event.schedule }}" == "0 0 * * *" ]]; then
+              echo "matrix<<EOF" >> $GITHUB_OUTPUT
+              echo '[
+                {"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"},
+                {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"},
+                {"os": "windows-latest", "browser": "chromium", "binary": "chromium"},
+                {"os": "macos-latest", "browser": "webkit", "binary": "webkit"},
+                {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}
+              ]' >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            else
+              # 3時間毎の定期実行（UTC 1, 4, 7, 10, 13, 20, 23）
+              # 現在のUTC時間を取得し、8進数解釈エラーを防ぐため10進数に変換
+              H=$(date -u +"%H")
+              H=$((10#$H))
+
+              # 実行時間（遅延も考慮した範囲）に応じてローテーション対象を1つ決定
+              # UTC 1, 10, 23時付近 -> Windows
+              # UTC 4, 13時付近   -> Safari (macOS WebKit)
+              # UTC 7, 20時付近   -> MobileSafari
+              if (( (H >= 23 || H <= 2) || (H >= 10 && H <= 11) )); then
+                ROTATION_TARGET='{"os": "windows-latest", "browser": "chromium", "binary": "chromium"}'
+              elif (( (H >= 4 && H <= 5) || (H >= 13 && H <= 14) )); then
+                ROTATION_TARGET='{"os": "macos-latest", "browser": "webkit", "binary": "webkit"}'
+              elif (( (H >= 7 && H <= 8) || (H >= 20 && H <= 21) )); then
+                ROTATION_TARGET='{"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}'
+              else
+                # 判定から外れた場合のフォールバック
+                ROTATION_TARGET='{"os": "windows-latest", "browser": "chromium", "binary": "chromium"}'
+              fi
+
+              # Ubuntuの2環境に、選択されたローテーション対象を加えてマトリックスを出力
+              echo "matrix<<EOF" >> $GITHUB_OUTPUT
+              echo "[
+                {\"os\": \"ubuntu-latest\", \"browser\": \"chromium\", \"binary\": \"chromium\"},
+                {\"os\": \"ubuntu-latest\", \"browser\": \"mobile-chrome\", \"binary\": \"chromium\"},
+                $ROTATION_TARGET
+              ]" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            fi
+          elif [[ "${{ github.event.inputs.os }}" == "all" ]]; then
+            # 手動実行で「all」が選ばれた場合は、全てのOS/ブラウザを実行
             echo "matrix<<EOF" >> $GITHUB_OUTPUT
             echo '[
               {"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"},
@@ -229,7 +276,16 @@ jobs:
         id: run_tests
         shell: bash
         run: |
-          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --reporter=line --workers=100%
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            WORKERS="100%"
+          else
+            # 手動実行時は入力パラメータから取得し、空の場合はデフォルト 2
+            WORKERS="${{ github.event.inputs.workers }}"
+            WORKERS="${WORKERS:-2}"
+          fi
+
+          echo "Running tests with workers: $WORKERS"
+          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --reporter=line --workers=$WORKERS
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }}
