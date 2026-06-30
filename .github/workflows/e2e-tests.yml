@@ -292,7 +292,7 @@ jobs:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
+          PWAPPY_TEST_USER_PREFIX: "pwusr"
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
@@ -437,7 +437,7 @@ jobs:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
+          PWAPPY_TEST_USER_PREFIX: "pwusr"
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
@@ -538,7 +538,7 @@ jobs:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
-          PWAPPY_TEST_IDENT_KEY: ${{ secrets.PWAPPY_TEST_IDENT_KEY }}
+          PWAPPY_TEST_USER_PREFIX: "pwusr"
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 

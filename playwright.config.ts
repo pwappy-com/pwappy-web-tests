@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import 'dotenv/config';
-import { STORAGE_STATE } from './tests/constants';
+import { getStorageStatePath } from './tests/constants';
 
 /**
  * Read environment variables from file.
@@ -67,54 +67,40 @@ export default defineConfig({
 
   /* Configure projects for major browsers */
   projects: [
-    // 認証用のセットアッププロジェクト
-    {
-      name: 'setup',
-      testMatch: /auth\.setup\.ts/,
-    },
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        storageState: STORAGE_STATE,
+        storageState: getStorageStatePath(process.env.TEST_WORKER_INDEX || '0', 'c'),
       },
-      dependencies: ['setup'],
     },
-
     {
       name: 'firefox',
       use: {
         ...devices['Desktop Firefox'],
-        storageState: STORAGE_STATE,
+        storageState: getStorageStatePath(process.env.TEST_WORKER_INDEX || '0', 'f'),
       },
-      dependencies: ['setup'],
     },
-
     {
       name: 'webkit',
       use: {
         ...devices['Desktop Safari'],
-        storageState: STORAGE_STATE,
+        storageState: getStorageStatePath(process.env.TEST_WORKER_INDEX || '0', 's'),
       },
-      dependencies: ['setup'],
     },
-
     {
       name: 'mobile-chrome',
       use: {
         ...devices['Pixel 5'],
-        storageState: STORAGE_STATE,
+        storageState: getStorageStatePath(process.env.TEST_WORKER_INDEX || '0', 'a'),
       },
-      dependencies: ['setup'],
     },
-
     {
       name: 'mobile-safari',
       use: {
         ...devices['iPhone 12'],
-        storageState: STORAGE_STATE,
+        storageState: getStorageStatePath(process.env.TEST_WORKER_INDEX || '0', 'i'),
       },
-      dependencies: ['setup'],
     },
 
     /* Test against branded browsers. */
