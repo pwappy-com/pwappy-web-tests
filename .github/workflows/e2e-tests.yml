@@ -30,7 +30,6 @@ on:
           - normal
           - premium
           - all
-          - cleanup
       # 手動実行時に実行するOSを選択するドロップダウン
       os:
         description: "実行するOSを選択"
@@ -61,7 +60,6 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       run_normal: ${{ steps.get_suite.outputs.run_normal }}
       run_premium: ${{ steps.get_suite.outputs.run_premium }}
-      run_cleanup_only: ${{ steps.get_suite.outputs.run_cleanup_only }}
     steps:
       - name: Determine test matrix
         id: set-matrix
@@ -115,11 +113,10 @@ jobs:
               echo "run_normal=true" >> $GITHUB_OUTPUT
             fi
           elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            # 旧仕様の event.inputs と新仕様の inputs を両方カバー
+            # 旧仕様の event.inputs と新仕様 inputs を両方カバー
             SUITE="${{ inputs.test_suite || github.event.inputs.test_suite }}"
             if [ "$SUITE" == "normal" ] || [ "$SUITE" == "all" ]; then echo "run_normal=true" >> $GITHUB_OUTPUT; fi
             if [ "$SUITE" == "premium" ] || [ "$SUITE" == "all" ]; then echo "run_premium=true" >> $GITHUB_OUTPUT; fi
-            if [ "$SUITE" == "cleanup" ]; then echo "run_cleanup_only=true" >> $GITHUB_OUTPUT; fi
           fi
 
   # ===================================================================
@@ -499,94 +496,3 @@ jobs:
       - name: Mark Job Failure
         if: steps.run_tests.outputs.EXIT_CODE != '0'
         run: exit 1
-
-  # ===================================================================
-  # ジョブ 4: クリーンアップ (全テスト完了後に実行)
-  # ===================================================================
-  cleanup:
-    # NormalまたはPremiumいずれかの実行が終わった後、常に呼び出す。
-    needs: prepare-matrix
-    if: |
-      always() && 
-      (needs.prepare-matrix.outputs.run_normal == 'true' || 
-       needs.prepare-matrix.outputs.run_premium == 'true' || 
-       needs.prepare-matrix.outputs.run_cleanup_only == 'true')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
-    steps:
-      - name: Checkout repository for cleanup
-        uses: actions/checkout@v6
-
-      - name: Set cache key prefix for cleanup
-        run: |
-          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-chromium-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
-
-      - name: Setup Node.js for cleanup
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: "npm"
-
-      - name: Install dependencies for cleanup
-        run: npm install
-
-      - name: Get daily cache key suffix
-        id: get-date
-        run: echo "date=$(TZ=Asia/Tokyo date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-        shell: bash
-
-      - name: Cache Playwright browsers for cleanup
-        id: cache-playwright-browsers-cleanup
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          key: ${{ env.CACHE_KEY_PREFIX }}-${{ steps.get-date.outputs.date }}
-          restore-keys: |
-            ${{ env.CACHE_KEY_PREFIX }}-
-
-      # キャッシュから不要なロックファイルを事前に強制削除してハングを防ぐ
-      - name: Remove stale Playwright locks for cleanup
-        shell: bash
-        run: |
-          if [ -d "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" ]; then
-            echo "Checking for stale locks in ${{ env.PLAYWRIGHT_BROWSERS_PATH }}..."
-            rm -rf "${{ env.PLAYWRIGHT_BROWSERS_PATH }}/__dirlock"
-            find "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" -name "__dirlock" -exec rm -rf {} + || true
-          fi
-
-      - name: Install Playwright system dependencies for cleanup
-        if: steps.cache-playwright-browsers-cleanup.outputs.cache-hit != 'true'
-        run: npx playwright install-deps chromium
-        env:
-          DEBIAN_FRONTEND: noninteractive
-
-      - name: Install Playwright Browsers for cleanup
-        if: steps.cache-playwright-browsers-cleanup.outputs.cache-hit != 'true'
-        run: npx playwright install chromium
-        env:
-          DEBUG: pw:*
-
-      # 既存の手動用クリーンアップスクリプトを単一プロジェクト（chromium）で安全に呼び出し（手動実行の互換性維持のため）
-      - name: Run Cleanup Script
-        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
-          --project=chromium
-        env:
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
-          PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
-          PWAPPY_LOGIN: "1"
-          TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
-
-      - name: Check upstream job status
-        # 先行するe2e-normalまたはe2e-premiumの結果を確認。
-        # 実行されたジョブがいえないか一方でも失敗（failure）していたら、このジョブも失敗させる。
-        if: |
-          (needs.e2e-normal.result == 'failure') || 
-          (needs.e2e-premium.result == 'failure')
-        run: |
-          echo "One or more upstream test jobs reported failure. Propagating status."
-          exit 1
