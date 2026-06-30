@@ -34,59 +34,91 @@ export class EditorHelper {
 
     /**
      * エディタ起動時に表示される「スターターテンプレートモーダル」を閉じてスキップします。
-     * 今後のテストでモーダル自体を操作したい場合は呼び出さないでください。
+     * PlaywrightのShadow DOM自動透過機能を利用し、既存アプリ時は待機を即座にスキップします。
      */
     async handleStarterTemplateModal(): Promise<void> {
+        const startTime = Date.now();
+        const log = (msg: string) => {
+            console.log(`[ModalCheck:Debug] [${Date.now() - startTime}ms] ${msg}`);
+        };
+
         try {
-            await test.step('スターターテンプレートモーダルのチェックとスキップ', async () => {
+            await test.step('スターターテンプレートモーダルのインテリジェントスキップ', async () => {
+                log('判定処理を開始します。ロード完了を待機中...');
+
+                // 1. ローディング表示が消えるのを確実に待つ（エディタDOMの安定化）
+                const loadingOverlay = this.page.locator('app-container-loading-overlay');
+                await expect(loadingOverlay).toBeHidden({ timeout: 15000 }).catch(() => {
+                    log('警告: app-container-loading-overlay が非表示になりませんでした。');
+                });
+
+                // 2. PlaywrightのロケータでDOMツリーを走査し、空アプリかどうかを判定（Shadow DOM透過）
+                const domTree = this.page.locator('#dom-tree');
+                const hasContents = await domTree.locator('.node[data-node-type="page"], .node[data-node-type="ons-navigator"]').count() > 0;
+                const isEmptyApp = !hasContents;
+
+                log(`アプリの状態判定: ${isEmptyApp ? '【新規・空アプリ】' : '【既存・要素ありアプリ】'}`);
+
+                // 既存の要素があるアプリの場合、モーダルは絶対に表示されないため即終了
+                if (!isEmptyApp) {
+                    log('要素ありアプリのため、待機なしで終了します。[スキップ成功]');
+                    return;
+                }
+
+                // 3. 空アプリの場合のみ、モーダルに 'visible' 属性が付与されるのを最大6秒間待機（Shadow DOM自動透過）
+                log('新規アプリのため、モーダル出現（visible属性）を最大6秒間待機します...');
                 const starterModal = this.page.locator('starter-template-modal');
 
-                let isModalVisible = false;
-                try {
-                    await starterModal.waitFor({ state: 'visible', timeout: 5000 });
-                    isModalVisible = true;
-                } catch (e) {
-                    // 5秒以内に現れなかった場合は表示なしと判断して安全にスルー
-                    console.log('[EditorHelper] starter-template-modal did not appear within 5s. Proceeding...');
-                }
+                // expect の組み込みリトライ（toHaveAttribute）を使って確実に属性の付与を待つ
+                await expect(starterModal).toHaveAttribute('visible', '', { timeout: 6000 });
+                log('モーダルの出現を確認しました！');
 
-                if (isModalVisible) {
-                    const skipBtn = starterModal.locator('.btn-skip, button:has-text("閉じて一から自分で作る")').first();
-                    await expect(skipBtn).toBeVisible({ timeout: 3000 });
+                // 4. モーダルのスキップ処理
+                const skipBtn = starterModal.locator('.btn-skip, button:has-text("閉じて一から自分で作る")').first();
+                await expect(skipBtn).toBeVisible({ timeout: 2000 });
 
-                    // 完全に消えるまでリトライを行う
-                    await expect(async () => {
-                        // 1. 物理クリックおよび物理タップを最優先で試行（モバイル・PCのタップリスナー対策）
-                        await skipBtn.click({ force: true, timeout: 1000 }).catch(() => {
-                            return skipBtn.tap({ noWaitAfter: true, timeout: 1000 });
-                        }).catch(() => {
-                            // 2. JSクリックをフォールバックとして試行
-                            return skipBtn.evaluate((el: HTMLElement) => el.click());
-                        }).catch(() => { });
+                await expect(async () => {
+                    log('スキップボタンのクリックを試行します。');
 
-                        // 3. モーダルの visible 属性が消え、非表示になるのを待つ
-                        await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 1500 });
-                        await expect(starterModal).toBeHidden({ timeout: 1500 });
-                    }).toPass({
-                        timeout: 8000,
-                        intervals: [500] // リトライ間隔を短くして高速化
-                    });
+                    // JSによる直接クリック
+                    const jsClicked = await skipBtn.evaluate((el: HTMLElement) => {
+                        if (el) {
+                            el.click();
+                            return true;
+                        }
+                        return false;
+                    }).catch(() => false);
 
-                    // 処理後の安定化待ち
-                    await this.page.waitForTimeout(500);
-                }
+                    if (jsClicked) {
+                        log('JSクリック送信成功。');
+                    } else {
+                        await skipBtn.click({ force: true, timeout: 500 }).catch(async () => {
+                            await skipBtn.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
+                        });
+                    }
+
+                    // モーダルが閉じた（visible属性が消えた）ことを検証
+                    await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 1000 });
+                }).toPass({
+                    timeout: 4000,
+                    intervals: [300]
+                });
+
+                log('モーダルの閉鎖完了。');
+                await this.page.waitForTimeout(300);
             });
         } catch (e) {
-            console.log('[EditorHelper] handleStarterTemplateModal skipped or failed:', e);
-            // クリックで消えなかった場合の強制非表示フォールバック
-            await this.page.evaluate(() => {
-                const modal = document.querySelector('starter-template-modal');
-                if (modal) {
-                    modal.removeAttribute('visible');
-                    (modal as any).style.display = 'none';
-                    (modal as any).style.pointerEvents = 'none';
+            log(`警告: 閉鎖処理中に例外が発生。強制破棄フォールバックを実行。内容: ${e}`);
+            // フェイルセーフ：ロケータを通じて直接visible属性を除去
+            await this.page.locator('starter-template-modal').evaluate((el: HTMLElement) => {
+                if (el) {
+                    el.removeAttribute('visible');
+                    el.style.display = 'none';
+                    el.style.pointerEvents = 'none';
                 }
             }).catch(() => { });
+        } finally {
+            log(`判定ロジック全体の合計処理時間: ${Date.now() - startTime}ms`);
         }
     }
 
