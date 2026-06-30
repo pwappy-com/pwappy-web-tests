@@ -664,13 +664,13 @@ test.describe('エディタ内機能のテスト', () => {
             await targetInput.locator('select[name="flex-wrap"]').selectOption('wrap');
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-wrap', value: 'wrap' });
 
-            await targetInput.locator('select[name="align-content"]').selectOption('Center');
+            await targetInput.locator('select[name="align-content"]').selectOption({ value: 'center' });
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'align-content', value: 'center' });
 
-            await targetInput.locator('select[name="justify-content"]').selectOption('Center');
+            await targetInput.locator('select[name="justify-content"]').selectOption({ value: 'center' });
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'justify-content', value: 'center' });
 
-            await targetInput.locator('select[name="align-items"]').selectOption('Baseline');
+            await targetInput.locator('select[name="align-items"]').selectOption({ value: 'baseline' });
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'align-items', value: 'baseline' });
 
             await checkbox.uncheck();
@@ -729,7 +729,7 @@ test.describe('エディタ内機能のテスト', () => {
             const alignSelfSelect = targetInputPanel.locator('select[name="align-self"]');
             await expect(alignSelfSelect).toBeVisible();
 
-            await alignSelfSelect.selectOption('Center');
+            await alignSelfSelect.selectOption({ value: 'center' });
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'align-self', value: 'center' });
         });
 

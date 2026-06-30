@@ -294,6 +294,28 @@ export class EditorHelper {
     }
 
     /**
+ * 属性キーから画面上の日本語表示名を取得するヘルパー関数
+ */
+    getDisplayName(key: string): string {
+        switch (key) {
+            case 'domId': return 'ID';
+            case 'explain': return '説明';
+            case 'class': return 'クラス';
+            case 'text': return 'テキスト';
+            case 'template-id': return 'テンプレートID';
+            case 'style-flex': return 'Flexboxレイアウト (親要素)';
+            case 'style-flexitem': return 'Flexbox配置 (子要素)';
+            case 'style-spacing': return '余白調整';
+            case 'style-typography': return '文字装飾';
+            case 'style-background': return '背景 / 装飾';
+            case 'style-border': return 'ボーダー / 角丸';
+            case 'style-shadow': return 'シャドウ / 奥行き';
+            case 'style-sizing': return 'サイズ / 表示制御';
+            default: return key;
+        }
+    }
+
+    /**
      * 属性編集モーダルで新しい属性定義を追加します。
      * @param name 属性名
      * @param template テンプレート文字列 (例: 'input[text]', 'style-flex')
@@ -319,7 +341,8 @@ export class EditorHelper {
         await propertyContainer.getByRole('button', { name: '追加' }).click();
 
         await expect(propertyContainer.locator('#attributeList')).toBeHidden();
-        const newPropertyRow = propertyContainer.locator('.editor-row', { hasText: name });
+        const displayName = this.getDisplayName(name);
+        const newPropertyRow = propertyContainer.locator('.editor-row', { hasText: displayName });
         await expect(newPropertyRow).toBeVisible();
     }
 
@@ -331,7 +354,7 @@ export class EditorHelper {
         const propertyContainer = this.getPropertyContainer();
         const attrList = propertyContainer.locator('#attributeList');
 
-        const targetRow = attrList.locator('div.attribute-item', { hasText: name });
+        const targetRow = attrList.locator(`div.attribute-item[data-attribute-key="${name}"]`);
         await targetRow.locator('.edit-icon').click();
 
         this.page.once('dialog', dialog => dialog.accept());
