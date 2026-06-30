@@ -41,11 +41,11 @@ on:
           - ubuntu-latest
           - windows-latest
           - macos-latest
-      # 手動実行時のワーカー数を指定（デフォルトは 2）
+      # 手動実行時のワーカー数を指定
       workers:
         description: "実行ワーカー数 (手動用)"
         required: true
-        default: "100%"
+        default: "75%"
         type: string
 
 # ワークフローを構成するジョブを定義
@@ -277,7 +277,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            WORKERS="100%"
+            WORKERS="75%"
           else
             # 手動実行時は入力パラメータから取得し、空の場合はデフォルト 2
             WORKERS="${{ github.event.inputs.workers }}"
