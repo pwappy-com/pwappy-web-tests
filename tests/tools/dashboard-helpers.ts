@@ -8,6 +8,10 @@ import fs from 'fs';
  * pageオブジェクトからブラウザの1文字コードを推測します
  */
 function detectBrowserCode(page: Page): string {
+    if (process.env.PWAPPY_TEST_CLEANUP_BROWSER_CODE) {
+        return process.env.PWAPPY_TEST_CLEANUP_BROWSER_CODE;
+    }
+
     const ua = page.context().browser()?.browserType().name() || '';
     const viewport = page.viewportSize();
     const isMobile = viewport ? viewport.width < 768 : false;

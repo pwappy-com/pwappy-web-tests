@@ -509,7 +509,7 @@ jobs:
           restore-keys: |
             ${{ env.CACHE_KEY_PREFIX }}-
 
-      # キャッシュから復元された不要なロックファイルを事前に強制削除してハングを防ぐ
+      # キャッシュから不要なロックファイルを事前に強制削除してハングを防ぐ
       - name: Remove stale Playwright locks for cleanup
         shell: bash
         run: |
@@ -531,20 +531,61 @@ jobs:
         env:
           DEBUG: pw:*
 
-      - name: Run Cleanup Script
-        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
-          --project=chromium
+      # クリーンアップスクリプトを、全アカウント候補（OS × ブラウザ × ワーカー）に対してループ実行します
+      - name: Run Cleanup Script for All Test Accounts
+        shell: bash
+        run: |
+          # テストで使われうるすべての「OSコード」「ブラウザコード」「ワーカー番号」
+          OS_LIST="ubuntu win macos local"
+          BROWSER_LIST="c f s a i"
+          WORKER_LIST="0 1"
+
+          for os in $OS_LIST; do
+            for browser in $BROWSER_LIST; do
+              for worker in $WORKER_LIST; do
+                
+                # 環境変数のセット
+                export TEST_WORKER_INDEX="$worker"
+                export PWAPPY_TEST_CLEANUP_BROWSER_CODE="$browser"
+                
+                if [ "$os" = "ubuntu" ]; then
+                  export TEST_RUN_SUFFIX="ubuntu"
+                elif [ "$os" = "win" ]; then
+                  export TEST_RUN_SUFFIX="win"
+                elif [ "$os" = "macos" ]; then
+                  export TEST_RUN_SUFFIX="macos"
+                else
+                  export TEST_RUN_SUFFIX="local"
+                fi
+
+                # 対応する認証ファイルのパスを取得
+                # .auth/user-[os]-[browser]-[worker].json
+                # ※ constants.ts の仕様上、 getOsCode() が TEST_RUN_SUFFIX から 'u' 'w' 'm' 'l' を抽出します
+                OS_CODE_CHAR="l"
+                if [ "$os" = "ubuntu" ]; then OS_CODE_CHAR="u"; fi
+                if [ "$os" = "win" ]; then OS_CODE_CHAR="w"; fi
+                if [ "$os" = "macos" ]; then OS_CODE_CHAR="m"; fi
+                
+                SESSION_FILE=".auth/user-${OS_CODE_CHAR}-${browser}-${worker}.json"
+
+                # 実際にテストで使われた形跡（中身が空でないセッションファイル）がある場合のみ、既存スクリプトを実行
+                if [ -f "$SESSION_FILE" ] && [ "$(cat "$SESSION_FILE" | tr -d ' ')" != "{}" ]; then
+                  echo "=== Cleaning up account: OS[$os] Browser[$browser] Worker[$worker] (File: $SESSION_FILE) ==="
+                  
+                  # 既存の削除スクリプト（a0-cleanup-all-apps.spec.ts）を、何一つコードを変更せずにそのまま呼び出し
+                  npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=chromium
+                fi
+              done
+             forage
+          done
         env:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
-          PWAPPY_TEST_USER_PREFIX: "pwusr"
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
       - name: Check upstream job status
-        # 先行するe2e-normalまたはe2e-premiumの結果を確認。
-        # 実行されたジョブがいえないか一方でも失敗（failure）していたら、このジョブも失敗させる。
         if: |
           (needs.e2e-normal.result == 'failure') || 
           (needs.e2e-premium.result == 'failure')
