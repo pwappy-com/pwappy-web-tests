@@ -4,7 +4,7 @@ import { test as base, expect, Page } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
-import { STORAGE_STATE } from '../../constants';
+import { getStorageStatePath } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
@@ -44,14 +44,20 @@ const test = base.extend<EditorFixtures>({
 
 test.describe.configure({ mode: 'serial' });
 
-// テスト全体の開始前に、共有アプリを1回だけ作成する
+// テスト全体の開始前に、アプリを1回だけ作成する
 test.beforeAll(async ({ browser }) => {
     const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-    const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
-    appName = `fe-test-${uniqueId}`.slice(0, 30);
-    appKey = `fe-key-${uniqueId}`.slice(0, 30);
+    
+    // workerIndex を取得
+    const workerIndex = test.info().workerIndex;
+    const storageStatePath = getStorageStatePath(workerIndex);
 
-    const context = await browser.newContext({ storageState: STORAGE_STATE });
+    const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
+    appName = `ui-auto-${uniqueId}`.slice(0, 30);
+    appKey = `auto-key-${uniqueId}`.slice(0, 30);
+
+    // ワーカー固有のセッションファイルを指定してコンテキストを作成
+    const context = await browser.newContext({ storageState: storageStatePath });
     const page = await context.newPage();
 
     await gotoDashboard(page);
@@ -63,7 +69,12 @@ test.beforeAll(async ({ browser }) => {
 // すべてのテストが終了した後に、アプリを削除する
 test.afterAll(async ({ browser }) => {
     if (appKey) {
-        const context = await browser.newContext({ storageState: STORAGE_STATE });
+        // 現在のワーカーのインデックスを取得
+        const workerIndex = test.info().workerIndex;
+        // ワーカー固有のセッションファイルのパスを取得
+        const storageStatePath = getStorageStatePath(workerIndex);
+
+        const context = await browser.newContext({ storageState: storageStatePath });
         const page = await context.newPage();
 
         await gotoDashboard(page);

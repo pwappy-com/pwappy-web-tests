@@ -1,6 +1,28 @@
 import { expect, type Page, type BrowserContext } from '@playwright/test';
 import { EditorHelper } from './editor-helpers';
 import { clickAndOpenNewTabSafely } from './window-helpers';
+import { ensureAuthenticated } from '../constants';
+import fs from 'fs';
+
+/**
+ * pageオブジェクトからブラウザの1文字コードを推測します
+ */
+function detectBrowserCode(page: Page): string {
+    if (process.env.PWAPPY_TEST_CLEANUP_BROWSER_CODE) {
+        return process.env.PWAPPY_TEST_CLEANUP_BROWSER_CODE;
+    }
+
+    const ua = page.context().browser()?.browserType().name() || '';
+    const viewport = page.viewportSize();
+    const isMobile = viewport ? viewport.width < 768 : false;
+
+    if (isMobile) {
+        return ua.includes('webkit') ? 'i' : 'a'; // iOS: i, Android: a
+    }
+    if (ua.includes('firefox')) return 'f';
+    if (ua.includes('webkit')) return 's'; // Safari: s
+    return 'c'; // Chromium: c (デフォルト)
+}
 
 /**
  * アプリケーションがリストに表示されているか/いないかを確認します。
@@ -579,6 +601,26 @@ export async function waitForVersionStatus(
 
 export async function gotoDashboard(page: Page): Promise<void> {
     console.log(`[gotoDashboard:Enter] Current URL: ${page.url()}`);
+
+    const workerIndex = process.env.TEST_WORKER_INDEX || '0';
+    const browserCode = detectBrowserCode(page);
+
+    // ★ 引数の順番を (workerIndex, browserCode) で呼び出します
+    const storageStatePath = await ensureAuthenticated(workerIndex, browserCode);
+
+    // Cookieの動的注入
+    try {
+        if (fs.existsSync(storageStatePath)) {
+            const state = JSON.parse(fs.readFileSync(storageStatePath, 'utf-8'));
+            if (state.cookies && state.cookies.length > 0) {
+                await page.context().addCookies(state.cookies);
+                console.log(`[gotoDashboard] Cookies successfully injected for Worker ${workerIndex} (${browserCode})`);
+            }
+        }
+    } catch (e) {
+        console.error(`[gotoDashboard:Error] Failed to inject cookies:`, e);
+    }
+
     // ページ単位で発生した5xxエラーを記録
     if (!(page as any).__hasErrorLogger) {
         page.on('response', response => {
@@ -595,6 +637,8 @@ export async function gotoDashboard(page: Page): Promise<void> {
     ).catch(() => { });
 
     console.log(`[gotoDashboard:Navigating] to ${String(process.env.PWAPPY_TEST_BASE_URL)}`);
+
+    // 3. Cookieが注入された状態でダッシュボードページへ遷移
     await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
     console.log(`[gotoDashboard:Navigated] Current URL: ${page.url()}`);
 
@@ -607,7 +651,6 @@ export async function gotoDashboard(page: Page): Promise<void> {
     await dashboardInitPromise;
 
     // 2. ローディングオーバーレイが表示された場合、それが消えるのを待つ
-    // z-index 3000 で前面を覆っているため、これがある間は何も操作できない
     const loadingOverlay = page.locator('dashboard-loading-overlay');
     await expect(loadingOverlay).toBeHidden({ timeout: 30000 }).catch(() => { });
 

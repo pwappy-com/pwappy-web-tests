@@ -2,7 +2,7 @@ import { test as base, expect, Page, Locator, CDPSession, Dialog } from '@playwr
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor, addVersion } from '../../tools/dashboard-helpers';
 import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';
-import { STORAGE_STATE } from '../../constants';
+import { getStorageStatePath } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
@@ -38,13 +38,17 @@ const test = base.extend<EditorFixtures>({
 // テスト全体の開始前に、アプリを1回だけ作成する
 test.beforeAll(async ({ browser }) => {
     const reversedTimestamp = Date.now().toString().split('').reverse().join('');
-    const uniqueId = `${testRunSuffix}-${reversedTimestamp}`;
 
-    // 並列実行時の競合を避けるため、プレフィックスを prop2 に変更
-    appName = `ui-prop2-${uniqueId}`.slice(0, 30);
-    appKey = `prop2-key-${uniqueId}`.slice(0, 30);
+    // workerIndex を取得
+    const workerIndex = test.info().workerIndex;
+    const storageStatePath = getStorageStatePath(workerIndex);
 
-    const context = await browser.newContext({ storageState: STORAGE_STATE });
+    const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
+    appName = `ui-auto-${uniqueId}`.slice(0, 30);
+    appKey = `auto-key-${uniqueId}`.slice(0, 30);
+
+    // ワーカー固有のセッションファイルを指定してコンテキストを作成
+    const context = await browser.newContext({ storageState: storageStatePath });
     const page = await context.newPage();
 
     await gotoDashboard(page);
@@ -56,7 +60,12 @@ test.beforeAll(async ({ browser }) => {
 // すべてのテストが終了した後に、アプリを削除する
 test.afterAll(async ({ browser }) => {
     if (appKey) {
-        const context = await browser.newContext({ storageState: STORAGE_STATE });
+        // 現在のワーカーのインデックスを取得
+        const workerIndex = test.info().workerIndex;
+        // ワーカー固有のセッションファイルのパスを取得
+        const storageStatePath = getStorageStatePath(workerIndex);
+
+        const context = await browser.newContext({ storageState: storageStatePath });
         const page = await context.newPage();
 
         await gotoDashboard(page);
