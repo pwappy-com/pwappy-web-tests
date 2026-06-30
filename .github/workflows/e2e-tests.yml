@@ -45,7 +45,7 @@ on:
       workers:
         description: "実行ワーカー数 (手動用)"
         required: true
-        default: "2"
+        default: "100%"
         type: string
 
 # ワークフローを構成するジョブを定義
