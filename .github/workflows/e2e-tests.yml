@@ -144,7 +144,7 @@ jobs:
           fi
 
       - name: Determine Test Suite Flags
-        id: get_suite
+        id: get-suite
         shell: bash
         run: |
           # 実行すべきスイート（Normal/Premium）をフラグとして出力
@@ -296,6 +296,42 @@ jobs:
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
+      # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
+      - name: Run Local Cleanup on Finish
+        if: always()
+        shell: bash
+        run: |
+          OS_CODE_CHAR="l"
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then OS_CODE_CHAR="u"; fi
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then OS_CODE_CHAR="w"; fi
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then OS_CODE_CHAR="m"; fi
+
+          BROWSER_CODE="c"
+          if [ "${{ matrix.browser }}" = "firefox" ]; then BROWSER_CODE="f"; fi
+          if [ "${{ matrix.browser }}" = "webkit" ]; then BROWSER_CODE="s"; fi
+          if [ "${{ matrix.browser }}" = "mobile-chrome" ]; then BROWSER_CODE="a"; fi
+          if [ "${{ matrix.browser }}" = "mobile-safari" ]; then BROWSER_CODE="i"; fi
+
+          # ローカルで作成された可能性のあるワーカー番号(0〜3)を走査して確実に掃除
+          for worker in 0 1 2 3; do
+            export TEST_WORKER_INDEX="$worker"
+            export PWAPPY_TEST_CLEANUP_BROWSER_CODE="$BROWSER_CODE"
+            export TEST_RUN_SUFFIX="${{ env.OS_SHORT_NAME }}"
+            
+            SESSION_FILE=".auth/user-${OS_CODE_CHAR}-${BROWSER_CODE}-${worker}.json"
+            
+            if [ -f "$SESSION_FILE" ] && [ "$(cat "$SESSION_FILE" | tr -d ' ')" != "{}" ]; then
+              echo "=== Cleaning up local account: OS[${{ matrix.os }}] Browser[${{ matrix.browser }}] Worker[$worker] ==="
+              npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=chromium
+            fi
+          done
+        env:
+          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
+          PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
+          PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
+          PWAPPY_LOGIN: "1"
+          TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
+
       # テスト失敗またはタイムアウト（キャンセル）時：このブラウザエンジン/OSに関連する「全ての古いキャッシュ」を削除する
       - name: Delete cache on failure or cancellation
         if: failure() || cancelled()
@@ -305,16 +341,6 @@ jobs:
           gh cache list --key "${{ env.CACHE_KEY_PREFIX }}-" --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # テスト中に自動作成された認証セッション（.auth フォルダ）をクリーンアップ用に保存
-      - name: Upload Auth Sessions for Cleanup
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: auth-sessions-normal-${{ matrix.os }}-${{ matrix.browser }}-${{ github.run_id }}
-          path: .auth/
-          retention-days: 1
-          if-no-files-found: ignore
 
       - name: Upload Test Results
         if: always()
@@ -452,6 +478,42 @@ jobs:
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
 
+      # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
+      - name: Run Local Cleanup on Finish
+        if: always()
+        shell: bash
+        run: |
+          OS_CODE_CHAR="l"
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then OS_CODE_CHAR="u"; fi
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then OS_CODE_CHAR="w"; fi
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then OS_CODE_CHAR="m"; fi
+
+          BROWSER_CODE="c"
+          if [ "${{ matrix.browser }}" = "firefox" ]; then BROWSER_CODE="f"; fi
+          if [ "${{ matrix.browser }}" = "webkit" ]; then BROWSER_CODE="s"; fi
+          if [ "${{ matrix.browser }}" = "mobile-chrome" ]; then BROWSER_CODE="a"; fi
+          if [ "${{ matrix.browser }}" = "mobile-safari" ]; then BROWSER_CODE="i"; fi
+
+          # ローカルで作成された可能性のあるワーカー番号(0〜3)を走査して確実に掃除
+          for worker in 0 1 2 3; do
+            export TEST_WORKER_INDEX="$worker"
+            export PWAPPY_TEST_CLEANUP_BROWSER_CODE="$BROWSER_CODE"
+            export TEST_RUN_SUFFIX="${{ env.OS_SHORT_NAME }}"
+            
+            SESSION_FILE=".auth/user-${OS_CODE_CHAR}-${BROWSER_CODE}-${worker}.json"
+            
+            if [ -f "$SESSION_FILE" ] && [ "$(cat "$SESSION_FILE" | tr -d ' ')" != "{}" ]; then
+              echo "=== Cleaning up local account: OS[${{ matrix.os }}] Browser[${{ matrix.browser }}] Worker[$worker] ==="
+              npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=chromium
+            fi
+          done
+        env:
+          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
+          PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
+          PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
+          PWAPPY_LOGIN: "1"
+          TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
+
       # テスト失敗またはタイムアウト（キャンセル）時：このブラウザエンジン/OSに関連する「全ての古いキャッシュ」を削除する
       - name: Delete cache on failure or cancellation
         if: failure() || cancelled()
@@ -460,16 +522,6 @@ jobs:
           gh cache list --key "${{ env.CACHE_KEY_PREFIX }}-" --json key --jq '.[].key' | xargs -I {} gh cache delete {} || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # テスト中に自動作成された認証セッション（.auth フォルダ）をクリーンアップ用に保存
-      - name: Upload Auth Sessions for Cleanup
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: auth-sessions-premium-${{ matrix.os }}-${{ matrix.browser }}-${{ github.run_id }}
-          path: .auth/
-          retention-days: 1
-          if-no-files-found: ignore
 
       - name: Upload Test Results
         if: always()
@@ -552,64 +604,23 @@ jobs:
         env:
           DEBUG: pw:*
 
-      # テストジョブで生成・一時保存されたすべての認証セッションをダウンロードして復元
-      - name: Download all Auth Sessions
-        uses: actions/download-artifact@v6
-        with:
-          pattern: auth-sessions-*
-          path: .auth
-          merge-multiple: true
-
-      # 既存のクリーンアップスクリプトを、全アカウント候補（OS × ブラウザ × ワーカー）に対してループ実行します
-      - name: Run Cleanup Script for All Test Accounts
-        shell: bash
-        run: |
-          # テストで使われうるすべての「OSコード」「ブラウザコード」「ワーカー番号」
-          OS_LIST="ubuntu win macos local"
-          BROWSER_LIST="c f s a i"
-          WORKER_LIST="0 1"
-
-          for os in $OS_LIST; do
-            for browser in $BROWSER_LIST; do
-              for worker in $WORKER_LIST; do
-                
-                # 環境変数のセット
-                export TEST_WORKER_INDEX="$worker"
-                export PWAPPY_TEST_CLEANUP_BROWSER_CODE="$browser"
-                
-                if [ "$os" = "ubuntu" ]; then
-                  export TEST_RUN_SUFFIX="ubuntu"
-                elif [ "$os" = "win" ]; then
-                  export TEST_RUN_SUFFIX="win"
-                elif [ "$os" = "macos" ]; then
-                  export TEST_RUN_SUFFIX="macos"
-                else
-                  export TEST_RUN_SUFFIX="local"
-                fi
-
-                # 対応する認証ファイルのパスを取得
-                # .auth/user-[os]-[browser]-[worker].json
-                # ※ constants.ts の仕様上、 getOsCode() が TEST_RUN_SUFFIX から 'u' 'w' 'm' 'l' を抽出します
-                OS_CODE_CHAR="l"
-                if [ "$os" = "ubuntu" ]; then OS_CODE_CHAR="u"; fi
-                if [ "$os" = "win" ]; then OS_CODE_CHAR="w"; fi
-                if [ "$os" = "macos" ]; then OS_CODE_CHAR="m"; fi
-                
-                SESSION_FILE=".auth/user-${OS_CODE_CHAR}-${browser}-${worker}.json"
-
-                # 実際にテストで使われた形跡（中身が空でないセッションファイル）がある場合のみ、既存スクリプトを実行
-                if [ -f "$SESSION_FILE" ] && [ "$(cat "$SESSION_FILE" | tr -d ' ')" != "{}" ]; then
-                  echo "=== Cleaning up account: OS[$os] Browser[$browser] Worker[$worker] (File: $SESSION_FILE) ==="
-                  
-                  # 既存の削除スクリプト（a0-cleanup-all-apps.spec.ts）を、何一つコードを変更せずにそのまま呼び出し
-                  npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=chromium
-                fi
-              done 
-            done
-          done
+      # 既存の手動用クリーンアップスクリプトを単一プロジェクト（chromium）で安全に呼び出し（手動実行の互換性維持のため）
+      - name: Run Cleanup Script
+        run: npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts
+          --project=chromium
         env:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
           PWAPPY_LOGIN: "1"
           TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
+
+      - name: Check upstream job status
+        # 先行するe2e-normalまたはe2e-premiumの結果を確認。
+        # 実行されたジョブがいえないか一方でも失敗（failure）していたら、このジョブも失敗させる。
+        if: |
+          (needs.e2e-normal.result == 'failure') || 
+          (needs.e2e-premium.result == 'failure')
+        run: |
+          echo "One or more upstream test jobs reported failure. Propagating status."
+          exit 1
