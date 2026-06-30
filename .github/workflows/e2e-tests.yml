@@ -13,8 +13,12 @@ concurrency:
 on:
   # 定期実行 (schedule)
   schedule:
-    # UTCの3時間毎に実行。JST 10時, 13時, 16時, 19時, 22時, 翌5時, 8時に実行 (Normalテスト用)
+    # 3時間毎に実行 (JST 10:00, 13:00, 16:00, 19:00, 22:00, 翌5:00, 8:00) -> Ubuntu専用にする
     - cron: "0 1,4,7,10,13,20,23 * * *"
+
+    # 毎日JST 深夜3:00 (UTC 18:00) に実行 -> Windows & Mac専用にする
+    - cron: "0 18 * * *"
+
     # UTCの毎日0時0分 (JST 9時) に実行 (Premiumテスト用) GeminiAPIキーの有料化に伴い一時停止
     - cron: "0 0 * * *"
   # 手動実行 (workflow_dispatch)
@@ -66,25 +70,17 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            # 毎日0時のスケジュール（Premiumテスト用）の場合は全OSを実行
+            # 1. 毎日0時のスケジュール（Premiumテスト用など）
             if [[ "${{ github.event.schedule }}" == "0 0 * * *" ]]; then
               echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"}, {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"}, {"os": "windows-latest", "browser": "chromium", "binary": "chromium"}, {"os": "macos-latest", "browser": "webkit", "binary": "webkit"}, {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}]' >> $GITHUB_OUTPUT
-            else
-              # 3時間毎の定期実行（UTC 1, 4, 7, 10, 13, 20, 23）
-              H=$(date -u +"%H")
-              H=$((10#$H))
-
-              if (( (H >= 23 || H <= 2) || (H >= 10 && H <= 11) )); then
-                ROTATION_TARGET='{"os": "windows-latest", "browser": "chromium", "binary": "chromium"}'
-              elif (( (H >= 4 && H <= 5) || (H >= 13 && H <= 14) )); then
-                ROTATION_TARGET='{"os": "macos-latest", "browser": "webkit", "binary": "webkit"}'
-              elif (( (H >= 7 && H <= 8) || (H >= 20 && H <= 21) )); then
-                ROTATION_TARGET='{"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}'
-              else
-                ROTATION_TARGET='{"os": "windows-latest", "browser": "chromium", "binary": "chromium"}'
-              fi
-
-              echo "matrix=[{\"os\": \"ubuntu-latest\", \"browser\": \"chromium\", \"binary\": \"chromium\"}, {\"os\": \"ubuntu-latest\", \"browser\": \"mobile-chrome\", \"binary\": \"chromium\"}, $ROTATION_TARGET]" >> $GITHUB_OUTPUT
+            
+            # 2. 3時間毎のスケジュール（JST日中・夕夜間など）：Ubuntuのみを実行して高速フィードバック
+            elif [[ "${{ github.event.schedule }}" == "0 1,4,7,10,13,20,23 * * *" ]]; then
+              echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"}, {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"}]' >> $GITHUB_OUTPUT
+            
+            # 3. 毎日JST深夜3時（UTC 18:00）のスケジュール：負荷の高い Windows と macOS をまとめて実行
+            elif [[ "${{ github.event.schedule }}" == "0 18 * * *" ]]; then
+              echo 'matrix=[{"os": "windows-latest", "browser": "chromium", "binary": "chromium"}, {"os": "macos-latest", "browser": "webkit", "binary": "webkit"}, {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}]' >> $GITHUB_OUTPUT
             fi
           else
             # 手動実行 (workflow_dispatch)
@@ -236,14 +232,20 @@ jobs:
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            WORKERS="75%"
+            if [ "$OS_NAME" = "ubuntu-latest" ]; then
+              # 高速なUbuntu環境は高効率な並列実行を維持
+              WORKERS="75%"
+            else
+              # Windows, macOS環境はI/O競合やCPU飽和を防ぐため直列（1ワーカー）で堅実に実行
+              WORKERS="1"
+            fi
           else
-            # 手動実行時は入力パラメータから取得し、空の場合はデフォルト 2
+            # 手動実行時は指定された値（未指定時は2）を適用
             WORKERS="${{ github.event.inputs.workers }}"
             WORKERS="${WORKERS:-2}"
           fi
 
-          echo "Running tests with workers: $WORKERS"
+          echo "Running tests on $OS_NAME with workers: $WORKERS"
           npx playwright test tests/specs/normal --project=${{ matrix.browser }} --reporter=line --workers=$WORKERS
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
