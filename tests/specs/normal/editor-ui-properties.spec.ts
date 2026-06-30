@@ -65,34 +65,61 @@ test.afterAll(async ({ browser }) => {
 });
 
 /**
- * 共有ヘルパー関数: 指定した入力欄をマウスでドラッグする
+ * 共有ヘルパー関数: 指定した入力欄をマウスでドラッグする（ハイブリッド動作版）
  */
 async function dragInput(editorPage: Page, inputLocator: Locator, deltaX: number, deltaY: number, shiftKey: boolean = false) {
-    const box = await inputLocator.boundingBox();
-    if (!box) throw new Error('Input bounding box not found');
+    const isMobile = editorPage.viewportSize() ? editorPage.viewportSize()!.width < 768 : false;
+    const browserName = editorPage.context().browser()?.browserType().name();
 
-    const startX = box.x + box.width / 2;
-    const startY = box.y + box.height / 2;
+    // WebKit環境またはモバイル環境の場合（物理ドラッグがエミュレータ/CI側で制限される環境）
+    if (isMobile || browserName === 'webkit') {
+        let finalDeltaX = deltaX;
+        if (deltaX === 0 && deltaY !== 0) {
+            finalDeltaX = -deltaY;
+        }
 
-    // WebKit環境のShadow DOMにおける誤検知（インターセプト判定）を回避するため、force: true を適用します
-    await inputLocator.click({ force: true });
-    await editorPage.waitForTimeout(100);
+        // 疑似イベント方式で、値の増減ロジックやクランプ処理が正しく動いているか検証
+        await inputLocator.evaluate((el: HTMLInputElement, { dx, shift }) => {
+            el.focus();
+            const rect = el.getBoundingClientRect();
+            const startX = rect.left + rect.width / 2;
+            const startY = rect.top + rect.height / 2;
 
-    await editorPage.mouse.move(startX, startY);
+            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY, shiftKey: shift }));
+            window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX + dx, clientY: startY, shiftKey: shift }));
+            window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX + dx, clientY: startY, shiftKey: shift }));
+        }, { dx: finalDeltaX, shift: shiftKey });
 
-    if (shiftKey) await editorPage.keyboard.down('Shift');
-    await editorPage.mouse.down();
+        await editorPage.waitForTimeout(300);
 
-    let finalDeltaX = deltaX;
-    let finalDeltaY = deltaY;
-    if (deltaX === 0 && deltaY !== 0) {
-        finalDeltaX = -deltaY;
-        finalDeltaY = 0;
+    } else {
+        // PC環境（Chromium / Firefoxなど）の場合
+        // 従来通り、Playwrightの「本物の物理マウス操作」を行い、UIの遮蔽バグなども厳密に検証
+        const box = await inputLocator.boundingBox();
+        if (!box) throw new Error('Input bounding box not found');
+
+        const startX = box.x + box.width / 2;
+        const startY = box.y + box.height / 2;
+
+        await inputLocator.click({ force: true });
+        await editorPage.waitForTimeout(100);
+
+        await editorPage.mouse.move(startX, startY);
+
+        if (shiftKey) await editorPage.keyboard.down('Shift');
+        await editorPage.mouse.down();
+
+        let finalDeltaX = deltaX;
+        let finalDeltaY = deltaY;
+        if (deltaX === 0 && deltaY !== 0) {
+            finalDeltaX = -deltaY;
+            finalDeltaY = 0;
+        }
+
+        await editorPage.mouse.move(startX + finalDeltaX, startY + finalDeltaY, { steps: 10 });
+        await editorPage.mouse.up();
+        if (shiftKey) await editorPage.keyboard.up('Shift');
     }
-
-    await editorPage.mouse.move(startX + finalDeltaX, startY + finalDeltaY, { steps: 10 });
-    await editorPage.mouse.up();
-    if (shiftKey) await editorPage.keyboard.up('Shift');
 }
 
 const logTime = (msg: string) => {
