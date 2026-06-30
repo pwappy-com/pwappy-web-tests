@@ -30,6 +30,7 @@ on:
           - normal
           - premium
           - all
+          - cleanup
       # 手動実行時に実行するOSを選択するドロップダウン
       os:
         description: "実行するOSを選択"
@@ -60,6 +61,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       run_normal: ${{ steps.get_suite.outputs.run_normal }}
       run_premium: ${{ steps.get_suite.outputs.run_premium }}
+      run_cleanup_only: ${{ steps.get_suite.outputs.run_cleanup_only }}
     steps:
       - name: Determine test matrix
         id: set-matrix
@@ -117,6 +119,7 @@ jobs:
             SUITE="${{ inputs.test_suite || github.event.inputs.test_suite }}"
             if [ "$SUITE" == "normal" ] || [ "$SUITE" == "all" ]; then echo "run_normal=true" >> $GITHUB_OUTPUT; fi
             if [ "$SUITE" == "premium" ] || [ "$SUITE" == "all" ]; then echo "run_premium=true" >> $GITHUB_OUTPUT; fi
+            if [ "$SUITE" == "cleanup" ]; then echo "run_cleanup_only=true" >> $GITHUB_OUTPUT; fi
           fi
 
   # ===================================================================
@@ -502,8 +505,12 @@ jobs:
   # ===================================================================
   cleanup:
     # NormalまたはPremiumいずれかの実行が終わった後、常に呼び出す。
-    needs: [e2e-normal, e2e-premium]
-    if: always()
+    needs: prepare-matrix
+    if: |
+      always() && 
+      (needs.prepare-matrix.outputs.run_normal == 'true' || 
+       needs.prepare-matrix.outputs.run_premium == 'true' || 
+       needs.prepare-matrix.outputs.run_cleanup_only == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
