@@ -1473,7 +1473,8 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
-    test('属性(style-typography)でのマウスドラッグによる数値増減とクランプ処理の検証', async ({ editorPage, editorHelper }) => {
+    test('属性(style-typography)でのマウスドラッグによる数値増減とクランプ処理の検証', async ({ editorPage, editorHelper, isMobile }) => {
+        test.skip(isMobile, 'マウスドラッグ操作はデスクトップ環境専用のためスキップします。');
         const previewSelector = 'ons-button';
 
         await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
@@ -1506,7 +1507,8 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
-    test('属性(style-typography)での小数ステップ（行高）と負の値許容（文字間隔）のドラッグ検証', async ({ editorPage, editorHelper }) => {
+    test('属性(style-typography)での小数ステップ（行高）と負の値許容（文字間隔）のドラッグ検証', async ({ editorPage, editorHelper, isMobile }) => {
+        test.skip(isMobile, 'マウスドラッグ操作はデスクトップ環境専用のためスキップします。');
         const previewSelector = 'ons-button';
 
         await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
@@ -1543,7 +1545,8 @@ test.describe('エディタ内機能のテスト', () => {
         });
     });
 
-    test('属性(style-typography)でのShiftキー併用加速とデッドゾーン誤検知防止の検証', async ({ editorPage, editorHelper }) => {
+    test('属性(style-typography)でのShiftキー併用加速とデッドゾーン誤検知防止の検証', async ({ editorPage, editorHelper, isMobile }) => {
+        test.skip(isMobile, 'マウスドラッグ操作・Shiftキー操作はデスクトップ環境専用のためスキップします。');
         await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
             const { buttonNode } = await editorHelper.setupPageWithButton();
             await editorHelper.selectNodeInDomTree(buttonNode);
