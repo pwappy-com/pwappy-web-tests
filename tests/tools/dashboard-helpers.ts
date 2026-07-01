@@ -614,7 +614,7 @@ export async function gotoDashboard(page: Page): Promise<void> {
             const state = JSON.parse(fs.readFileSync(storageStatePath, 'utf-8'));
             if (state.cookies && state.cookies.length > 0) {
                 await page.context().addCookies(state.cookies);
-                console.log(`[gotoDashboard] Cookies successfully injected for Worker ${workerIndex} (${browserCode})`);
+                // console.log(`[gotoDashboard] Cookies successfully injected for Worker ${workerIndex} (${browserCode})`);
             }
         }
     } catch (e) {
@@ -636,11 +636,11 @@ export async function gotoDashboard(page: Page): Promise<void> {
         { timeout: 15000 }
     ).catch(() => { });
 
-    console.log(`[gotoDashboard:Navigating] to ${String(process.env.PWAPPY_TEST_BASE_URL)}`);
+    // console.log(`[gotoDashboard:Navigating] to ${String(process.env.PWAPPY_TEST_BASE_URL)}`);
 
     // 3. Cookieが注入された状態でダッシュボードページへ遷移
     await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
-    console.log(`[gotoDashboard:Navigated] Current URL: ${page.url()}`);
+    // console.log(`[gotoDashboard:Navigated] Current URL: ${page.url()}`);
 
     // デフォルトでツアーを表示させないようにする
     await page.evaluate(() => {
