@@ -716,7 +716,7 @@ export class EditorHelper {
         });
 
         await testPage.waitForLoadState('domcontentloaded');
-        console.log(`[TestPage URL] 開いた実機テストページのURL: ${testPage.url()}`);
+        // console.log(`[TestPage URL] 開いた実機テストページのURL: ${testPage.url()}`);
 
         return testPage;
     }

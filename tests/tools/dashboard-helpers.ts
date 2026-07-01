@@ -103,7 +103,7 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
  * クリーンアップスクリプトと同じ「アプリ設定」からの削除フローを使用します。
  */
 export async function deleteApp(page: Page, appKey: string): Promise<void> {
-    console.log(`[deleteApp:Enter] Current URL: ${page.url()}, appKey: ${appKey}`);
+    // console.log(`[deleteApp:Enter] Current URL: ${page.url()}, appKey: ${appKey}`);
     await page.bringToFront();
 
     // 1. 確実にダッシュボード（ワークベンチ）を表示
