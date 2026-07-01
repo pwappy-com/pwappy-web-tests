@@ -1016,4 +1016,48 @@ test.describe('エディタ内機能のテスト (前半)', () => {
         });
     });
 
+    test('モバイル環境でのカラー属性の変更と反映（不具合再現テスト）', async ({ editorPage, editorHelper }) => {
+        const previewSelector = 'ons-button';
+
+        await test.step('1. セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+            const { buttonNode } = await editorHelper.setupPageWithButton();
+            await editorHelper.selectNodeInDomTree(buttonNode);
+            await editorHelper.openMoveingHandle('right');
+            const propertyContainer = editorPage.locator('property-container');
+            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+        });
+
+        await test.step('2. 背景 / 装飾（style-background）エディタを取得', async () => {
+            const propertyContainer = editorHelper.getPropertyContainer();
+            const bgEditor = propertyContainer.locator('style-background-editor');
+            await expect(bgEditor).toBeVisible();
+
+            const colorInput = bgEditor.locator('input[type="color"]').first();
+            await expect(colorInput).toBeAttached();
+        });
+
+        await test.step('3. モバイル環境の挙動を模して change イベントのみを送信し、値が反映されるか検証', async () => {
+            const propertyContainer = editorHelper.getPropertyContainer();
+            const bgEditor = propertyContainer.locator('style-background-editor');
+            const colorInput = bgEditor.locator('input[type="color"]').first();
+
+            // モバイルのカラーピッカーはダイアログが閉じた際に 'change' イベントのみを発火することがある
+            // 現状の実装（@inputのみ）では、'change' イベントだけをディスパッチすると更新が反映されない
+            await colorInput.evaluate((el: HTMLInputElement) => {
+                el.value = '#00ff00';
+                el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+            });
+
+            // デバウンスとUI反映を考慮して待機
+            await editorPage.waitForTimeout(300);
+
+            // 期待値: ボタンの背景色が緑色 (rgb(0, 255, 0)) に更新されていること
+            // 現状は @input のみのため、このアサーションは不合格（FAIL）となり、PC/モバイル双方で不具合が再現される
+            await editorHelper.expectPreviewElementCss({
+                selector: previewSelector,
+                property: 'background-color',
+                value: 'rgb(0, 255, 0)'
+            });
+        });
+    });
 });
