@@ -244,9 +244,8 @@ export class EditorHelper {
         // 1. ドラッグ＆ドロップを実行してダイアログを起動
         await this.page.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
 
-        // 2. カスタムダイアログの表示を待機
-        const templateContainer = this.page.locator('template-container');
-        const dialog = templateContainer.locator('message-box#html-tag-select-dialog');
+        // 2. カスタムダイアログの表示を待機 (template-container の外側に移動したため、最上位ページから直接 first() で取得します)
+        const dialog = this.page.locator('message-box#html-tag-select-dialog').first();
         await expect(dialog).toBeVisible({ timeout: 5000 });
 
         const presetTags = ['div', 'span', 'p', 'img', 'a', 'ul', 'li', 'br', 'h1', 'h2', 'h3', 'strong'];
@@ -254,7 +253,7 @@ export class EditorHelper {
 
         if (presetTags.includes(targetTagLower)) {
             // プリセットに含まれる場合は、対応するボタンをクリックして自動決定
-            const presetBtn = dialog.locator('button.title-icon-bar-button').filter({ hasText: new RegExp(`^${targetTagLower}$`, 'i') }).first();
+            const presetBtn = dialog.locator('button.preset-tag-button', { hasText: new RegExp(`^${targetTagLower}$`, 'i') }).first();
             await presetBtn.click();
         } else {
             // プリセットに含まれない場合は、入力欄にテキストを入れてEnterキーで確定
