@@ -1139,9 +1139,8 @@ customElements.define('${componentTagName}', ${scriptName});
             // エディタを閉じる（保存して戻る）
             await editorPage.locator('script-container #fab-save').click();
 
-            // エディタが開いている状態なので、スクリプトタブをクリックしてリスト表示に戻る
-            const scriptContainer = editorPage.locator('script-container');
-            await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
+            // 【修正】新仕様対応：戻るボタン（#fab-close）をクリックしてエディタを閉じ、一覧に戻る
+            await editorPage.locator('script-container #fab-close').click();
 
             await editorPage.locator('script-container #script-list-container').waitFor({ state: 'visible' });
         });
