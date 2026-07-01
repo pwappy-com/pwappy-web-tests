@@ -108,8 +108,9 @@ async function dragInput(editorPage: Page, inputLocator: Locator, deltaX: number
 }
 
 const logTime = (msg: string) => {
-    const now = new Date();
-    console.log(`[TourTest:Time] ${now.toISOString()} - ${msg}`);
+    // デバッグ時以外は不要なのでコメント化
+    // const now = new Date();
+    // console.log(`[TourTest:Time] ${now.toISOString()} - ${msg}`);
 };
 
 // =========================================================================

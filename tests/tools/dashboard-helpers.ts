@@ -42,7 +42,7 @@ export async function expectAppVisibility(page: Page, appKey: string, isVisible:
  * ダッシュボード画面で新しいアプリケーションを正常に作成します。
  */
 export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
-    console.log(`[createApp:Enter] Current URL: ${page.url()}, appName: ${appName}, appKey: ${appKey}`);
+    // console.log(`[createApp:Enter] Current URL: ${page.url()}, appName: ${appName}, appKey: ${appKey}`);
 
     // about:blank の場合に警告を出す
     if (page.url() === 'about:blank') {
@@ -600,7 +600,7 @@ export async function waitForVersionStatus(
 }
 
 export async function gotoDashboard(page: Page): Promise<void> {
-    console.log(`[gotoDashboard:Enter] Current URL: ${page.url()}`);
+    // console.log(`[gotoDashboard:Enter] Current URL: ${page.url()}`);
 
     const workerIndex = process.env.TEST_WORKER_INDEX || '0';
     const browserCode = detectBrowserCode(page);

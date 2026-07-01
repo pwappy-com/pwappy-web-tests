@@ -19,7 +19,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
     test.beforeEach(async ({ page, context }) => {
         page.on('console', msg => {
             if (msg.text().includes('[ArchiveTest:') || msg.type() === 'error') {
-                console.log(`[ArchiveTest:Console] ${msg.type()}: ${msg.text()}`);
+                // console.log(`[ArchiveTest:Console] ${msg.type()}: ${msg.text()}`);
             }
         });
 
@@ -27,17 +27,17 @@ test.describe('アーカイブ E2Eシナリオ', () => {
             const url = response.url();
             // アーカイブ関連API、またはエラーレスポンスを全てキャプチャ
             if (url.includes('application/archive') || url.includes('application/restore') || response.status() >= 400) {
-                console.log(`\n[ArchiveTest:Network] === API Response ===`);
-                console.log(`[ArchiveTest:Network] URL: ${response.request().method()} ${url}`);
-                console.log(`[ArchiveTest:Network] Status: ${response.status()}`);
+                // console.log(`\n[ArchiveTest:Network] === API Response ===`);
+                // console.log(`[ArchiveTest:Network] URL: ${response.request().method()} ${url}`);
+                // console.log(`[ArchiveTest:Network] Status: ${response.status()}`);
                 try {
                     const reqBody = response.request().postData();
-                    console.log(`[ArchiveTest:Network] Request Body: ${reqBody}`);
+                    // console.log(`[ArchiveTest:Network] Request Body: ${reqBody}`);
                 } catch (e) { }
                 try {
-                    console.log(`[ArchiveTest:Network] Response Body: ${await response.text()}`);
+                    // console.log(`[ArchiveTest:Network] Response Body: ${await response.text()}`);
                 } catch (e) { }
-                console.log(`[ArchiveTest:Network] ====================\n`);
+                // console.log(`[ArchiveTest:Network] ====================\n`);
             }
         });
 
@@ -56,12 +56,12 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 for (const el of path) {
                     if (el.classList && el.classList.contains('confirm-ok-button') && el.innerText.includes('アーカイブ')) {
                         (window as any).__archiveClickCount++;
-                        console.log(`[ArchiveTest:ClickEvent] 「アーカイブ」確認ボタンがクリックされました。累計: ${(window as any).__archiveClickCount}回`);
+                        // console.log(`[ArchiveTest:ClickEvent] 「アーカイブ」確認ボタンがクリックされました。累計: ${(window as any).__archiveClickCount}回`);
                         break;
                     }
                     if (el.classList && (el.classList.contains('confirm-restore-button') || el.innerText.includes('復元'))) {
                         (window as any).__restoreClickCount++;
-                        console.log(`[ArchiveTest:ClickEvent] 「復元」確認ボタンがクリックされました。累計: ${(window as any).__restoreClickCount}回`);
+                        // console.log(`[ArchiveTest:ClickEvent] 「復元」確認ボタンがクリックされました。累計: ${(window as any).__restoreClickCount}回`);
                         break;
                     }
                 }
@@ -98,7 +98,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 await page.waitForTimeout(500);
                 await expect(confirmDialog).toBeVisible({ timeout: 5000 });
 
-                console.log(`[ArchiveTest:Action] アーカイブ実行ボタンをクリックします`);
+                // console.log(`[ArchiveTest:Action] アーカイブ実行ボタンをクリックします`);
                 await page.getByRole('button', { name: 'アーカイブ', exact: true }).click();
                 await page.waitForTimeout(500);
 
@@ -139,7 +139,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 const confirmDialog = page.locator('message-box#restore-confirm');
                 await expect(confirmDialog).toBeVisible({ timeout: 5000 });
 
-                console.log(`[ArchiveTest:Action] 復元実行ボタンをクリックします`);
+                // console.log(`[ArchiveTest:Action] 復元実行ボタンをクリックします`);
                 await confirmDialog.locator('.confirm-restore-button, .confirm-ok-button').click({ force: true, timeout: 2000 });
 
                 await expect(confirmDialog).toBeHidden({ timeout: 5000 });
@@ -192,7 +192,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 await page.waitForTimeout(500);
                 await expect(confirmDialog).toBeVisible({ timeout: 5000 });
 
-                console.log(`[ArchiveTest:Action] アーカイブ実行ボタンをクリックします`);
+                // console.log(`[ArchiveTest:Action] アーカイブ実行ボタンをクリックします`);
                 await page.getByRole('button', { name: 'アーカイブ', exact: true }).click();
                 await page.waitForTimeout(500);
 
@@ -238,7 +238,7 @@ test.describe('アーカイブ E2Eシナリオ', () => {
                 const confirmDialog = page.locator('message-box#restore-confirm');
                 await expect(confirmDialog).toBeVisible({ timeout: 5000 });
 
-                console.log(`[ArchiveTest:Action] 復元実行ボタンをクリックします`);
+                // console.log(`[ArchiveTest:Action] 復元実行ボタンをクリックします`);
                 await confirmDialog.locator('.confirm-restore-button, .confirm-ok-button').click({ force: true, timeout: 2000 });
 
                 await expect(confirmDialog).toBeHidden({ timeout: 5000 });

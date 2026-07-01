@@ -39,7 +39,8 @@ export class EditorHelper {
     async handleStarterTemplateModal(): Promise<void> {
         const startTime = Date.now();
         const log = (msg: string) => {
-            console.log(`[ModalCheck:Debug] [${Date.now() - startTime}ms] ${msg}`);
+            // デバッグ時以外は不要なのでコメント化
+            // console.log(`[ModalCheck:Debug] [${Date.now() - startTime}ms] ${msg}`);
         };
 
         try {

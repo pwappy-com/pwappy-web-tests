@@ -103,8 +103,9 @@ test.describe.serial('エディタUI自動化統合テスト', () => {
     }
 
     const logTime = (msg: string) => {
-        const now = new Date();
-        console.log(`[TourTest:Time] ${now.toISOString()} - ${msg}`);
+        // デバッグするとき以外は不要なのでコメント化
+        // const now = new Date();
+        // console.log(`[TourTest:Time] ${now.toISOString()} - ${msg}`);
     };
 
     // =========================================================================
@@ -496,10 +497,10 @@ test.describe.serial('エディタUI自動化統合テスト', () => {
                 editorPage = await openEditor(page, context, appName);
                 logTime('openEditor 完了');
 
-                // Playwright側のコンソールにもブラウザ内のログをブリッジする
-                editorPage.on('console', msg => {
-                    console.log(`[TourTest:BrowserConsole] ${msg.type()}: ${msg.text()}`);
-                });
+                // // Playwright側のコンソールにもブラウザ内のログをブリッジする
+                // editorPage.on('console', msg => {
+                //     console.log(`[TourTest:BrowserConsole] ${msg.type()}: ${msg.text()}`);
+                // });
 
                 if (browserName === 'webkit') {
                     await editorPage.route('**/*.webm', route => route.abort('blockedbyclient'));
