@@ -650,8 +650,13 @@ test.describe('HTMLタグ選択ダイアログ機能のテスト', () => {
         const newHtmlTagNode = targetLocator.locator('> .node[data-node-type="span"]');
         await expect(newHtmlTagNode).toBeVisible();
 
+        // 追加された要素の自動生成されたDOM IDを取得
+        const domId = await newHtmlTagNode.getAttribute('data-node-dom-id');
+        if (!domId) throw new Error('data-node-dom-id is not defined');
+
         // 中身が空のタグは幅や高さが0になり visibility 判定で落ちるため、Attached で検証
-        const previewElement = editorHelper.getPreviewElement('span');
+        // 'span' タグ名ではなく、一意の '#span1' などのIDを指定します
+        const previewElement = editorHelper.getPreviewElement(`#${domId}`);
         await expect(previewElement).toBeAttached();
     });
 

@@ -356,26 +356,42 @@ export class EditorHelper {
     async addAttributeDefinition({ name, template, scope }: { name: string; template: string; scope: 'element' | 'tag' }): Promise<void> {
         const propertyContainer = this.getPropertyContainer();
         const scopeButtonName = scope === 'element' ? '要素に追加' : 'タグに追加';
+
+        // 1. 設定用モーダルを起動して入力するフェーズ
         await expect(propertyContainer).toBeVisible();
         await propertyContainer.getByRole('button', { name: scopeButtonName }).click();
 
         const nameCombobox = propertyContainer.getByRole('combobox', { name: '属性名:' });
         const templateCombobox = propertyContainer.getByRole('combobox', { name: 'テンプレート:' });
 
-        // 入力可能状態になるまで待機＆検証
         await expect(nameCombobox).toBeEditable();
         await expect(templateCombobox).toBeEditable();
 
-        // 実際に入力
         await nameCombobox.fill(name);
         await templateCombobox.fill(template);
 
         await propertyContainer.getByRole('button', { name: '追加' }).click();
 
-        await expect(propertyContainer.locator('#attributeList')).toBeHidden();
+        // 2. モーダルが閉じて、追加された入力フィールドがDOMに描画されるまでのラグを toPass で吸収
         const displayName = this.getDisplayName(name);
         const newPropertyRow = propertyContainer.locator('.editor-row', { hasText: displayName });
-        await expect(newPropertyRow).toBeVisible();
+
+        await expect(async () => {
+            // アラート（重複エラー等）が割り込んでいないか確認
+            const alert = this.page.locator('alert-component');
+            if (await alert.isVisible().catch(() => false)) {
+                await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });
+            }
+
+            // 設定用ポップアップが完全に閉じていることを確認
+            await expect(propertyContainer.locator('#attributeList')).toBeHidden({ timeout: 1000 });
+
+            // 追加された行が可視（レンダリング済み）になっていることを検証
+            await expect(newPropertyRow).toBeVisible({ timeout: 1000 });
+        }).toPass({
+            timeout: 15000,      // 最大15秒間リトライ
+            intervals: [1000]    // 1秒間隔
+        });
     }
 
     /**

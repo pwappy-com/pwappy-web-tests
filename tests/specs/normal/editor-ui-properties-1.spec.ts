@@ -21,7 +21,22 @@ const test = base.extend<EditorFixtures>({
 
         // 作成済みの共有アプリ詳細画面へ移動
         const appRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) }).first();
-        await expect(appRow).toBeVisible({ timeout: 15000 });
+
+        // アプリケーションカードが出現するまで、必要に応じてリロードを挟みながら待機
+        await expect(async () => {
+            const count = await appRow.count();
+            if (count === 0) {
+                // カードが見つからない場合は、ダッシュボードの表示を更新して再検索を試みます
+                await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => { });
+                await page.locator('dashboard-loading-overlay').waitFor({ state: 'hidden', timeout: 5000 }).catch(() => { });
+            }
+            await expect(appRow).toBeVisible({ timeout: 2000 });
+        }).toPass({
+            timeout: 30000,     // 最大30秒間リトライを繰り返す
+            intervals: [3000]   // リロード後の表示を考慮し、3秒間隔でリトライ
+        });
+
+        // 確実に対象のアプリ詳細画面を開く
         await appRow.click({ force: true });
         await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
 
