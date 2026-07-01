@@ -1190,8 +1190,7 @@ customElements.define('${componentTagName}', ${scriptName});
             await editorHelper.addNewScript(scriptName);
             await editorHelper.editScriptContent(scriptName, initialContent);
 
-            // リストに戻る
-            await scriptContainer.locator('#tab-script').click();
+            // 【修正】editScriptContentの内部で自動的に一覧に戻るため、表示検証のみに変更します
             await expect(scriptContainer.locator('#script-list-container')).toBeVisible();
         });
 
@@ -1202,14 +1201,14 @@ customElements.define('${componentTagName}', ${scriptName});
             await editorHelper.openScriptForEditing(scriptName);
             await expect(editorContainer).toBeVisible();
 
-            const cancelBtn = scriptContainer.locator('#fab-cancel');
-            await cancelBtn.click();
+            const closeBtn = scriptContainer.locator('#fab-close');
+            await closeBtn.click();
 
             await expect(scriptContainer.locator('#script-list-container')).toBeVisible();
             await expect(editorContainer).toBeHidden();
         });
 
-        test('変更がある場合、確認ダイアログでOKを押すと変更が破棄される', async ({ editorPage, editorHelper }) => {
+        test('変更がある場合、確認ダイアログで「キャンセル（いいえ）」を選択すると変更が破棄されて一覧に戻る', async ({ editorPage, editorHelper }) => {
             const scriptContainer = editorPage.locator('script-container');
             const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
 
@@ -1219,11 +1218,12 @@ customElements.define('${componentTagName}', ${scriptName});
             await editorHelper.setMonacoValue(monacoEditor, modifiedContent);
 
             editorPage.once('dialog', async dialog => {
-                expect(dialog.message()).toContain('編集内容が破棄されます');
-                await dialog.accept();
+                expect(dialog.message()).toContain('未保存の変更があります');
+                // キャンセル（dismiss）を選択して、変更を破棄して閉じる
+                await dialog.dismiss();
             });
 
-            await scriptContainer.locator('#fab-cancel').click();
+            await scriptContainer.locator('#fab-close').click();
 
             await expect(scriptContainer.locator('#script-list-container')).toBeVisible();
 
@@ -1232,21 +1232,55 @@ customElements.define('${componentTagName}', ${scriptName});
             expect(normalizeWhitespace(currentContent)).toBe(normalizeWhitespace(initialContent));
         });
 
-        test('変更がある場合、確認ダイアログでキャンセルを押すと編集を続行できる', async ({ editorPage, editorHelper }) => {
+        test('変更がある場合、確認ダイアログで「OK（はい）」を選択すると変更が保存されて一覧に戻る', async ({ editorPage, editorHelper }) => {
             const scriptContainer = editorPage.locator('script-container');
             const monacoEditor = scriptContainer.locator('.monaco-editor[role="code"]');
 
             await editorHelper.openScriptForEditing(scriptName);
             await editorHelper.setMonacoValue(monacoEditor, modifiedContent);
+
             editorPage.once('dialog', async dialog => {
-                await dialog.dismiss();
+                expect(dialog.message()).toContain('未保存の変更があります');
+                // OK（accept）を選択して、変更を保存して閉じる
+                await dialog.accept();
             });
 
-            await scriptContainer.locator('#fab-cancel').click();
-            await expect(scriptContainer.locator('#script-container')).toBeVisible();
+            await scriptContainer.locator('#fab-close').click();
 
+            await expect(scriptContainer.locator('#script-list-container')).toBeVisible();
+
+            await editorHelper.openScriptForEditing(scriptName);
             const currentContent = await editorHelper.getMonacoEditorContent();
             expect(normalizeWhitespace(currentContent)).toBe(normalizeWhitespace(modifiedContent));
+        });
+
+        test('「最近開いたスクリプトを再開する」バナーが表示され、クリックして再編集に入れること', async ({ editorPage, editorHelper }) => {
+            const scriptContainer = editorPage.locator('script-container');
+            const listContainer = scriptContainer.locator('#script-list-container');
+            const editorContainer = scriptContainer.locator('#script-container');
+
+            // 💡 beforeEachで直前に編集を終えて閉じた scriptName (cancelTestScript) の
+            // 再開バナーが、すでに一覧画面の上部に描画されている状態からスタートします。
+
+            await test.step('1. 一覧画面の上部に「最近開いたスクリプト」バナーが出現していることを検証', async () => {
+                // beforeEachで最後に閉じたスクリプト名が含まれるバナーを特定
+                const resumeBanner = listContainer.locator('div').filter({ hasText: '最近開いた' }).first();
+                await expect(resumeBanner).toBeVisible();
+                await expect(resumeBanner).toContainText(scriptName); // beforeEachの scriptName と一致することを確認
+            });
+
+            await test.step('2. バナーをクリックすると、そのスクリプトの編集画面に即座に戻れることを検証', async () => {
+                const resumeBanner = listContainer.locator('div').filter({ hasText: '最近開いた' }).first();
+                await resumeBanner.click();
+
+                // 編集画面（Monacoエディタ）が再展開され、一覧画面が非表示になっていること
+                await expect(editorContainer).toBeVisible();
+                await expect(listContainer).toBeHidden();
+
+                // エディタの内容が該当スクリプトのものであることを確認
+                const content = await editorHelper.getMonacoEditorContent();
+                expect(content).toContain(`function ${scriptName}`);
+            });
         });
     });
 });

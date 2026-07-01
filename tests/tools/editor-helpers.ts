@@ -845,34 +845,19 @@ export class EditorHelper {
         const apiResult = await this.setMonacoValue(monacoEditor, scriptContent);
 
         // 値が正しく反映されたか確認
-        const contentAfterApi = await this.getMonacoEditorContent();
-        const isMatch = contentAfterApi.trim() === scriptContent.trim();
-
-        if (!isMatch) {
-            console.warn(`[Safari Debug] API setValue mismatch in editScript.
-            Expected start: "${scriptContent.substring(0, 50)}..."
-            Actual start:   "${contentAfterApi.substring(0, 50)}..."`);
-
-            // フォールバック: 物理入力
+        const currentContent = await this.getMonacoEditorContent();
+        if (normalizeWhitespace(currentContent) !== normalizeWhitespace(scriptContent)) {
+            // API反映に失敗した場合はキーボード入力でフォールバック
             const textarea = monacoEditor.locator('textarea').first();
-
-            // エディタ（textarea）に確実にフォーカスを当てるため、視覚的なラインをクリック
             await monacoEditor.locator('.view-lines').click();
             await textarea.focus();
-
-            // 既存の入力サジェストやオーバーレイを消す
             await this.page.keyboard.press('Escape');
-
-            // 全選択して削除 (Mac/Safari対応を含む確実な方法)
             await this.page.keyboard.press('Control+A');
             await this.page.keyboard.press('Meta+A');
             await this.page.keyboard.press('Delete');
             await this.page.keyboard.press('Backspace');
-
-            // 削除後の反映待ち
             await this.page.waitForTimeout(300);
 
-            // 入力
             if (browserName === 'webkit') {
                 await expect(textarea).toBeEditable();
                 await textarea.fill(scriptContent);
@@ -882,7 +867,8 @@ export class EditorHelper {
             await this.page.keyboard.press('Escape');
         }
 
-        const saveButton = scriptContainer.getByTitle('スクリプトの保存');
+        // 1. 【修正】タイトルが変更されたため、ID（#fab-save）で安全に特定します
+        const saveButton = scriptContainer.locator('#fab-save');
         const saveIcon = saveButton.locator('i');
 
         // 保存前に「変更あり」のクラス（shake-save-button）が付くのを待つ
@@ -893,11 +879,9 @@ export class EditorHelper {
         const alert = this.page.locator('alert-component');
         // 保存に成功、またはエラーでアラートが出たら判定する
         if (await alert.isVisible({ timeout: 8000 }).catch(() => false)) {
-            // Shadow DOM内部のプロパティやinnerTextから確実に取り出す
             const msg = await alert.evaluate((el: any) => el.alertMessage || el.innerText || '');
 
             if (msg?.includes('エラー') || msg?.includes('修正')) {
-                // エラー内容を出力してテストを失敗させる
                 throw new Error(`スクリプト保存エラー: ${msg}\n入力したコード:\n${scriptContent}`);
             }
             await alert.getByRole('button', { name: '閉じる' }).click();
@@ -906,6 +890,10 @@ export class EditorHelper {
 
         // アイコンが通常状態に戻るのを待つ
         await expect(saveIcon).not.toHaveClass(/shake-save-button/);
+
+        // 2. 【追加】新仕様対応：戻るボタン（#fab-close）をクリックしてエディタを閉じ、一覧に戻る
+        const closeButton = scriptContainer.locator('#fab-close');
+        await closeButton.click();
     }
 
     /**
@@ -1055,7 +1043,11 @@ export class EditorHelper {
             await this.page.keyboard.press('Escape');
         }
 
+        // 1. 【修正】保存ボタンをクリック
         await scriptContainer.locator('#fab-save').click();
+
+        // 2. 【追加】新仕様対応：戻るボタン（#fab-close）をクリックしてエディタを閉じ、一覧に戻る
+        await scriptContainer.locator('#fab-close').click();
     }
 
     /**
