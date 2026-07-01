@@ -42,7 +42,7 @@ export async function expectAppVisibility(page: Page, appKey: string, isVisible:
  * ダッシュボード画面で新しいアプリケーションを正常に作成します。
  */
 export async function createApp(page: Page, appName: string, appKey: string): Promise<void> {
-    console.log(`[createApp:Enter] Current URL: ${page.url()}, appName: ${appName}, appKey: ${appKey}`);
+    // console.log(`[createApp:Enter] Current URL: ${page.url()}, appName: ${appName}, appKey: ${appKey}`);
 
     // about:blank の場合に警告を出す
     if (page.url() === 'about:blank') {
@@ -103,7 +103,7 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
  * クリーンアップスクリプトと同じ「アプリ設定」からの削除フローを使用します。
  */
 export async function deleteApp(page: Page, appKey: string): Promise<void> {
-    console.log(`[deleteApp:Enter] Current URL: ${page.url()}, appKey: ${appKey}`);
+    // console.log(`[deleteApp:Enter] Current URL: ${page.url()}, appKey: ${appKey}`);
     await page.bringToFront();
 
     // 1. 確実にダッシュボード（ワークベンチ）を表示
@@ -600,7 +600,7 @@ export async function waitForVersionStatus(
 }
 
 export async function gotoDashboard(page: Page): Promise<void> {
-    console.log(`[gotoDashboard:Enter] Current URL: ${page.url()}`);
+    // console.log(`[gotoDashboard:Enter] Current URL: ${page.url()}`);
 
     const workerIndex = process.env.TEST_WORKER_INDEX || '0';
     const browserCode = detectBrowserCode(page);
@@ -614,7 +614,7 @@ export async function gotoDashboard(page: Page): Promise<void> {
             const state = JSON.parse(fs.readFileSync(storageStatePath, 'utf-8'));
             if (state.cookies && state.cookies.length > 0) {
                 await page.context().addCookies(state.cookies);
-                console.log(`[gotoDashboard] Cookies successfully injected for Worker ${workerIndex} (${browserCode})`);
+                // console.log(`[gotoDashboard] Cookies successfully injected for Worker ${workerIndex} (${browserCode})`);
             }
         }
     } catch (e) {
@@ -636,11 +636,11 @@ export async function gotoDashboard(page: Page): Promise<void> {
         { timeout: 15000 }
     ).catch(() => { });
 
-    console.log(`[gotoDashboard:Navigating] to ${String(process.env.PWAPPY_TEST_BASE_URL)}`);
+    // console.log(`[gotoDashboard:Navigating] to ${String(process.env.PWAPPY_TEST_BASE_URL)}`);
 
     // 3. Cookieが注入された状態でダッシュボードページへ遷移
     await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
-    console.log(`[gotoDashboard:Navigated] Current URL: ${page.url()}`);
+    // console.log(`[gotoDashboard:Navigated] Current URL: ${page.url()}`);
 
     // デフォルトでツアーを表示させないようにする
     await page.evaluate(() => {

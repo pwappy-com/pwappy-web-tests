@@ -39,7 +39,8 @@ export class EditorHelper {
     async handleStarterTemplateModal(): Promise<void> {
         const startTime = Date.now();
         const log = (msg: string) => {
-            console.log(`[ModalCheck:Debug] [${Date.now() - startTime}ms] ${msg}`);
+            // デバッグ時以外は不要なのでコメント化
+            // console.log(`[ModalCheck:Debug] [${Date.now() - startTime}ms] ${msg}`);
         };
 
         try {
@@ -243,9 +244,8 @@ export class EditorHelper {
         // 1. ドラッグ＆ドロップを実行してダイアログを起動
         await this.page.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
 
-        // 2. カスタムダイアログの表示を待機
-        const templateContainer = this.page.locator('template-container');
-        const dialog = templateContainer.locator('message-box#html-tag-select-dialog');
+        // 2. カスタムダイアログの表示を待機 (template-container の外側に移動したため、最上位ページから直接 first() で取得します)
+        const dialog = this.page.locator('message-box#html-tag-select-dialog').first();
         await expect(dialog).toBeVisible({ timeout: 5000 });
 
         const presetTags = ['div', 'span', 'p', 'img', 'a', 'ul', 'li', 'br', 'h1', 'h2', 'h3', 'strong'];
@@ -253,7 +253,7 @@ export class EditorHelper {
 
         if (presetTags.includes(targetTagLower)) {
             // プリセットに含まれる場合は、対応するボタンをクリックして自動決定
-            const presetBtn = dialog.locator('button.title-icon-bar-button').filter({ hasText: new RegExp(`^${targetTagLower}$`, 'i') }).first();
+            const presetBtn = dialog.locator('button.preset-tag-button', { hasText: new RegExp(`^${targetTagLower}$`, 'i') }).first();
             await presetBtn.click();
         } else {
             // プリセットに含まれない場合は、入力欄にテキストを入れてEnterキーで確定
@@ -715,7 +715,7 @@ export class EditorHelper {
         });
 
         await testPage.waitForLoadState('domcontentloaded');
-        console.log(`[TestPage URL] 開いた実機テストページのURL: ${testPage.url()}`);
+        // console.log(`[TestPage URL] 開いた実機テストページのURL: ${testPage.url()}`);
 
         return testPage;
     }
@@ -1060,17 +1060,30 @@ export class EditorHelper {
         await expect(eventContainer).toBeVisible();
 
         // 「イベントを編集」ボタンをクリック
-        await eventContainer.locator('button#fab-edit[title="イベントを編集"]').click();
+        const fabEdit = eventContainer.locator('button#fab-edit[title="イベントを編集"]');
+        await fabEdit.click();
 
-        // イベントリストポップアップが表示されるのを待つ
         const eventListPopup = eventContainer.locator('#eventList');
-        await expect(eventListPopup).toBeVisible();
-
-        // 「追加」ボタンをクリック
-        await eventListPopup.getByRole('button', { name: '追加' }).click();
-
-        // イベント追加ポップアップが表示されるのを待つ
         const eventAddPopup = eventContainer.locator('#eventEditMenu');
+
+        // =========================================================================
+        // 【ダンプ事実に基づく修正】
+        // 既存テストのようにイベントがある場合は #eventList が開き、
+        // 今回の p タグのようにイベントが空の場合は直接 #eventEditMenu が開きます。
+        // どちらかが表示されるまで待機します。
+        // =========================================================================
+        await expect(async () => {
+            const isListVisible = await eventListPopup.isVisible();
+            const isAddVisible = await eventAddPopup.isVisible();
+            expect(isListVisible || isAddVisible).toBe(true);
+        }).toPass({ timeout: 5000 });
+
+        // イベント一覧（#eventList）が開いた場合のみ、「追加」ボタンをクリック
+        if (await eventListPopup.isVisible()) {
+            await eventListPopup.getByRole('button', { name: '追加' }).click();
+        }
+
+        // ここで確実に #eventEditMenu (イベント追加ポップアップ) が表示された状態になります
         await expect(eventAddPopup).toBeVisible();
 
         // 各項目を入力
@@ -1087,12 +1100,14 @@ export class EditorHelper {
         // 「追加」ボタンをクリックしてイベントを登録
         await eventAddPopup.getByRole('button', { name: '追加' }).click();
 
-        // ポップアップが閉じるのを待つ
+        // ポップアップが閉じるのを待つ（両方非表示になることを確認）
         await expect(eventAddPopup).toBeHidden();
         await expect(eventListPopup).toBeHidden();
 
-        // イベントがリストに追加されたことを確認
-        const newEventRow = eventContainer.locator(`.editor-row:has-text("${eventName}")`);
+        // イベントがリストに追加されたことを確認 (コメントで重複回避)
+        const newEventRow = eventContainer.locator(`.editor-row`, { hasText: eventName })
+            .filter({ hasText: comment });
+
         await expect(newEventRow).toBeVisible();
         await expect(newEventRow.locator('.comment')).toHaveText(comment);
     }
