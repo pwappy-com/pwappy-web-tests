@@ -627,9 +627,6 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 // =========================================================================
 
 test.describe('HTMLタグ選択ダイアログ機能のテスト', () => {
-    test.beforeEach(async ({ page }) => {
-        await gotoDashboard(page);
-    });
 
     test('プリセットボタンからHTMLタグを追加できること', async ({ editorPage, editorHelper }) => {
         await editorHelper.addPage();
@@ -640,11 +637,11 @@ test.describe('HTMLタグ選択ダイアログ機能のテスト', () => {
         await editorHelper.openMoveingHandle('left');
         await editorPage.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
 
-        const dialog = editorPage.locator('template-container message-box#html-tag-select-dialog');
+        const dialog = editorPage.locator('message-box#html-tag-select-dialog').first();
         await expect(dialog).toBeVisible({ timeout: 5000 });
 
-        // 2. プリセットから「span」を選択
-        const spanButton = dialog.locator('button.title-icon-bar-button', { hasText: /^span$/ });
+        // 2. プリセットから「span」を選択 (preset-tag-button に更新)
+        const spanButton = dialog.locator('button.preset-tag-button', { hasText: /^span$/ });
         await spanButton.click();
 
         // 3. ダイアログが閉じて、エディタのツリー上に要素が追加されたことを確認
@@ -665,7 +662,7 @@ test.describe('HTMLタグ選択ダイアログ機能のテスト', () => {
         await editorHelper.openMoveingHandle('left');
         await editorPage.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
 
-        const dialog = editorPage.locator('template-container message-box#html-tag-select-dialog');
+        const dialog = editorPage.locator('message-box#html-tag-select-dialog').first();
         await expect(dialog).toBeVisible();
 
         // 1. 手入力欄にカスタムタグ「section」を入力してEnterで決定
@@ -692,12 +689,35 @@ test.describe('HTMLタグ選択ダイアログ機能のテスト', () => {
         await editorHelper.openMoveingHandle('left');
         await editorPage.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
 
-        const dialog = editorPage.locator('template-container message-box#html-tag-select-dialog');
+        const dialog = editorPage.locator('message-box#html-tag-select-dialog').first();
         await expect(dialog).toBeVisible();
 
         // 1. キャンセルボタンをクリック
         const cancelBtn = dialog.locator('[slot="cancel-slot"]');
         await cancelBtn.click();
+
+        // 2. ダイアログが閉じる
+        await expect(dialog).toBeHidden();
+
+        // 3. 要素が追加されていないことを検証
+        const childNodes = targetLocator.locator('> .node');
+        await expect(childNodes).toHaveCount(0);
+    });
+
+    test('ダイアログのオーバーレイ（背景）をクリックしたとき、キャンセル扱いになりタグが追加されないこと', async ({ editorPage, editorHelper }) => {
+        await editorHelper.addPage();
+        const contentAreaSelector = '#dom-tree div[data-node-explain="コンテンツ"]';
+        const targetLocator = editorPage.locator(contentAreaSelector);
+
+        await editorHelper.openMoveingHandle('left');
+        await editorPage.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
+
+        const dialog = editorPage.locator('message-box#html-tag-select-dialog').first();
+        await expect(dialog).toBeVisible();
+
+        // 1. オーバーレイ（背景）をクリック (evaluateによるクリックでビューポート外エラーを回避)
+        const overlay = dialog.locator('.overlay');
+        await overlay.evaluate((el: HTMLElement) => el.click());
 
         // 2. ダイアログが閉じる
         await expect(dialog).toBeHidden();
@@ -715,7 +735,7 @@ test.describe('HTMLタグ選択ダイアログ機能のテスト', () => {
         await editorHelper.openMoveingHandle('left');
         await editorPage.locator('tool-box-item', { hasText: 'HTML Tag' }).dragTo(targetLocator);
 
-        const dialog = editorPage.locator('template-container message-box#html-tag-select-dialog');
+        const dialog = editorPage.locator('message-box#html-tag-select-dialog').first();
         await expect(dialog).toBeVisible();
 
         // 1. 不適切な文字列（タグ名に使えない記号など）を入力して追加
@@ -743,6 +763,7 @@ test.describe('HTMLタグ選択ダイアログ機能のテスト', () => {
         await expect(childNodes).toHaveCount(0);
     });
 });
+
 // =========================================================================
 // Merged from: tests/specs/normal/editor-edge-hover.spec.ts
 // =========================================================================
