@@ -444,6 +444,79 @@ test.describe('UIアクションパレット機能の検証', () => {
         });
     });
 
+    test('ons-navigatorなどの骨組み要素が「主要なコントロール」グループとしてパレット最上位に自動ソートされること', async ({ editorPage, editorHelper }) => {
+        test.setTimeout(60000);
+        let navigatorId: string;
+
+        await test.step('1. セットアップ: appノードが構築されるのを待ってからons-navigatorを追加し、エディタを普通に開く', async () => {
+            // 左パネル（DOMツリー）を表示
+            await editorHelper.openMoveingHandle('left');
+            const domTree = editorHelper.getDomTree();
+            await expect(domTree).toBeVisible();
+
+            // 実績のあるロケータで app ノードを特定し、起動直後の構築完了を待ちます
+            const appNode = domTree.locator('> div[data-node-type="app"]').first();
+            await expect(appNode).toBeVisible({ timeout: 15000 });
+
+            // appNode をターゲットにして ons-navigator を配置
+            const navigatorNode = await editorHelper.addComponent('ons-navigator', appNode);
+            await expect(navigatorNode).toBeVisible();
+
+            // 追加されたノードのIDを取得
+            navigatorId = await navigatorNode.getAttribute('data-node-id') as string;
+
+            // 右ハンドルを展開し、スクリプトタブで新規スクリプトを作成・編集状態にする
+            await editorHelper.openMoveingHandle('right');
+            const scriptContainer = editorPage.locator('script-container');
+            await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
+            await editorHelper.addNewScript('testBackboneSort');
+            await editorHelper.openScriptForEditing('testBackboneSort');
+        });
+
+        await test.step('2. エディタ上で右クリックしてパレットを起動し、ソートされた最上位グループを検証', async () => {
+            const monacoEditor = editorPage.locator('script-container .monaco-editor[role="code"]');
+            const viewLine = monacoEditor.locator('.view-line').first();
+            const paletteOverlay = editorPage.locator('#paletteOverlay-teleported');
+
+            // 💡 コンテキストメニュー経由でパレットを「要素未定」の状態で起動
+            await expect(async () => {
+                await viewLine.click({ force: true }).catch(() => { });
+                await editorPage.waitForTimeout(300);
+
+                // 右クリックしてコンテキストメニューを起動
+                await viewLine.click({ button: 'right' });
+
+                // メニューが表示されるのを待機
+                const contextMenu = editorPage.locator('.context-view.monaco-menu-container');
+                await expect(contextMenu).toBeVisible({ timeout: 5000 });
+
+                const actionItem = contextMenu.locator('.action-item', { hasText: /アクションパレット/ }).first();
+                
+                // 💡 【超重要】モバイル環境の遅延対策。スクロール移動と300ms待機を挟み、イベントリスナーを安定化させます
+                await actionItem.scrollIntoViewIfNeeded();
+                await editorPage.waitForTimeout(300);
+
+                // 安定した状態でクリックを実行
+                await actionItem.click({ force: true });
+
+                // パレットが起動（要素未選択のCOMPONENT状態）
+                await expect(paletteOverlay).toHaveClass(/active/, { timeout: 3000 });
+            }).toPass({ timeout: 20000, intervals: [1000] });
+
+            // 要素未選択の初期画面なので、最上位グループとして「主要なコントロール」ヘッダーが出現します
+            const firstGroupHeader = paletteOverlay.locator('.palette-group-header').first();
+            await expect(firstGroupHeader).toHaveText(/主要なコントロール \(Navigator 等\)/);
+
+            // その最初のアイテムにナビゲーターのアクションが含まれていることを検証
+            const firstItem = paletteOverlay.locator('.palette-list .palette-item').first();
+            await expect(firstItem).toContainText('ナビゲーター');
+
+            // パレットを閉じる
+            await paletteOverlay.locator('#btnClose').click();
+            await expect(paletteOverlay).not.toHaveClass(/active/);
+        });
+    });
+
     test('コンテキストメニューから起動し、キーボード操作で画面遷移・キャンセルができる', async ({ editorPage, editorHelper }) => {
         await test.step('セットアップ', async () => {
             await editorHelper.openMoveingHandle('right');

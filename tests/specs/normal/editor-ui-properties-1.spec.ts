@@ -718,19 +718,20 @@ test.describe('エディタ内機能のテスト (前半)', () => {
             await checkbox.check();
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'display', value: 'flex' });
 
-            await targetInput.locator('select[name="flex-direction"]').selectOption('column');
+            // 1. 配置方向 (direction) を「縦並び (上から下)」に変更
+            await targetInput.locator('button.visual-btn[title="縦並び"]').click();
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-direction', value: 'column' });
 
-            await targetInput.locator('select[name="flex-wrap"]').selectOption('wrap');
+            // 2. 折り返し (wrap) を「折り返す」に変更
+            await targetInput.locator('button.visual-btn[title="折り返す"]').click();
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-wrap', value: 'wrap' });
 
-            await targetInput.locator('select[name="align-content"]').selectOption({ value: 'center' });
-            await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'align-content', value: 'center' });
-
-            await targetInput.locator('select[name="justify-content"]').selectOption({ value: 'center' });
+            // 3. 水平配置 (justify-content) を「中央揃え」に変更
+            await targetInput.locator('button.visual-btn[title="中央揃え"]').first().click(); // 複数の中央揃えボタンがあるため first() などで絞り込む
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'justify-content', value: 'center' });
 
-            await targetInput.locator('select[name="align-items"]').selectOption({ value: 'baseline' });
+            // 4. 垂直配置 (align-items) を「ベースライン揃え」に変更
+            await targetInput.locator('button.visual-btn[title="ベースライン揃え"]').click();
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'align-items', value: 'baseline' });
 
             await checkbox.uncheck();
@@ -762,34 +763,45 @@ test.describe('エディタ内機能のテスト (前半)', () => {
             const targetInputPanel = editorHelper.getPropertyInput('style-flex-item');
             await expect(targetInputPanel).toBeVisible();
 
-            const flexGrowInput = targetInputPanel.locator('input[id="flex-grow"]');
+            // 1. Grow (伸長) の変更と確定
+            const flexGrowInput = targetInputPanel.locator('.option-col', { hasText: 'Grow' }).locator('input');
             await expect(flexGrowInput).toBeVisible();
             await expect(flexGrowInput).toBeEditable();
             await flexGrowInput.fill('1');
+            await flexGrowInput.press('Enter'); // 💡 changeイベントを発火させて値を確定する
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-grow', value: '1' });
 
-            const flexShrinkInput = targetInputPanel.locator('input[id="flex-shrink"]');
+            // 2. Shrink (縮小) の変更と確定
+            const flexShrinkInput = targetInputPanel.locator('.option-col', { hasText: 'Shrink' }).locator('input');
             await expect(flexShrinkInput).toBeVisible();
             await expect(flexShrinkInput).toBeEditable();
             await flexShrinkInput.fill('2');
+            await flexShrinkInput.press('Enter');
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-shrink', value: '2' });
 
-            const flexBasisInput = targetInputPanel.locator('input[id="flex-basis"]');
+            // 3. Basis (基準幅) の変更と確定
+            const flexBasisInput = targetInputPanel.locator('.option-col', { hasText: 'Basis' }).locator('input');
             await expect(flexBasisInput).toBeVisible();
             await expect(flexBasisInput).toBeEditable();
             await flexBasisInput.fill('100%');
+            await flexBasisInput.press('Enter');
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'flex-basis', value: '100%' });
 
-            const orderInput = targetInputPanel.locator('input[id="order"]');
+            // 4. Order (表示順) の変更と確定
+            const orderInput = targetInputPanel.locator('.option-col', { hasText: 'Order' }).locator('input');
             await expect(orderInput).toBeVisible();
             await expect(orderInput).toBeEditable();
             await orderInput.fill('10');
+            await orderInput.press('Enter');
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'order', value: '10' });
 
-            const alignSelfSelect = targetInputPanel.locator('select[name="align-self"]');
-            await expect(alignSelfSelect).toBeVisible();
+            // 5. align-self の変更 (これはボタンクリックなので Enter は不要)
+            const alignSelfGroup = targetInputPanel.locator('.button-group').last();
+            const centerAlignSelfBtn = alignSelfGroup.locator('button.visual-btn[title="中央揃え"]');
 
-            await alignSelfSelect.selectOption({ value: 'center' });
+            await expect(centerAlignSelfBtn).toBeVisible();
+            await centerAlignSelfBtn.click();
+
             await editorHelper.expectPreviewElementCss({ selector: nodeType, property: 'align-self', value: 'center' });
         });
 
@@ -1016,7 +1028,7 @@ test.describe('エディタ内機能のテスト (前半)', () => {
         });
     });
 
-    test('モバイル環境でのカラー属性の変更と反映（不具合再現テスト）', async ({ editorPage, editorHelper }) => {
+    test('モバイル環境でのカラー属性の変更と反映（正常に同期されること）', async ({ editorPage, editorHelper }) => {
         const previewSelector = 'ons-button';
 
         await test.step('1. セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
@@ -1036,23 +1048,19 @@ test.describe('エディタ内機能のテスト (前半)', () => {
             await expect(colorInput).toBeAttached();
         });
 
-        await test.step('3. モバイル環境の挙動を模して change イベントのみを送信し、値が反映されるか検証', async () => {
+        await test.step('3. モバイル環境の挙動を模して change イベントのみを送信し、値が同期・反映されるか検証', async () => {
             const propertyContainer = editorHelper.getPropertyContainer();
             const bgEditor = propertyContainer.locator('style-background-editor');
             const colorInput = bgEditor.locator('input[type="color"]').first();
 
-            // モバイルのカラーピッカーはダイアログが閉じた際に 'change' イベントのみを発火することがある
-            // 現状の実装（@inputのみ）では、'change' イベントだけをディスパッチすると更新が反映されない
+            // input[type="color"] に新値を設定して change イベントを発生させる
             await colorInput.evaluate((el: HTMLInputElement) => {
                 el.value = '#00ff00';
                 el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
             });
 
-            // デバウンスとUI反映を考慮して待機
-            await editorPage.waitForTimeout(300);
-
-            // 期待値: ボタンの背景色が緑色 (rgb(0, 255, 0)) に更新されていること
-            // 現状は @input のみのため、このアサーションは不合格（FAIL）となり、PC/モバイル双方で不具合が再現される
+            // 修正された live() ディレクティブと quick-editor-save のリスナーにより、
+            // @inputだけでなく @change だけのトリガーでも属性とプレビューが即時同期します
             await editorHelper.expectPreviewElementCss({
                 selector: previewSelector,
                 property: 'background-color',
