@@ -524,7 +524,7 @@ export class EditorHelper {
             await expect(async () => {
                 await handle.tap({ noWaitAfter: true });
                 await handle.tap({ noWaitAfter: true });
-                await this.page.waitForTimeout(500);
+                await this.page.waitForTimeout(100);
                 await expect(targetContainer).toBeVisible({ timeout: 1000 });
             }).toPass({
                 timeout: 10000
