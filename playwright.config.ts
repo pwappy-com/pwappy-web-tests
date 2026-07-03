@@ -47,12 +47,15 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     // baseURL: 'http://localhost:3000',
 
-    /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    //trace: 'retain-on-failure',
-    trace: 'off',
-    //trace: 'on',
+    /* テスト失敗時にトレース情報を保存（操作手順、ネットワーク、コンソールログなどをタイムラインで確認可能） */
+    trace: 'retain-on-failure',
+
+    /* テスト失敗時に最終画面のスクリーンショットを保存 */
     screenshot: 'only-on-failure',
+
+    /* テスト失敗時に操作動画を保存 */
     video: 'retain-on-failure',
+
     launchOptions: {
       args: [
         // CI環境ではない（ローカル）場合のみ CORS を無効化するフラグを追加
