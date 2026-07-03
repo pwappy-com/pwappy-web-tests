@@ -655,12 +655,12 @@ export class EditorHelper {
      */
     async switchToRunModeAndVerify(options: { expectedAlertText?: string } = {}): Promise<void> {
         const platformSwitcher = this.page.locator('platform-switcher');
-        await platformSwitcher.locator('.screen-rotete-container').click();
+        await platformSwitcher.locator('.screen-rotete-container').click({ force: true });
         const menu = platformSwitcher.locator('#platformEditMenu');
         await expect(menu).toBeVisible();
 
         await menu.getByText('動作').click();
-        await platformSwitcher.locator('.screen-rotete-container').click();
+        await platformSwitcher.locator('.screen-rotete-container').click({ force: true });
         await expect(menu).toBeHidden();
 
         if (options.expectedAlertText) {
