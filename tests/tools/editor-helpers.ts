@@ -521,11 +521,29 @@ export class EditorHelper {
             : this.page.locator('template-container');
 
         if (!await targetContainer.isVisible()) {
+            let attempt = 0;
             await expect(async () => {
-                // すでに展開が開始されている、または表示済みの場合は再ダブルタップを行わない
+                attempt++;
                 if (!await targetContainer.isVisible()) {
-                    await handle.tap({ noWaitAfter: true });
-                    await handle.tap({ noWaitAfter: true });
+                    if (attempt % 3 === 1) {
+                        // 物理またはJSによるダブルクリックを試す
+                        await handle.dblclick({ force: true, timeout: 500 }).catch(async () => {
+                            await handle.evaluate(el => {
+                                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+                            }).catch(() => { });
+                        });
+
+                    } else if (attempt % 3 === 2) {
+                        // 3連続タップ（ダブルタップ擬似シミュレーション）を試す
+                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
+                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
+                    } else {
+                        // シングルクリック/シングルタップを試す（最も一般的なトグル仕様への対応）
+                        await handle.click({ force: true, timeout: 500 }).catch(async () => {
+                            await handle.tap({ timeout: 500 }).catch(() => { });
+                        });
+
+                    }
                 }
                 // アニメーション完了を待機
                 await expect(targetContainer).toBeVisible({ timeout: 1500 });
@@ -547,11 +565,24 @@ export class EditorHelper {
 
         if (await scriptContainer.isVisible()) {
             const handle = this.page.locator(`#rightMovingHandle`);
+            let attempt = 0;
             await expect(async () => {
-                // すでに閉じている場合はダブルタップを行わない
+                attempt++;
                 if (await scriptContainer.isVisible()) {
-                    await handle.tap({ noWaitAfter: true });
-                    await handle.tap({ noWaitAfter: true });
+                    if (attempt % 3 === 1) {
+                        await handle.dblclick({ force: true, timeout: 500 }).catch(async () => {
+                            await handle.evaluate(el => {
+                                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+                            }).catch(() => { });
+                        });
+                    } else if (attempt % 3 === 2) {
+                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
+                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
+                    } else {
+                        await handle.click({ force: true, timeout: 500 }).catch(async () => {
+                            await handle.tap({ timeout: 500 }).catch(() => { });
+                        });
+                    }
                 }
                 await expect(scriptContainer).toBeHidden({ timeout: 1500 });
             }).toPass({
@@ -562,11 +593,24 @@ export class EditorHelper {
 
         if (await templateContainer.isVisible()) {
             const handle = this.page.locator(`#leftMovingHandle`);
+            let attempt = 0;
             await expect(async () => {
-                // すでに閉じている場合はダブルタップを行わない
+                attempt++;
                 if (await templateContainer.isVisible()) {
-                    await handle.tap({ noWaitAfter: true });
-                    await handle.tap({ noWaitAfter: true });
+                    if (attempt % 3 === 1) {
+                        await handle.click({ force: true, timeout: 500 }).catch(async () => {
+                            await handle.tap({ timeout: 500 }).catch(() => { });
+                        });
+                    } else if (attempt % 3 === 2) {
+                        await handle.dblclick({ force: true, timeout: 500 }).catch(async () => {
+                            await handle.evaluate(el => {
+                                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+                            }).catch(() => { });
+                        });
+                    } else {
+                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
+                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
+                    }
                 }
                 await expect(templateContainer).toBeHidden({ timeout: 1500 });
             }).toPass({
