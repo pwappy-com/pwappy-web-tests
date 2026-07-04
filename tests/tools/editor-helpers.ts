@@ -156,15 +156,18 @@ export class EditorHelper {
                     await expect(discardConfirmDialog).toBeVisible({ timeout: 5000 });
 
                     // --- 3. 「はい、破棄します」をクリック ---
-                    // これにより、アプリ側で alert() が実行されるが、冒頭のリスナーが自動で閉じる
+                    // これにより、アプリ側で alert() が実行されるが、冒頭 of リスナーが自動で閉じる
                     await discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' }).click({ force: true });
 
                     // 4. すべてのモーダルが消え去るのを待つ
-                    await expect(snapshotConfirmDialog).toBeHidden();
-                    await expect(discardConfirmDialog).toBeHidden();
-
-                    // 処理後の安定化待ち
-                    await this.page.waitForTimeout(500);
+                    // toPassによる再試行で、ダイアログフェードアウト中の過渡期によるFlaky（不安定化）を防止
+                    await expect(async () => {
+                        await expect(snapshotConfirmDialog).toBeHidden({ timeout: 1000 });
+                        await expect(discardConfirmDialog).toBeHidden({ timeout: 1000 });
+                    }).toPass({
+                        timeout: 10000,
+                        intervals: [500]
+                    });
                 }
             });
         } finally {
@@ -713,13 +716,25 @@ export class EditorHelper {
      */
     async switchToRunModeAndVerify(options: { expectedAlertText?: string } = {}): Promise<void> {
         const platformSwitcher = this.page.locator('platform-switcher');
-        await platformSwitcher.locator('.screen-rotete-container').click({ force: true });
         const menu = platformSwitcher.locator('#platformEditMenu');
-        await expect(menu).toBeVisible();
 
-        await menu.getByText('動作').click();
-        await platformSwitcher.locator('.screen-rotete-container').click({ force: true });
-        await expect(menu).toBeHidden();
+        // メニュー展開時のチャタリング（開閉の繰り返し）防止ガード
+        await expect(async () => {
+            if (!await menu.isVisible()) {
+                await platformSwitcher.locator('.screen-rotete-container').click({ force: true });
+            }
+            await expect(menu).toBeVisible({ timeout: 2000 });
+        }).toPass({ timeout: 10000, intervals: [1000] });
+
+        await menu.getByText('動作').click({ force: true });
+
+        // メニュー閉鎖時のチャタリング防止ガード
+        await expect(async () => {
+            if (await menu.isVisible()) {
+                await platformSwitcher.locator('.screen-rotete-container').click({ force: true });
+            }
+            await expect(menu).toBeHidden({ timeout: 2000 });
+        }).toPass({ timeout: 10000, intervals: [1000] });
 
         if (options.expectedAlertText) {
             const previewFrame = this.getPreviewFrame();
@@ -1002,8 +1017,11 @@ export class EditorHelper {
         // 複数アラートがスタックされている場合を考慮し、last() で確実に特定する
         const alertDialog = pageOrFrame.locator('ons-alert-dialog').filter({ hasText: expectedText }).last();
 
-        await expect(alertDialog).toBeVisible({ timeout: 15000 });
-        await expect(alertDialog).toContainText(expectedText);
+        // toPassによる再試行を活用するため、個別の先行タイムアウト値を調整
+        await expect(async () => {
+            await expect(alertDialog).toBeVisible({ timeout: 2000 });
+            await expect(alertDialog).toContainText(expectedText);
+        }).toPass({ timeout: 10000 });
 
         const alertButton = alertDialog.locator('ons-alert-dialog-button');
 
@@ -1021,9 +1039,8 @@ export class EditorHelper {
             intervals: [1000] // 1秒おきに再試行
         });
 
-        // Onsen UIのページ遷移（pushPageなど）のアニメーション（約400ms）が
-        // ヘッドレス環境ではもたつくことがあるため、少し長めに待機して show/hide 発火を待つ
-        await this.page.waitForTimeout(1000);
+        // 固定待機(waitForTimeout)を完全に廃止し、body要素が安定していることを条件に待機を代用
+        await pageOrFrame.locator('body').waitFor({ state: 'attached', timeout: 5000 });
     }
 
     /**

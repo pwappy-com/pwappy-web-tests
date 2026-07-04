@@ -176,6 +176,11 @@ export async function openEditor(
         });
     });
 
+    const tempDialogHandler = async (dialog: any) => {
+        await dialog.accept().catch(() => { });
+    };
+    editorPage.on('dialog', tempDialogHandler);
+
     await editorPage.waitForLoadState('domcontentloaded');
 
     // 開発用オーバーレイによるポインタ遮断を防ぐスタイルを注入
@@ -204,6 +209,8 @@ export async function openEditor(
     if (options.skipStarterModal) {
         await tempHelper.handleStarterTemplateModal();
     }
+
+    editorPage.off('dialog', tempDialogHandler);
 
     await expect(editorPage.locator('ios-component')).toBeVisible();
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });

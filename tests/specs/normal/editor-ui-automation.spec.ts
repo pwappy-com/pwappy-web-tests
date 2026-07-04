@@ -428,13 +428,25 @@ test.describe.serial('エディタUI自動化統合テスト', () => {
                 const discardConfirm = editorPage.locator('message-box', { hasText: 'すべてのスナップショットを破棄しますか？' });
                 await expect(discardConfirm).toBeVisible({ timeout: 10000 });
 
+                // 標準アラートの出現によるブロッキングを確実にハンドリングするためダイアログイベントを事前待機
+                const dialogPromise = editorPage.waitForEvent('dialog');
+
                 // 確認ダイアログで「はい、破棄します」をクリック
                 await discardConfirm.getByRole('button', { name: 'はい、破棄します' }).click({ force: true });
+
+                // 発生した標準ダイアログを即座に承認
+                const dialog = await dialogPromise;
+                await dialog.accept().catch(() => { });
             });
 
             await test.step('3. スナップショット画面の状態確認', async () => {
-                // ダイアログが消えるのを待機
-                await expect(editorPage.locator('message-box', { hasText: 'すべてのスナップショットを破棄しますか？' })).toBeHidden({ timeout: 10000 });
+                // toPass を用いて確認ダイアログが完全にDOM・属性レベルで非表示に切り替わるまで再試行待機
+                await expect(async () => {
+                    await expect(editorPage.locator('message-box', { hasText: 'すべてのスナップショットを破棄しますか？' })).toBeHidden({ timeout: 1000 });
+                }).toPass({
+                    timeout: 10000,
+                    intervals: [500]
+                });
 
                 // スナップショットを全破棄してアプリが空になったため、確実に出現するモーダルをスキップ
                 // これにより「アプリケーション配下に要素がないときにスターターテンプレートのウィンドウが表示される」ことも間接的に検証・処理される
