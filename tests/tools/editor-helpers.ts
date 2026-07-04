@@ -522,12 +522,16 @@ export class EditorHelper {
 
         if (!await targetContainer.isVisible()) {
             await expect(async () => {
-                await handle.tap({ noWaitAfter: true });
-                await handle.tap({ noWaitAfter: true });
-                await this.page.waitForTimeout(100);
-                await expect(targetContainer).toBeVisible({ timeout: 1000 });
+                // すでに展開が開始されている、または表示済みの場合は再ダブルタップを行わない
+                if (!await targetContainer.isVisible()) {
+                    await handle.tap({ noWaitAfter: true });
+                    await handle.tap({ noWaitAfter: true });
+                }
+                // アニメーション完了を待機
+                await expect(targetContainer).toBeVisible({ timeout: 1500 });
             }).toPass({
-                timeout: 10000
+                timeout: 10000,
+                intervals: [1000] // チャタリングを防ぐため、再試行の間隔を十分に確保する
             });
         }
     }
@@ -544,21 +548,31 @@ export class EditorHelper {
         if (await scriptContainer.isVisible()) {
             const handle = this.page.locator(`#rightMovingHandle`);
             await expect(async () => {
-                await handle.tap({ noWaitAfter: true });
-                await handle.tap({ noWaitAfter: true });
-                await this.page.waitForTimeout(500);
-                await expect(scriptContainer).toBeHidden({ timeout: 1000 });
-            }).toPass({ timeout: 10000 });
+                // すでに閉じている場合はダブルタップを行わない
+                if (await scriptContainer.isVisible()) {
+                    await handle.tap({ noWaitAfter: true });
+                    await handle.tap({ noWaitAfter: true });
+                }
+                await expect(scriptContainer).toBeHidden({ timeout: 1500 });
+            }).toPass({ 
+                timeout: 10000,
+                intervals: [1000]
+            });
         }
 
         if (await templateContainer.isVisible()) {
             const handle = this.page.locator(`#leftMovingHandle`);
             await expect(async () => {
-                await handle.tap({ noWaitAfter: true });
-                await handle.tap({ noWaitAfter: true });
-                await this.page.waitForTimeout(500);
-                await expect(templateContainer).toBeHidden({ timeout: 1000 });
-            }).toPass({ timeout: 10000 });
+                // すでに閉じている場合はダブルタップを行わない
+                if (await templateContainer.isVisible()) {
+                    await handle.tap({ noWaitAfter: true });
+                    await handle.tap({ noWaitAfter: true });
+                }
+                await expect(templateContainer).toBeHidden({ timeout: 1500 });
+            }).toPass({ 
+                timeout: 10000,
+                intervals: [1000]
+            });
         }
     }
 

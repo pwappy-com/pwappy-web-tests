@@ -142,7 +142,7 @@ customElements.define('${tagName}', ${scriptName});
             const eventRow = eventContainer.locator('.editor-row', { hasText: eventName });
 
             // イベント行の「+」ボタンをクリックしてスクリプト追加メニューを開く
-            await eventRow.getByRole('button').click();
+            await eventRow.getByTitle('スクリプトの追加').click();
 
             // スクリプト名を入力して追加
             const addMenu = eventContainer.locator('#scriptAddMenu');
@@ -160,10 +160,16 @@ customElements.define('${tagName}', ${scriptName});
             await editorHelper.closeMoveingHandle();
             await editorHelper.switchToRunModeAndVerify();
 
-            const previewFrame = editorPage.frameLocator('#ios-container #renderzone');
+            const previewFrame = editorHelper.getPreviewFrame();
 
-            // Web Component内のボタンをクリックしてイベントを発火させる
-            await previewFrame.locator(tagName).getByRole('button', { name: 'Fire Event' }).click();
+            // Web Component内のボタンを特定
+            const fireButton = previewFrame.locator(tagName).getByRole('button', { name: 'Fire Event' });
+            
+            // ボタンがDOMツリーにしっかりとアタッチされていることを検証
+            await expect(fireButton).toBeAttached({ timeout: 15000 });
+
+            // シャドウDOM内のボタンに対して、物理クリックの空振りを防ぐためにJSネイティブのクリックを実行
+            await fireButton.evaluate((el: HTMLElement) => el.click());
 
             // 割り当てたスクリプトが実行され、アラートが表示されることを確認
             await editorHelper.verifyAndCloseAlert(previewFrame, alertText);
