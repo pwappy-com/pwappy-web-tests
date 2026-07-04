@@ -554,7 +554,7 @@ export class EditorHelper {
                     await handle.tap({ noWaitAfter: true });
                 }
                 await expect(scriptContainer).toBeHidden({ timeout: 1500 });
-            }).toPass({ 
+            }).toPass({
                 timeout: 10000,
                 intervals: [1000]
             });
@@ -569,7 +569,7 @@ export class EditorHelper {
                     await handle.tap({ noWaitAfter: true });
                 }
                 await expect(templateContainer).toBeHidden({ timeout: 1500 });
-            }).toPass({ 
+            }).toPass({
                 timeout: 10000,
                 intervals: [1000]
             });
@@ -1402,12 +1402,16 @@ export class EditorHelper {
             await expect(alert).toBeHidden();
         }
 
-        // メニューボタンをクリック
-        await this.page.locator('#fab-bottom-menu-box').click();
-
-        // メニューが表示されるのを待つ
         const menu = this.page.locator('#platformBottomMenu');
-        await expect(menu).toBeVisible();
+
+        // メニューが表示されるまで、1秒ごとにメニューボタンのクリックを繰り返す
+        await expect(async () => {
+            await this.page.locator('#fab-bottom-menu-box').click();
+            await expect(menu).toBeVisible({ timeout: 500 });
+        }).toPass({
+            intervals: [1000], // 1秒ごとにリトライ
+            timeout: 5000      // 最大5秒間試行（環境に合わせて調整してください）
+        });
 
         // 「ファイル管理」をクリック
         await menu.getByText('ファイル管理').click();
