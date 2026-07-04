@@ -26,6 +26,21 @@ const test = base.extend<EditorFixtures>({
         await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
 
         const editorPage = await openEditor(page, context, appName);
+
+        // クライアント側のアニメーションを強制無効化し、ダイアログ非表示などのアサーションを高速化します
+        await editorPage.evaluate(() => {
+            const style = document.createElement('style');
+            style.innerHTML = `
+                *, *::before, *::after {
+                    transition: none !important;
+                    animation: none !important;
+                    transition-duration: 0s !important;
+                    animation-duration: 0s !important;
+                }
+            `;
+            document.head.appendChild(style);
+        }).catch(() => {});
+
         await use(editorPage);
         await editorPage.close();
     },

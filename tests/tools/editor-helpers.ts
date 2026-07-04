@@ -155,9 +155,16 @@ export class EditorHelper {
                     });
                     await expect(discardConfirmDialog).toBeVisible({ timeout: 5000 });
 
-                    // --- 3. 「はい、破棄します」をクリック ---
-                    // これにより、アプリ側で alert() が実行されるが、冒頭 of リスナーが自動で閉じる
-                    await discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' }).click({ force: true });
+                    // --- 3. 「はい、破棄します」をクリック（活性化を待って確実に実行） ---
+                    // アニメーション等の遅延による空振りを防ぐため、ボタンが有効化されるまで toPass で再試行します
+                    const discardBtn = discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' });
+                    await expect(async () => {
+                        await expect(discardBtn).toBeEnabled({ timeout: 1000 });
+                        await discardBtn.click({ force: true });
+                    }).toPass({
+                        timeout: 5000,
+                        intervals: [500]
+                    });
 
                     // 4. すべてのモーダルが消え去るのを待つ
                     // toPassによる再試行で、ダイアログフェードアウト中の過渡期によるFlaky（不安定化）を防止
