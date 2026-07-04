@@ -283,7 +283,7 @@ jobs:
             
             if [ -f "$SESSION_FILE" ] && [ "$(cat "$SESSION_FILE" | tr -d ' ')" != "{}" ]; then
               echo "=== Cleaning up local account: OS[${{ matrix.os }}] Browser[${{ matrix.browser }}] Worker[$worker] ==="
-              npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=${{ matrix.browser }}
+              npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=${{ matrix.browser }} --output=test-results-cleanup
             fi
           done
         env:
@@ -465,7 +465,7 @@ jobs:
             
             if [ -f "$SESSION_FILE" ] && [ "$(cat "$SESSION_FILE" | tr -d ' ')" != "{}" ]; then
               echo "=== Cleaning up local account: OS[${{ matrix.os }}] Browser[${{ matrix.browser }}] Worker[$worker] ==="
-              npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=${{ matrix.browser }}
+              npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=${{ matrix.browser }} --output=test-results-cleanup
             fi
           done
         env:
