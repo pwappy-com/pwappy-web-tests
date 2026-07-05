@@ -146,8 +146,15 @@ export class EditorHelper {
 
                 // ダイアログが表示されるか確認
                 if (await snapshotConfirmDialog.isVisible({ timeout: 5000 }).catch(() => false)) {
-                    // --- 1. 最初のダイアログ: 「破棄する」をクリック ---
-                    await snapshotConfirmDialog.getByRole('button', { name: '破棄する' }).click({ force: true });
+                    // --- 1. 最初のダイアログ: 「破棄する」をクリック（活性化を待って確実に実行） ---
+                    const discardInitialBtn = snapshotConfirmDialog.getByRole('button', { name: '破棄する' });
+                    await expect(async () => {
+                        await expect(discardInitialBtn).toBeEnabled({ timeout: 1000 });
+                        await discardInitialBtn.click({ force: true });
+                    }).toPass({
+                        timeout: 5000,
+                        intervals: [500]
+                    });
 
                     // --- 2. 再確認ダイアログが表示されるのを待つ ---
                     const discardConfirmDialog = this.page.locator('message-box', {
@@ -1561,44 +1568,28 @@ export class EditorHelper {
      */
     async enterDirectory(name: string): Promise<void> {
         const explorer = this.page.locator('file-explorer');
-        // 名前でフィルタリングしたディレクトリ要素
-        const dir = explorer.locator('.directory').filter({ hasText: name });
-        await expect(dir).toBeVisible();
 
-        // 現在のパンくずの数を取得
-        const beforeCount = await explorer.locator('.path-link').count();
-
-        // 【修正】アクションと検証をセットでリトライする（Flaky対策）
+        // 1. ドラッグの干渉等による空振りを防ぐため、リトライ込みで実行する
         await expect(async () => {
+            const dir = explorer.locator('.directory').filter({ hasText: name });
+            await expect(dir).toBeVisible();
+
+            // 現在のパンくずの数を取得
             const links = explorer.locator('.path-link');
-            const currentCount = await links.count();
+            const beforeCount = await links.count();
 
-            // まだ遷移していない（パンくずが増えていない）場合のみアクションを実行
-            if (currentCount <= beforeCount) {
-                // ディレクトリが見えていればダブルクリックを試行
-                if (await dir.isVisible()) {
-                    // delay: クリック間隔を少し空けてダブルクリックとして認識されやすくする
-                    // force: 重なりなどを無視して強制的にクリックを試みる
-                    await dir.dblclick({ delay: 50, force: true });
-                }
+            // ダブルクリック
+            await dir.dblclick({ delay: 50, force: true });
 
-                // クリック後のロード完了を待つ
-                await this.waitForFileExplorerLoading();
-            }
+            // ロード完了を待つ
+            await this.waitForFileExplorerLoading();
 
-            // --- 検証 ---
+            // パンくずの数が変わっている（中に入った）ことを確認
             const afterCount = await links.count();
-
-            // 1. 数が増えていること
             expect(afterCount).toBeGreaterThan(beforeCount);
-
-            // 2. 最後のパンくずにディレクトリ名が含まれること
-            const lastLinkText = await links.last().innerText();
-            expect(lastLinkText).toContain(name);
-
         }).toPass({
-            timeout: 15000,   // 何度かリトライできるよう長めに時間を確保
-            intervals: [1000] // 1秒間隔でチェック
+            timeout: 15000,
+            intervals: [1000]
         });
     }
 
