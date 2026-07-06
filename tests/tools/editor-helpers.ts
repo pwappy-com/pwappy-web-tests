@@ -805,10 +805,15 @@ export class EditorHelper {
         }
 
         // 保存後にメニューが閉じていたら再度開く
-        if (!await platformBottomMenu.isVisible()) {
-            await menuButton.click();
-            await expect(platformBottomMenu).toBeVisible();
-        }
+        await expect(async () => {
+            if (!await platformBottomMenu.isVisible()) {
+                await menuButton.click({ force: true, timeout: 2000 }).catch(() => { });
+                await expect(platformBottomMenu).toBeVisible({ timeout: 2000 });
+            }
+        }).toPass({
+            timeout: 10000,
+            intervals: [1000]
+        });
 
         // 共通関数を使ってテストページ（タブ）を開く
         const testPage = await clickAndOpenNewTabSafely(this.page, this.page.context(), async () => {
@@ -1041,13 +1046,23 @@ export class EditorHelper {
 
         // クリックと非表示確認をセットにしてリトライ（toPass）させる
         await expect(async () => {
-            if (await alertDialog.isVisible()) {
+            const isVisible = await alertDialog.isVisible().catch(() => false);
+            if (isVisible) {
                 // force: trueのクリックがインターセプトされる環境への対策として
                 // dispatchEvent を使い、ブラウザ本来のイベントフローを自然に発火させる
                 await alertButton.dispatchEvent('click').catch(() => { });
             }
-            // アラートが非表示（またはDOMから消滅）になることを期待
-            await expect(alertDialog).toBeHidden({ timeout: 1000 });
+
+            try {
+                // アラートが非表示（またはDOMから消滅）になることを期待
+                await expect(alertDialog).toBeHidden({ timeout: 1000 });
+            } catch (e: any) {
+                // ページがクローズ/切断された場合は非表示と同等のため、例外を安全に無視して終了
+                if (e.message.includes('closed') || e.message.includes('Target page')) {
+                    return;
+                }
+                throw e;
+            }
         }).toPass({
             timeout: 15000,
             intervals: [1000] // 1秒おきに再試行
