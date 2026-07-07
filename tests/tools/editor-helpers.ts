@@ -390,8 +390,7 @@ export class EditorHelper {
         await propertyContainer.getByRole('button', { name: '追加' }).click();
 
         // 2. モーダルが閉じて、追加された入力フィールドがDOMに描画されるまでのラグを toPass で吸収
-        const displayName = this.getDisplayName(name);
-        const newPropertyRow = propertyContainer.locator('.editor-row', { hasText: displayName });
+        const newPropertyRow = propertyContainer.locator(`[data-attribute-type="${name}"], [data-attribute-key="${name}"]`).first();
 
         await expect(async () => {
             // アラート（重複エラー等）が割り込んでいないか確認
