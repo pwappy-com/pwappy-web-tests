@@ -1726,4 +1726,209 @@ customElements.define('${tagName}', ${scriptName});
             fs.unlinkSync(dummyPngPath);
         } catch (e) { }
     });
+
+    test('アプリアイコン設定（AppIconEditor）：エディタ画面内のアプリ設定パネルにおける、初期表示、宛先アコーディオン、画像アップロード、マスク形状切り替え、個別編集切替、背景色自動抽出、コピー＆ペースト、宛先編集と適用保存を検証する', async ({ editorPage, editorHelper }, testInfo) => {
+        // テスト用の1x1サイズの一時ダミーPNGファイルをローカルに自動生成
+        const dummyPngPath = path.join(testInfo.outputDir, 'temp-dummy-icon.png');
+
+        // ENOENT（ディレクトリ未存在）エラーを防ぐため、親フォルダを事前に再帰作成
+        fs.mkdirSync(testInfo.outputDir, { recursive: true });
+
+        const dummyPngBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+        fs.writeFileSync(dummyPngPath, dummyPngBuffer);
+
+        // 1. エディタ画面右側のプロパティパネル（サブウィンドウ）を展開
+        await editorHelper.openMoveingHandle('right');
+        const propertyContainer = editorHelper.getPropertyContainer();
+
+        // 2. プロパティパネル内の「アプリ設定」タブをアクティブにする
+        await editorHelper.switchTabInContainer(propertyContainer, 'アプリ設定');
+
+        // アプリ設定コンテナ内に <app-icon-editor> が正常にマウントされていることを確認
+        const appIconEditor = propertyContainer.locator('app-icon-editor');
+        await expect(appIconEditor).toBeVisible({ timeout: 15000 });
+
+        // LitElementのShadow DOM描画を同期・安定化させるための微小待機
+        await editorPage.waitForTimeout(500);
+
+        // --- 3. 初期表示の検証 ---
+        const placeholder = appIconEditor.locator('.placeholder-text');
+        const canvas = appIconEditor.locator('canvas#editor-canvas');
+
+        await expect(async () => {
+            const isPlaceholderVisible = await placeholder.isVisible().catch(() => false);
+            const isCanvasVisible = await canvas.isVisible().catch(() => false);
+            expect(isPlaceholderVisible || isCanvasVisible).toBe(true);
+        }).toPass({ timeout: 10000, intervals: [500] });
+
+        const applyBtn = appIconEditor.locator('.btn-primary');
+        // 初期状態（無変更状態）では適用ボタンが非活性であることを確認
+        await expect(applyBtn).toBeDisabled();
+
+        const sizeListContainer = appIconEditor.locator('.size-list-container');
+        await expect(sizeListContainer).not.toHaveClass(/expanded/); // アコーディオン初期状態は閉じている
+
+        // --- 4. アコーディオン操作の検証 ---
+        const accordionHeader = appIconEditor.locator('.target-section-title');
+        await accordionHeader.click();
+        await expect(sizeListContainer).toHaveClass(/expanded/);
+
+        const sizeItems = sizeListContainer.locator('.size-item');
+        await expect(sizeItems).toHaveCount(3); // デフォルトサイズ項目の検出確認
+
+        // --- 5. 画像ファイルの流し込み（アップロードシミュレート） ---
+        const fileInput = appIconEditor.locator('input[type="file"]#icon-file-input');
+        await fileInput.setInputFiles(dummyPngPath);
+
+        // 新規流し込み完了後にキャンバス要素が必ず表示されていることを確認
+        await expect(canvas).toBeVisible({ timeout: 10000 });
+        await expect(placeholder).toBeHidden();
+
+        // --- 6. プレビューマスク形状（OS表示シミュレート）切り替えの検証 ---
+        const maskSelector = appIconEditor.locator('.mask-selector');
+        const maskPreview = appIconEditor.locator('.preview-mask');
+        await expect(maskPreview).toHaveClass(/ios/); // デフォルトは iOS枠
+
+        await maskSelector.locator('.mask-btn', { hasText: 'Android' }).click();
+        await expect(maskPreview).toHaveClass(/android/); // Android枠
+
+        await maskSelector.locator('.mask-btn', { hasText: '全表示' }).click();
+        await expect(maskPreview).toHaveClass(/none/); // マスクなし
+
+        // --- 7. 背景色変更と端の色自動抽出の検証 ---
+        const colorInput = appIconEditor.locator('input.color-input');
+        await expect(colorInput).toBeVisible();
+        await colorInput.fill('#ff0000');
+        await colorInput.dispatchEvent('input');
+        await colorInput.dispatchEvent('change');
+
+        // 端の色を自動抽出ボタンのクリックとアラートの処理
+        const autoColorBtn = appIconEditor.locator('.btn-auto-color');
+        await expect(autoColorBtn).toBeVisible();
+        await autoColorBtn.click();
+
+        const alertDialog = editorPage.locator('alert-component');
+        await expect(alertDialog).toBeVisible({ timeout: 10000 });
+        await alertDialog.getByRole('button', { name: '閉じる' }).click();
+        await expect(alertDialog).toBeHidden();
+
+        // --- 8. 個別アイコン編集切り替えとリセットの検証 ---
+        const targetSelect = appIconEditor.locator('select.target-select');
+        await expect(targetSelect).toBeVisible();
+
+        // 個別アイコン（インデックス1）へ切り替え
+        await targetSelect.selectOption({ index: 1 });
+        await targetSelect.dispatchEvent('change');
+        await editorPage.waitForTimeout(300);
+
+        // 個別調整中のCSSクラスがキャンバスコンテナに適用されていることを確認
+        const canvasContainer = appIconEditor.locator('.canvas-container');
+        await expect(canvasContainer).toHaveClass(/editing-custom/);
+
+        // ズームコントロール操作
+        const zoomRange = appIconEditor.locator('.zoom-control input[type="range"]');
+        await expect(zoomRange).toBeVisible();
+        await zoomRange.evaluate((el: HTMLInputElement) => {
+            el.value = '2.5';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+        await expect(applyBtn).toBeEnabled();
+
+        // 個別設定のリセット動作検証
+        const resetBtn = appIconEditor.locator('.btn-text-reset');
+        await expect(resetBtn).toBeVisible();
+        await resetBtn.click();
+        await expect(resetBtn).toBeHidden(); // リセット後は消える
+
+        // --- 9. 一時記憶クリップボード（位置・ズーム等のコピー＆ペースト）の検証 ---
+        // ズーム値を変更
+        await zoomRange.evaluate((el: HTMLInputElement) => {
+            el.value = '3.0';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        const copyBtn = appIconEditor.locator('.btn-clipboard', { hasText: 'コピー' });
+        const pasteBtn = appIconEditor.locator('.btn-clipboard', { hasText: '貼り付け' });
+
+        await expect(copyBtn).toBeVisible();
+        await expect(pasteBtn).toBeVisible();
+        await expect(pasteBtn).toBeDisabled(); // コピー前はペースト無効
+
+        await copyBtn.click();
+        await expect(alertDialog).toBeVisible({ timeout: 10000 });
+        await expect(alertDialog).toContainText('調整値（位置・サイズ・背景色情報）をコピーしました');
+        await alertDialog.getByRole('button', { name: '閉じる' }).click();
+        await expect(alertDialog).toBeHidden();
+
+        await expect(pasteBtn).toBeEnabled(); // コピー後は活性化
+
+        // ズームを一時的に変更
+        await zoomRange.evaluate((el: HTMLInputElement) => {
+            el.value = '1.2';
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        // 貼り付け適用
+        await pasteBtn.click();
+        await expect(alertDialog).toBeVisible({ timeout: 10000 });
+        await expect(alertDialog).toContainText('コピーした調整値をこのアイコンに適用しました');
+        await alertDialog.getByRole('button', { name: '閉じる' }).click();
+        await expect(alertDialog).toBeHidden();
+
+        // 値がコピー時点の3.0に復元されたか検証
+        await expect(zoomRange).toHaveValue('3');
+
+        // 一括編集モードに戻す
+        await targetSelect.selectOption('-1');
+        await targetSelect.dispatchEvent('change');
+        await editorPage.waitForTimeout(300);
+
+        // --- 10. 宛先出力先設定の動的追加・編集・削除の検証 ---
+        const addTargetBtn = accordionHeader.locator('.btn-add-target');
+        await addTargetBtn.click();
+        await expect(sizeItems).toHaveCount(4); // 新しい宛先が1件追加されていること
+
+        const lastItem = sizeItems.last();
+        const sizePxInput = lastItem.locator('.size-px-input');
+        const pathInput = lastItem.locator('.size-path-input');
+
+        await expect(sizePxInput).toBeEditable();
+        await sizePxInput.fill('256');
+        await sizePxInput.dispatchEvent('change');
+
+        await expect(pathInput).toBeEditable();
+        await pathInput.fill('images/custom-app-icon.webp');
+        await pathInput.dispatchEvent('change');
+
+        const deleteBtn = lastItem.locator('.btn-delete-target');
+        await deleteBtn.click();
+        await expect(sizeItems).toHaveCount(3); // 削除により 3 つに戻ることを検証
+
+        // --- 11. トリミング適用保存と完了確認 ---
+        await applyBtn.click();
+
+        // エディタ画面上にマウントされている共通アラートコンポーネントを監視
+        await expect(alertDialog).toBeVisible({ timeout: 20000 });
+
+        const alertMessage = await alertDialog.locator('.alert-text, [slot="message"], .modal-content, p').first().innerText().catch(() => '');
+
+        if (alertMessage.includes('制限されています') || alertMessage.includes('デモモード')) {
+            // ゲストまたはデモモード等で書き込み制限のあるアカウント環境で実行された場合の正常終了フォールバック
+            await alertDialog.getByRole('button', { name: '閉じる' }).click();
+        } else {
+            // 新仕様のアラートメッセージ（すべて出力しました）を検証
+            await expect(alertDialog).toContainText('すべて出力しました');
+            await alertDialog.getByRole('button', { name: '閉じる' }).click();
+        }
+
+        await expect(alertDialog).toBeHidden();
+
+        // ローカルに生成した一時PNGファイルの削除
+        try {
+            fs.unlinkSync(dummyPngPath);
+        } catch (e) { }
+    });
 });
