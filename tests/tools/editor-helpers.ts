@@ -234,16 +234,31 @@ export class EditorHelper {
 
         await expect(targetLocator).toBeVisible();
 
-        const newComponentNode = targetLocator.locator(`> .node[data-node-type="${componentName}"]`).first();
+        const componentNodes = targetLocator.locator(`> .node[data-node-type="${componentName}"]`);
+        const existingIds = await componentNodes.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-node-id')));
+        const getAddedIds = () => componentNodes.evaluateAll((nodes, previousIds) =>
+            nodes.map(node => node.getAttribute('data-node-id'))
+                .filter((id): id is string => id !== null && !previousIds.includes(id)), existingIds);
 
-        // 負荷が高い状況下でのドラッグ＆ドロップ（dragTo）の空振りを防ぐため、toPassによる自動リトライを持たせます
+        // 既存ノードを成功と誤認せず、途中で失敗したドラッグの押下状態も解除する。
         await expect(async () => {
-            if (!await newComponentNode.isVisible()) {
-                await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, { targetPosition: { x: 10, y: 10 }, timeout: 3000 });
+            if ((await getAddedIds()).length === 0) {
+                await expect(this.page.locator('app-container-loading-overlay')).toBeHidden({ timeout: 10000 });
+                await this.page.mouse.up();
+                try {
+                    await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, {
+                        targetPosition: { x: 10, y: 10 }, timeout: 10000
+                    });
+                } finally {
+                    await this.page.mouse.up();
+                }
             }
-            await expect(newComponentNode).toBeVisible({ timeout: 3000 });
-        }).toPass({ timeout: 15000, intervals: [1000] });
+            await expect.poll(getAddedIds, { timeout: 5000 }).toHaveLength(1);
+        }).toPass({ timeout: 30000, intervals: [1000] });
 
+        const [addedId] = await getAddedIds();
+        const newComponentNode = componentNodes.and(this.page.locator(`[data-node-id="${addedId}"]`));
+        await expect(newComponentNode).toBeVisible();
         return newComponentNode;
     }
 
@@ -968,8 +983,14 @@ export class EditorHelper {
 
         // 保存完了の判定
         const alert = this.page.locator('alert-component');
-        // 保存に成功、またはエラーでアラートが出たら判定する
-        if (await alert.isVisible({ timeout: 8000 }).catch(() => false)) {
+        // isVisible({ timeout }) は待機しないため、保存結果が出るまで明示的に待つ。
+        await expect.poll(async () => {
+            if (await alert.isVisible()) return true;
+            const className = await saveIcon.getAttribute('class');
+            return !className?.split(/\s+/).includes('shake-save-button');
+        }, { timeout: 20000, message: 'スクリプトの保存完了またはエラー表示を待機' }).toBe(true);
+
+        if (await alert.isVisible()) {
             const msg = await alert.evaluate((el: any) => el.alertMessage || el.innerText || '');
 
             if (msg?.includes('エラー') || msg?.includes('修正')) {
@@ -985,6 +1006,8 @@ export class EditorHelper {
         // 2. 【追加】新仕様対応：戻るボタン（#fab-close）をクリックしてエディタを閉じ、一覧に戻る
         const closeButton = scriptContainer.locator('#fab-close');
         await closeButton.click();
+        await expect(monacoEditor).toBeHidden();
+        await expect(scriptRow).toBeVisible();
     }
 
     /**
