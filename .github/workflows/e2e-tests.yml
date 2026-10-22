@@ -11,9 +11,6 @@ concurrency:
 
 # ワークフローが実行されるトリガーを定義
 on:
-  push:
-    branches:
-      - fix/stabilize-editor-e2e-39687552586
   # 定期実行 (schedule)
   schedule:
     # 3時間毎に実行 (JST 10:00, 13:00, 16:00, 19:00, 22:00, 翌5:00, 8:00) -> Ubuntu専用にする
@@ -86,9 +83,7 @@ jobs:
         id: set-matrix
         shell: bash
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            echo 'matrix=[{"os": "macos-latest", "browser": "webkit", "binary": "webkit"}, {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}]' >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event_name }}" == "schedule" ]]; then
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
             # 1. 毎日0時のスケジュール（Premiumテスト用など）
             if [[ "${{ github.event.schedule }}" == "0 0 * * *" ]]; then
               echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"}, {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"}, {"os": "windows-latest", "browser": "chromium", "binary": "chromium"}, {"os": "macos-latest", "browser": "webkit", "binary": "webkit"}, {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}]' >> $GITHUB_OUTPUT
@@ -121,9 +116,7 @@ jobs:
         shell: bash
         run: |
           # 実行すべきスイート（Normal/Premium）をフラグとして出力
-          if [ "${{ github.event_name }}" == "push" ]; then
-            echo "run_normal=true" >> $GITHUB_OUTPUT
-          elif [ "${{ github.event_name }}" == "schedule" ]; then
+          if [ "${{ github.event_name }}" == "schedule" ]; then
             if [ "${{ github.event.schedule }}" == "0 0 * * *" ]; then
               echo "run_premium=true" >> $GITHUB_OUTPUT
             else
@@ -252,9 +245,7 @@ jobs:
         id: run_tests
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            WORKERS="1"
-          elif [ "${{ github.event_name }}" = "schedule" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ]; then
             if [ "$OS_NAME" = "ubuntu-latest" ]; then
               # 高速なUbuntu環境は高効率な並列実行を維持
               WORKERS="75%"
@@ -282,8 +273,8 @@ jobs:
           npx playwright test "${TEST_ARGS[@]}" --project=${{ matrix.browser }} --reporter=line --workers="$WORKERS" --retries="$RETRIES"
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
-          TEST_SCOPE: ${{ github.event_name == 'push' && 'editor-regression' || inputs.test_scope || 'all' }}
-          TEST_RETRIES: ${{ github.event_name == 'push' && '0' || inputs.retries || '5' }}
+          TEST_SCOPE: ${{ inputs.test_scope || 'all' }}
+          TEST_RETRIES: ${{ inputs.retries || '5' }}
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
