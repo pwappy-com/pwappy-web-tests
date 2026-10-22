@@ -148,7 +148,8 @@ test.describe('エディタ内イベント＆スクリプト機能のビルド�
     });
 
     test('ページのライフサイクルイベント(init/show/hide/destroy)にスクリプトを割り当て', async ({ editorPage, editorHelper }) => {
-        test.setTimeout(120000);
+        // 複数のスクリプト編集とプレビュー・実機ページの検証を含むため、CIでは個別に予算を確保する。
+        test.setTimeout(process.env.CI ? 240000 : 120000);
 
         let appNode: Locator, page1Node: Locator, page2Node: Locator;
         let appId: string, page1Id: string, page2Id: string;
