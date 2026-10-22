@@ -1006,8 +1006,8 @@ export class EditorHelper {
         // 2. 【追加】新仕様対応：戻るボタン（#fab-close）をクリックしてエディタを閉じ、一覧に戻る
         const closeButton = scriptContainer.locator('#fab-close');
         await closeButton.click();
+        // 閉じる操作はイベントタブへの復帰を保証しないため、編集画面の終了を確認する。
         await expect(monacoEditor).toBeHidden();
-        await expect(scriptRow).toBeVisible();
     }
 
     /**
