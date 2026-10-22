@@ -52,6 +52,20 @@ on:
         default: "75%"
         type: string
 
+      test_scope:
+        description: "通常テストの実行範囲"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - editor-regression
+      retries:
+        description: "通常テストの再試行回数"
+        required: true
+        default: "5"
+        type: string
+
 # ワークフローを構成するジョブを定義
 jobs:
   # ===================================================================
@@ -246,9 +260,21 @@ jobs:
           fi
 
           echo "Running tests on $OS_NAME with workers: $WORKERS"
-          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --reporter=line --workers=$WORKERS
+          RETRIES="${TEST_RETRIES:-5}"
+          if ! [[ "$RETRIES" =~ ^[0-5]$ ]]; then
+            echo "retries must be between 0 and 5"
+            exit 1
+          fi
+          TEST_ARGS=(tests/specs/normal)
+          if [ "$TEST_SCOPE" = "editor-regression" ]; then
+            TEST_ARGS=(tests/specs/normal/editor-events-build.spec.ts tests/specs/normal/editor-property-parsing-build.spec.ts
+              --grep 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires')
+          fi
+          npx playwright test "${TEST_ARGS[@]}" --project=${{ matrix.browser }} --reporter=line --workers="$WORKERS" --retries="$RETRIES"
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
+          TEST_SCOPE: ${{ inputs.test_scope || 'all' }}
+          TEST_RETRIES: ${{ inputs.retries || '5' }}
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
