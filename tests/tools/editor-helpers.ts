@@ -197,6 +197,11 @@ export class EditorHelper {
     async addPage(): Promise<Locator> {
         await this.page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
         await this.openMoveingHandle('left');
+        const pageNodes = this.page.locator('#dom-tree > .node[data-node-type="page"]');
+        const previousIds = await pageNodes.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-node-id')));
+        const getAddedIds = () => pageNodes.evaluateAll((nodes, ids) =>
+            nodes.map(node => node.getAttribute('data-node-id'))
+                .filter((id): id is string => id !== null && !ids.includes(id)), previousIds);
         const humburgerButton = this.page.locator('template-container #hamburger');
         await expect(humburgerButton).toBeVisible();
         await humburgerButton.click();
@@ -204,7 +209,10 @@ export class EditorHelper {
         await expect(contextMenu).toBeVisible();
         await contextMenu.getByText('ページ追加').click();
 
-        const newPageNode = this.page.locator('#dom-tree > .node[data-node-type="page"]').last();
+        // .last() は次のページ追加で参照先が変わるため、追加完了とIDを確定して返す。
+        await expect.poll(getAddedIds).toHaveLength(1);
+        const [addedId] = await getAddedIds();
+        const newPageNode = pageNodes.and(this.page.locator(`[data-node-id="${addedId}"]`));
         await expect(newPageNode).toBeVisible();
         return newPageNode;
     }
@@ -541,25 +549,7 @@ export class EditorHelper {
     async openMoveingHandle(handleType: 'right' | 'left'): Promise<void> {
         if (!this.isMobile) return;
 
-        const leftHandle = this.page.locator(`#leftMovingHandle`);
-        const rightHandle = this.page.locator(`#rightMovingHandle`);
-        await expect(leftHandle).toBeVisible();
-        await expect(rightHandle).toBeVisible();
-
-        const handle = this.page.locator(`#${handleType}MovingHandle`);
-        const targetContainer = (handleType === 'right')
-            ? this.page.locator('script-container')
-            : this.page.locator('template-container');
-
-        await expect(async () => {
-            if (!await targetContainer.isVisible()) {
-                // 操作失敗を隠さず、ハンドルが操作可能になるまで待つ。
-                // 入力方式を途中で切り替えると開閉が重なるため、ダブルクリックに統一する。
-                await this.page.mouse.up();
-                await handle.dblclick({ timeout: 5000 });
-            }
-            await expect(targetContainer).toBeVisible({ timeout: 5000 });
-        }).toPass({ timeout: 20000, intervals: [1000] });
+        await this.setMovingHandleState(handleType, true);
     }
 
     /**
@@ -567,65 +557,27 @@ export class EditorHelper {
      */
     async closeMoveingHandle(): Promise<void> {
         if (!this.isMobile) return;
+        await this.setMovingHandleState('right', false);
+        await this.setMovingHandleState('left', false);
+    }
 
-        const templateContainer = this.page.locator('template-container');
-        const scriptContainer = this.page.locator('script-container');
-
-        if (await scriptContainer.isVisible()) {
-            const handle = this.page.locator(`#rightMovingHandle`);
-            let attempt = 0;
-            await expect(async () => {
-                attempt++;
-                if (await scriptContainer.isVisible()) {
-                    if (attempt % 3 === 1) {
-                        await handle.dblclick({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.evaluate(el => {
-                                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-                            }).catch(() => { });
-                        });
-                    } else if (attempt % 3 === 2) {
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                    } else {
-                        await handle.click({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.tap({ timeout: 500 }).catch(() => { });
-                        });
-                    }
-                }
-                await expect(scriptContainer).toBeHidden({ timeout: 1500 });
-            }).toPass({
-                timeout: 10000,
-                intervals: [1000]
-            });
-        }
-
-        if (await templateContainer.isVisible()) {
-            const handle = this.page.locator(`#leftMovingHandle`);
-            let attempt = 0;
-            await expect(async () => {
-                attempt++;
-                if (await templateContainer.isVisible()) {
-                    if (attempt % 3 === 1) {
-                        await handle.click({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.tap({ timeout: 500 }).catch(() => { });
-                        });
-                    } else if (attempt % 3 === 2) {
-                        await handle.dblclick({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.evaluate(el => {
-                                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-                            }).catch(() => { });
-                        });
-                    } else {
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                    }
-                }
-                await expect(templateContainer).toBeHidden({ timeout: 1500 });
-            }).toPass({
-                timeout: 10000,
-                intervals: [1000]
-            });
-        }
+    private async setMovingHandleState(handleType: 'right' | 'left', open: boolean): Promise<void> {
+        const handle = this.page.locator(`#${handleType}MovingHandle`);
+        const container = this.page.locator(handleType === 'right' ? 'script-container' : 'template-container');
+        await expect(async () => {
+            if (await container.isVisible() !== open) {
+                await expect(handle).toBeVisible({ timeout: 5000 });
+                await this.page.mouse.up();
+                // WebKitではハンドルのstable待ちが完了しない例がある。
+                // 可視性と操作後の状態を検証し、同じ操作を短時間に混在させない。
+                await handle.dblclick({ force: true, timeout: 5000 });
+            }
+            if (open) {
+                await expect(container).toBeVisible({ timeout: 5000 });
+            } else {
+                await expect(container).toBeHidden({ timeout: 5000 });
+            }
+        }).toPass({ timeout: 20000, intervals: [1000] });
     }
 
     /**
@@ -655,8 +607,10 @@ export class EditorHelper {
             }
             // Monacoエディタのサジェストなどが被っているケースを考慮しEscapeを送信
             await this.page.keyboard.press('Escape');
-            // アニメーションや重なりを無視してクリック
-            await tabLocator.click({ force: true, timeout: 3000 });
+            // 選択済みタブへの再クリックでWebKitの入力待ちを増やさない。
+            if (!/\bactive\b/.test(await tabLocator.getAttribute('class') || '')) {
+                await tabLocator.click({ timeout: 5000 });
+            }
 
             // 切り替わったことを確認（activeクラスが付与されるのを待つ）
             await expect(tabLocator).toHaveClass(/active/, { timeout: 3000 });
@@ -863,8 +817,8 @@ export class EditorHelper {
 
         await targetToplistItem.click();
         await expect(topTemplateListContainer).toBeHidden();
-        // 切り替え後の再描画待ち
-        await this.page.waitForTimeout(500);
+        // メニューが閉じただけでは旧ツリーが残るため、選択先の再描画を待つ。
+        await expect(this.page.locator(`#dom-tree > .node[data-node-id="${templateId}"]`)).toBeVisible();
     }
 
     /**
