@@ -551,38 +551,15 @@ export class EditorHelper {
             ? this.page.locator('script-container')
             : this.page.locator('template-container');
 
-        if (!await targetContainer.isVisible()) {
-            let attempt = 0;
-            await expect(async () => {
-                attempt++;
-                if (!await targetContainer.isVisible()) {
-                    if (attempt % 3 === 1) {
-                        // 物理またはJSによるダブルクリックを試す
-                        await handle.dblclick({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.evaluate(el => {
-                                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-                            }).catch(() => { });
-                        });
-
-                    } else if (attempt % 3 === 2) {
-                        // 3連続タップ（ダブルタップ擬似シミュレーション）を試す
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                    } else {
-                        // シングルクリック/シングルタップを試す（最も一般的なトグル仕様への対応）
-                        await handle.click({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.tap({ timeout: 500 }).catch(() => { });
-                        });
-
-                    }
-                }
-                // アニメーション完了を待機
-                await expect(targetContainer).toBeVisible({ timeout: 1500 });
-            }).toPass({
-                timeout: 10000,
-                intervals: [1000] // チャタリングを防ぐため、再試行の間隔を十分に確保する
-            });
-        }
+        await expect(async () => {
+            if (!await targetContainer.isVisible()) {
+                // 操作失敗を隠さず、ハンドルが操作可能になるまで待つ。
+                // 入力方式を途中で切り替えると開閉が重なるため、ダブルクリックに統一する。
+                await this.page.mouse.up();
+                await handle.dblclick({ timeout: 5000 });
+            }
+            await expect(targetContainer).toBeVisible({ timeout: 5000 });
+        }).toPass({ timeout: 20000, intervals: [1000] });
     }
 
     /**
