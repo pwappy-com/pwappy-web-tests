@@ -170,6 +170,7 @@ test.describe('エディタ内イベント＆スクリプト機能のビルド�
             const rawPage2Id = await page2Node.getAttribute('data-node-id');
             expect(rawPage2Id).not.toBeNull();
             page2Id = rawPage2Id!;
+            expect(page2Id).not.toBe(page1Id);
         });
 
         await test.step('スクリプト設定: 各イベントにアラートを表示するスクリプトを追加', async () => {
