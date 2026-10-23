@@ -344,7 +344,8 @@ test.describe('クイックプロパティエディタ（QuickPropertyEditor）�
     });
 
     test('基本情報編集: 保存を押さずに要素を切り替えた時の「一括自動保存」と「ID重複防止ガード」が機能すること', async ({ editorPage, editorHelper }) => {
-        test.setTimeout(90000); // 💡 モバイルの低速実行に対応するため、タイムアウトを90秒に設定
+        // CIの2ワーカーではセットアップ・自動保存検証後のID重複ガードまで90秒に収まらない。
+        test.setTimeout(process.env.CI ? 180000 : 90000);
         let node1Id: string;
         let node2Id: string;
 
