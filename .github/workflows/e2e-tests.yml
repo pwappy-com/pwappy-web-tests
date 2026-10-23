@@ -285,6 +285,7 @@ jobs:
 
       # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
+        timeout-minutes: 5
         if: always()
         shell: bash
         run: |
@@ -467,6 +468,7 @@ jobs:
 
       # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
+        timeout-minutes: 5
         if: always()
         shell: bash
         run: |
