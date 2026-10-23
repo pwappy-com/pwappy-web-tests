@@ -744,25 +744,30 @@ export class EditorHelper {
         await menuButton.click();
         await expect(platformBottomMenu).toBeVisible();
 
-        // 保存ボタンを押す前に、保存通信(API)の完了を監視する準備をする
-        const saveResponsePromise = this.page.waitForResponse(
-            response => response.request().method() === 'PUT' && response.url().includes('editor'),
-            { timeout: 30000 }
-        ).catch(() => null);
+        // 保存対象のリクエストをクリック前に登録し、HTTP応答とアプリの結果を必須確認する。
+        // URLの部分一致やタイムアウトの握りつぶしで、保存失敗を見逃さない。
+        const appKey = new URL(this.page.url()).searchParams.get('appKey');
+        expect(appKey, '保存対象のappKeyが必要です').toBeTruthy();
+        const [saveResponse] = await Promise.all([
+            this.page.waitForResponse(response => {
+                const request = response.request();
+                if (request.method() !== 'PUT') return false;
+                try {
+                    const payload = request.postDataJSON();
+                    return payload?.appKey === appKey && payload?.editorJson !== undefined;
+                } catch {
+                    return false;
+                }
+            }, { timeout: 30000 }),
+            platformBottomMenu.getByText('保存', { exact: true }).click()
+        ]);
+        expect(saveResponse.ok(), `保存API HTTP ${saveResponse.status()}`).toBeTruthy();
+        const saveResult = await saveResponse.json();
+        expect(saveResult.code, '保存APIの成功コード').toBe(200);
 
-        // 保存をクリック
-        await platformBottomMenu.getByText('保存', { exact: true }).click();
-
-        // 「処理中」が一瞬表示されるのを待ってから、消えるのを待つ
+        // 保存応答後の再読込・再描画が完了するまで待つ。固定の5秒待機は不要。
         const loadingOverlay = this.page.locator('app-container-loading-overlay');
-        await loadingOverlay.getByText('処理中').waitFor({ state: 'visible', timeout: 2000 }).catch(() => { });
-        await loadingOverlay.getByText('処理中').waitFor({ state: 'hidden', timeout: 30000 });
-
-        // ネットワークレベルで保存APIの通信が完了するのを確実に待つ
-        await saveResponsePromise;
-
-        // サーバー側のファイル書き込みラグを吸収するための待機
-        await this.page.waitForTimeout(5000);
+        await expect(loadingOverlay).toBeHidden({ timeout: 30000 });
 
         // アラートにエラー文字が含まれていればテストを強制終了させる
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
