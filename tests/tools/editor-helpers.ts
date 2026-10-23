@@ -1582,17 +1582,23 @@ export class EditorHelper {
     async enterDirectory(name: string): Promise<void> {
         const explorer = this.page.locator('file-explorer');
 
+        await this.waitForFileExplorerLoading();
         const links = explorer.locator('.path-link');
         const beforeCount = await links.count();
         // リトライ前の階層を固定し、遷移済みなら再度ダブルクリックしない。
         await expect(async () => {
+            await this.waitForFileExplorerLoading();
             if (await links.count() === beforeCount) {
                 const dir = explorer.locator('.directory').filter({ hasText: name });
-                await expect(dir).toBeVisible();
-                await dir.dblclick({ delay: 50, force: true, timeout: 5000 });
+                // 行内の選択チェックボックスを避け、操作可能なフォルダーアイコンを開く。
+                const folderIcon = dir.locator('.icon-directory');
+                await expect(folderIcon).toBeVisible();
+                await this.page.mouse.up();
+                await folderIcon.dblclick({ delay: 50, timeout: 5000 });
             }
             await this.waitForFileExplorerLoading();
             await expect.poll(() => links.count(), { timeout: 5000 }).toBeGreaterThan(beforeCount);
+            await expect(links.last()).toHaveText(`/${name}`, { timeout: 5000 });
         }).toPass({
             timeout: 15000,
             intervals: [1000]
