@@ -148,19 +148,16 @@ export class EditorHelper {
                 if (await snapshotConfirmDialog.isVisible({ timeout: 5000 }).catch(() => false)) {
                     // --- 1. 最初のダイアログ: 「破棄する」をクリック（活性化を待って確実に実行） ---
                     const discardInitialBtn = snapshotConfirmDialog.getByRole('button', { name: '破棄する' });
-                    await expect(async () => {
-                        await expect(discardInitialBtn).toBeEnabled({ timeout: 1000 });
-                        await discardInitialBtn.click({ force: true });
-                    }).toPass({
-                        timeout: 5000,
-                        intervals: [500]
-                    });
-
-                    // --- 2. 再確認ダイアログが表示されるのを待つ ---
                     const discardConfirmDialog = this.page.locator('message-box', {
                         hasText: 'すべてのスナップショットを破棄しますか？'
                     });
-                    await expect(discardConfirmDialog).toBeVisible({ timeout: 5000 });
+                    await expect(async () => {
+                        if (!await discardConfirmDialog.isVisible()) {
+                            await discardInitialBtn.click({ timeout: 5000 });
+                        }
+                        // クリックの完了ではなく、次の確認画面への遷移を成功条件にする。
+                        await expect(discardConfirmDialog).toBeVisible({ timeout: 5000 });
+                    }).toPass({ timeout: 15000, intervals: [500] });
 
                     // --- 3. 「はい、破棄します」をクリック（活性化を待って確実に実行） ---
                     // アニメーション等の遅延による空振りを防ぐため、ボタンが有効化されるまで toPass で再試行します
@@ -607,10 +604,9 @@ export class EditorHelper {
             }
             // Monacoエディタのサジェストなどが被っているケースを考慮しEscapeを送信
             await this.page.keyboard.press('Escape');
-            // 選択済みタブへの再クリックでWebKitの入力待ちを増やさない。
-            if (!/\bactive\b/.test(await tabLocator.getAttribute('class') || '')) {
-                await tabLocator.click({ timeout: 5000 });
-            }
+            // 選択済みタブへのクリックも、サブウィンドウを閉じる外部クリックとして必要。
+            await expect(tabLocator).toBeVisible({ timeout: 5000 });
+            await tabLocator.click({ force: true, timeout: 5000 });
 
             // 切り替わったことを確認（activeクラスが付与されるのを待つ）
             await expect(tabLocator).toHaveClass(/active/, { timeout: 3000 });
@@ -1447,14 +1443,13 @@ export class EditorHelper {
 
         const menu = this.page.locator('#platformBottomMenu');
 
-        // メニューが表示されるまで、1秒ごとにメニューボタンのクリックを繰り返す
+        // 既に開いたメニューを再クリックで閉じない。描画完了も待ってから次へ進む。
         await expect(async () => {
-            await this.page.locator('#fab-bottom-menu-box').click();
-            await expect(menu).toBeVisible({ timeout: 500 });
-        }).toPass({
-            intervals: [1000], // 1秒ごとにリトライ
-            timeout: 5000      // 最大5秒間試行（環境に合わせて調整してください）
-        });
+            if (!await menu.isVisible()) {
+                await this.page.locator('#fab-bottom-menu-box').click({ timeout: 5000 });
+            }
+            await expect(menu).toBeVisible({ timeout: 5000 });
+        }).toPass({ intervals: [1000], timeout: 15000 });
 
         // 「ファイル管理」をクリック
         await menu.getByText('ファイル管理').click();
@@ -1537,24 +1532,17 @@ export class EditorHelper {
     async enterDirectory(name: string): Promise<void> {
         const explorer = this.page.locator('file-explorer');
 
-        // 1. ドラッグの干渉等による空振りを防ぐため、リトライ込みで実行する
+        const links = explorer.locator('.path-link');
+        const beforeCount = await links.count();
+        // リトライ前の階層を固定し、遷移済みなら再度ダブルクリックしない。
         await expect(async () => {
-            const dir = explorer.locator('.directory').filter({ hasText: name });
-            await expect(dir).toBeVisible();
-
-            // 現在のパンくずの数を取得
-            const links = explorer.locator('.path-link');
-            const beforeCount = await links.count();
-
-            // ダブルクリック
-            await dir.dblclick({ delay: 50, force: true });
-
-            // ロード完了を待つ
+            if (await links.count() === beforeCount) {
+                const dir = explorer.locator('.directory').filter({ hasText: name });
+                await expect(dir).toBeVisible();
+                await dir.dblclick({ delay: 50, force: true, timeout: 5000 });
+            }
             await this.waitForFileExplorerLoading();
-
-            // パンくずの数が変わっている（中に入った）ことを確認
-            const afterCount = await links.count();
-            expect(afterCount).toBeGreaterThan(beforeCount);
+            await expect.poll(() => links.count(), { timeout: 5000 }).toBeGreaterThan(beforeCount);
         }).toPass({
             timeout: 15000,
             intervals: [1000]
