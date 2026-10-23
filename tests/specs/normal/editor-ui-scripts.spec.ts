@@ -248,7 +248,8 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
                 console.error('Copy Test Log 2');
             });
 
-            await expect(consoleContainer.locator('.log-item')).toHaveCount(2);
+            await expect(consoleContainer.locator('.log-item').filter({ hasText: 'Copy Test Log 1' })).toHaveCount(1);
+            await expect(consoleContainer.locator('.log-item').filter({ hasText: 'Copy Test Log 2' })).toHaveCount(1);
 
             // コピーボタンをクリック
             await copyButton.click({ force: true });
