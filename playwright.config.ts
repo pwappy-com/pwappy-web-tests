@@ -53,8 +53,9 @@ export default defineConfig({
     /* テスト失敗時に最終画面のスクリーンショットを保存 */
     screenshot: 'only-on-failure',
 
-    /* テスト失敗時に操作動画を保存 */
-    video: 'retain-on-failure',
+    /* macOS CIでは7GiB/3CPU環境で大量のswapを確認したため録画負荷を除く。
+     * traceと失敗時スクリーンショットは維持し、workers/retriesや検証内容は変えない。 */
+    video: isCI && process.platform === 'darwin' ? 'off' : 'retain-on-failure',
 
     launchOptions: {
       args: [
