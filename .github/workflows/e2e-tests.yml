@@ -133,6 +133,7 @@ jobs:
   # ジョブ 2: Normalテストの実行
   # ===================================================================
   e2e-normal:
+    name: e2e-normal (${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}, ${{ matrix.browser }})
     needs: prepare-matrix
     if: ${{ needs.prepare-matrix.outputs.run_normal == 'true' }}
     timeout-minutes: 120
@@ -145,7 +146,8 @@ jobs:
       max-parallel: 5
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
-    runs-on: ${{ matrix.os }}
+    # 7GiB ARMランナーで継続するswapを避け、同じmacOS 26の標準14GiB Intelランナーに固定。
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
@@ -155,7 +157,7 @@ jobs:
       # キャッシュキー接頭辞の設定 (バイナリエンジン単位でキャッシュを共有)
       - name: Set cache key prefix
         run: |
-          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
+          echo "CACHE_KEY_PREFIX=${{ runner.os }}-${{ runner.arch }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
