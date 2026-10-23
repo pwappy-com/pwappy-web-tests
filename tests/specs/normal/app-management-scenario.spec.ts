@@ -252,7 +252,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
             const confirmDialog = page.locator('message-box#delete-confirm-general');
             await expect(confirmDialog).toBeVisible();
-            await confirmDialog.locator('.confirm-cancel-button').click({ force: true });
+            await confirmDialog.locator('.confirm-cancel-button').click();
             await expect(confirmDialog).toBeHidden();
 
             await page.getByRole('button', { name: ' ワークベンチに戻る' }).click();
