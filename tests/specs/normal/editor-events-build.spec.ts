@@ -135,9 +135,21 @@ test.describe('エディタ内イベント＆スクリプト機能のビルド�
 
             await verifyScriptInTestPage(testPage, testPageExpectedScripts);
 
+            // load未発火とHTTP障害を区別できるよう、再読込より前に通信失敗を記録する。
+            testPage.on('response', response => {
+                if (response.status() >= 400) {
+                    console.error(`[LoadTest HTTP] ${response.status()} ${response.request().resourceType()} ${new URL(response.url()).pathname}`);
+                }
+            });
+            testPage.on('requestfailed', request => {
+                console.error(`[LoadTest Network] ${request.resourceType()} ${new URL(request.url()).pathname}: ${request.failure()?.errorText}`);
+            });
+
             const currentUrl = new URL(testPage.url());
             currentUrl.searchParams.set('cb', Date.now().toString());
-            await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
+            // このテストの対象はwindow.load。DOMContentLoadedだけでは外部リソース読込が終わらない。
+            const response = await testPage.goto(currentUrl.toString(), { waitUntil: 'load', timeout: 30000 });
+            expect(response?.ok(), `実機ページのHTTP応答: ${response?.status()}`).toBe(true);
 
             const alertDialog = testPage.locator('ons-alert-dialog').filter({ hasText: alertText }).last();
             await expect(alertDialog).toBeVisible({ timeout: 15000 });
