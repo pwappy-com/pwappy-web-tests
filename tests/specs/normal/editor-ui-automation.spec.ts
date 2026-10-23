@@ -443,15 +443,14 @@ test.describe.serial('エディタUI自動化統合テスト', () => {
                 const discardConfirm = editorPage.locator('message-box', { hasText: 'すべてのスナップショットを破棄しますか？' });
                 await expect(discardConfirm).toBeVisible({ timeout: 10000 });
 
-                // 標準アラートの出現によるブロッキングを確実にハンドリングするためダイアログイベントを事前待機
-                const dialogPromise = editorPage.waitForEvent('dialog');
-
-                // 確認ダイアログで「はい、破棄します」をクリック
-                await discardConfirm.getByRole('button', { name: 'はい、破棄します' }).click({ force: true });
-
-                // 発生した標準ダイアログを即座に承認
-                const dialog = await dialogPromise;
-                await dialog.accept().catch(() => { });
+                // クリック完了を待つ前に標準ダイアログを承認する。
+                // ダイアログがクリック処理をブロックしても相互待ちにならないようにする。
+                const dialogHandled = editorPage.waitForEvent('dialog', { timeout: 15000 })
+                    .then(dialog => dialog.accept());
+                await Promise.all([
+                    dialogHandled,
+                    discardConfirm.getByRole('button', { name: 'はい、破棄します' }).click(),
+                ]);
             });
 
             await test.step('3. スナップショット画面の状態確認', async () => {
