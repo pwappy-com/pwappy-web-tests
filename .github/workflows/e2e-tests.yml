@@ -270,6 +270,22 @@ jobs:
             TEST_ARGS=(tests/specs/normal/editor-events-build.spec.ts tests/specs/normal/editor-property-parsing-build.spec.ts
               --grep 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires')
           fi
+          # Safariで入力処理自体が停止するため、ホスト負荷を記録する（テスト条件は維持）。
+          if [ "$(uname -s)" = "Darwin" ]; then
+            E2E_RESOURCE_LOG="$RUNNER_TEMP/e2e-resources.log"
+            (
+              while true; do
+                date -u '+%Y-%m-%dT%H:%M:%SZ'
+                uptime
+                vm_stat | head -n 10 || true
+                # commは実行ファイル名のみ。引数や環境変数は出力しない。
+                ps -axo pid,ppid,%cpu,rss,comm | sort -k3 -nr | head -n 12 || true
+                sleep 30
+              done
+            ) > "$E2E_RESOURCE_LOG" 2>&1 &
+            E2E_MONITOR_PID=$!
+            trap 'e2e_status=$?; kill "$E2E_MONITOR_PID" 2>/dev/null || true; wait "$E2E_MONITOR_PID" 2>/dev/null || true; echo "::group::macOS runner resource samples"; cat "$E2E_RESOURCE_LOG"; echo "::endgroup::"; exit "$e2e_status"' EXIT
+          fi
           npx playwright test "${TEST_ARGS[@]}" --project=${{ matrix.browser }} --reporter=line --workers="$WORKERS" --retries="$RETRIES"
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
