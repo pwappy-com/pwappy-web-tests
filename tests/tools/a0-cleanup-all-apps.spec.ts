@@ -27,6 +27,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
     });
 
     const concurrency = 10;
+    const cleanupErrors: unknown[] = [];
 
     // ====================================================
     // 1. アーカイブのクリーンアップ
@@ -89,16 +90,32 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
             await expect(newPage.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
             const restoreConfirm = newPage.locator('message-box#restore-confirm');
             await expect(restoreConfirm).toBeVisible();
-            await restoreConfirm.locator('.confirm-restore-button').click({ force: true });
+            const [restoreResponse] = await Promise.all([
+              newPage.waitForResponse(response => {
+                if (response.request().method() !== 'PUT') return false;
+                try {
+                  return response.request().postDataJSON()?.appKey === appKey;
+                } catch {
+                  return false;
+                }
+              }, { timeout: 30000 }),
+              restoreConfirm.locator('.confirm-restore-button').click()
+            ]);
+            expect(restoreResponse.ok(), `Archive restore HTTP ${restoreResponse.status()}`).toBeTruthy();
+            const restoreResult = await restoreResponse.json();
+            expect(restoreResult.code, `Archive restore status: ${restoreResult.status}`).toBe(200);
             await expect(newPage.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
             const alertDialog = newPage.locator('alert-component');
             await expect(alertDialog).toBeVisible();
+            await expect(alertDialog).toContainText(`アプリ「${appKey}」を復元しました`);
             await alertDialog.getByRole('button', { name: '閉じる' }).click();
+            await expect(targetRow, 'Restored app must disappear from the archive').toHaveCount(0, { timeout: 30000 });
             console.log(` -> ワークベンチに復元完了: ${appName} (${appKey})`);
           }
         } catch (e) {
           console.error(`[Archive] ${appKey} の処理中にエラーが発生しました:`, e);
+          cleanupErrors.push(e);
         } finally {
           await newPage.close();
         }
@@ -117,6 +134,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
 
       // 全ワーカーの処理が終わるまで待つ
       await Promise.all(archiveWorkers);
+      if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Cleanup operation failed; refusing to repeat unsuccessful mutations');
 
       // 画面更新してまだ残っているか再検証
       await page.reload();
@@ -215,6 +233,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
 
         } catch (e) {
           console.error(`[Workbench] ${appKey} の処理中にエラーが発生しました:`, e);
+          cleanupErrors.push(e);
         } finally {
           await newPage.close();
         }
@@ -233,6 +252,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
 
       // 全ワーカーの処理が終わるまで待つ
       await Promise.all(workbenchWorkers);
+      if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Cleanup operation failed; refusing to repeat unsuccessful mutations');
 
       // 画面を再読み込みして、残りのアプリがないか確認
       await page.reload();
