@@ -246,19 +246,27 @@ export class EditorHelper {
                 .filter((id): id is string => id !== null && !previousIds.includes(id)), existingIds);
 
         // 既存ノードを成功と誤認せず、途中で失敗したドラッグの押下状態も解除する。
+        let attempt = 0;
         await expect(async () => {
-            if ((await getAddedIds()).length === 0) {
-                await expect(this.page.locator('app-container-loading-overlay')).toBeHidden({ timeout: 10000 });
-                await this.page.mouse.up();
-                try {
-                    await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, {
-                        targetPosition: { x: 10, y: 10 }, timeout: 10000
-                    });
-                } finally {
+            const attemptStarted = Date.now();
+            console.log(`[EditorSync:addComponent] component=${componentName} attempt=${++attempt} start`);
+            try {
+                if ((await getAddedIds()).length === 0) {
+                    await expect(this.page.locator('app-container-loading-overlay')).toBeHidden({ timeout: 10000 });
                     await this.page.mouse.up();
+                    try {
+                        await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, {
+                            targetPosition: { x: 10, y: 10 }, timeout: 10000
+                        });
+                    } finally {
+                        await this.page.mouse.up();
+                    }
                 }
+                await expect.poll(getAddedIds, { timeout: 5000 }).toHaveLength(1);
+            } catch (error) {
+                console.error(`[EditorSync:addComponent] attempt=${attempt} elapsedMs=${Date.now() - attemptStarted}: ${error instanceof Error ? error.message : String(error)}`);
+                throw error;
             }
-            await expect.poll(getAddedIds, { timeout: 5000 }).toHaveLength(1);
         }).toPass({ timeout: 30000, intervals: [1000] });
 
         const [addedId] = await getAddedIds();
@@ -561,18 +569,26 @@ export class EditorHelper {
     private async setMovingHandleState(handleType: 'right' | 'left', open: boolean): Promise<void> {
         const handle = this.page.locator(`#${handleType}MovingHandle`);
         const container = this.page.locator(handleType === 'right' ? 'script-container' : 'template-container');
+        let attempt = 0;
         await expect(async () => {
-            if (await container.isVisible() !== open) {
-                await expect(handle).toBeVisible({ timeout: 5000 });
-                await this.page.mouse.up();
-                // WebKitではハンドルのstable待ちが完了しない例がある。
-                // 可視性と操作後の状態を検証し、同じ操作を短時間に混在させない。
-                await handle.dblclick({ force: true, timeout: 5000 });
-            }
-            if (open) {
-                await expect(container).toBeVisible({ timeout: 5000 });
-            } else {
-                await expect(container).toBeHidden({ timeout: 5000 });
+            const attemptStarted = Date.now();
+            console.log(`[EditorSync:movingHandle] side=${handleType} open=${open} attempt=${++attempt} start`);
+            try {
+                if (await container.isVisible() !== open) {
+                    await expect(handle).toBeVisible({ timeout: 5000 });
+                    await this.page.mouse.up();
+                    // WebKitではハンドルのstable待ちが完了しない例がある。
+                    // 可視性と操作後の状態を検証し、同じ操作を短時間に混在させない。
+                    await handle.dblclick({ force: true, timeout: 5000 });
+                }
+                if (open) {
+                    await expect(container).toBeVisible({ timeout: 5000 });
+                } else {
+                    await expect(container).toBeHidden({ timeout: 5000 });
+                }
+            } catch (error) {
+                console.error(`[EditorSync:movingHandle] attempt=${attempt} elapsedMs=${Date.now() - attemptStarted}: ${error instanceof Error ? error.message : String(error)}`);
+                throw error;
             }
         }).toPass({ timeout: 20000, intervals: [1000] });
     }
@@ -597,19 +613,27 @@ export class EditorHelper {
         const selector = tabIdMap[tabName] || `.tab:text-is("${tabName}")`;
         const tabLocator = containerLocator.locator(selector).first();
 
+        let attempt = 0;
         await expect(async () => {
-            const alert = this.page.locator('alert-component');
-            if (await alert.isVisible().catch(() => false)) {
-                await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
-            }
-            // Monacoエディタのサジェストなどが被っているケースを考慮しEscapeを送信
-            await this.page.keyboard.press('Escape');
-            // 選択済みタブへのクリックも、サブウィンドウを閉じる外部クリックとして必要。
-            await expect(tabLocator).toBeVisible({ timeout: 5000 });
-            await tabLocator.click({ force: true, timeout: 5000 });
+            const attemptStarted = Date.now();
+            console.log(`[EditorSync:switchTab] tab=${tabName} attempt=${++attempt} start`);
+            try {
+                const alert = this.page.locator('alert-component');
+                if (await alert.isVisible().catch(() => false)) {
+                    await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+                }
+                // Monacoエディタのサジェストなどが被っているケースを考慮しEscapeを送信
+                await this.page.keyboard.press('Escape');
+                // 選択済みタブへのクリックも、サブウィンドウを閉じる外部クリックとして必要。
+                await expect(tabLocator).toBeVisible({ timeout: 5000 });
+                await tabLocator.click({ force: true, timeout: 5000 });
 
-            // 切り替わったことを確認（activeクラスが付与されるのを待つ）
-            await expect(tabLocator).toHaveClass(/active/, { timeout: 3000 });
+                // 切り替わったことを確認（activeクラスが付与されるのを待つ）
+                await expect(tabLocator).toHaveClass(/active/, { timeout: 3000 });
+            } catch (error) {
+                console.error(`[EditorSync:switchTab] attempt=${attempt} elapsedMs=${Date.now() - attemptStarted}: ${error instanceof Error ? error.message : String(error)}`);
+                throw error;
+            }
         }).toPass({ timeout: 15000, intervals: [1000] });
     }
 
@@ -673,23 +697,28 @@ export class EditorHelper {
         const platformSwitcher = this.page.locator('platform-switcher');
         const menu = platformSwitcher.locator('#platformEditMenu');
 
-        // メニュー展開時のチャタリング（開閉の繰り返し）防止ガード
+        const menuToggle = platformSwitcher.locator('.screen-rotete-container');
         await expect(async () => {
             if (!await menu.isVisible()) {
-                await platformSwitcher.locator('.screen-rotete-container').click({ force: true });
+                await this.page.mouse.up();
+                await menuToggle.click({ timeout: 5000 });
             }
-            await expect(menu).toBeVisible({ timeout: 2000 });
-        }).toPass({ timeout: 10000, intervals: [1000] });
+            await expect(menu).toBeVisible({ timeout: 5000 });
+        }).toPass({ timeout: 15000, intervals: [1000] });
 
-        await menu.getByText('動作').click({ force: true });
+        await menu.getByText('動作', { exact: true }).click({ timeout: 5000 });
 
-        // メニュー閉鎖時のチャタリング防止ガード
-        await expect(async () => {
+        // 動作モードの再描画による自動閉鎖を先に待ち、閉鎖途中にトグルを押して再展開しない。
+        try {
+            await expect(menu).toBeHidden({ timeout: 5000 });
+        } catch {
+            console.log('[RunMode] メニューが閉じないため、表示状態を再確認して閉じます。');
             if (await menu.isVisible()) {
-                await platformSwitcher.locator('.screen-rotete-container').click({ force: true });
+                await this.page.mouse.up();
+                await menuToggle.click({ timeout: 5000 });
             }
-            await expect(menu).toBeHidden({ timeout: 2000 });
-        }).toPass({ timeout: 10000, intervals: [1000] });
+            await expect(menu).toBeHidden({ timeout: 5000 });
+        }
 
         if (options.expectedAlertText) {
             const previewFrame = this.getPreviewFrame();
