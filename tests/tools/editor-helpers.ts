@@ -49,9 +49,7 @@ export class EditorHelper {
 
                 // 1. ローディング表示が消えるのを確実に待つ（エディタDOMの安定化）
                 const loadingOverlay = this.page.locator('app-container-loading-overlay');
-                await expect(loadingOverlay).toBeHidden({ timeout: 15000 }).catch(() => {
-                    log('警告: app-container-loading-overlay が非表示になりませんでした。');
-                });
+                await expect(loadingOverlay).toBeHidden({ timeout: 15000 });
 
                 // 2. PlaywrightのロケータでDOMツリーを走査し、空アプリかどうかを判定（Shadow DOM透過）
                 const domTree = this.page.locator('#dom-tree');
@@ -109,15 +107,8 @@ export class EditorHelper {
                 await this.page.waitForTimeout(300);
             });
         } catch (e) {
-            log(`警告: 閉鎖処理中に例外が発生。強制破棄フォールバックを実行。内容: ${e}`);
-            // フェイルセーフ：ロケータを通じて直接visible属性を除去
-            await this.page.locator('starter-template-modal').evaluate((el: HTMLElement) => {
-                if (el) {
-                    el.removeAttribute('visible');
-                    el.style.display = 'none';
-                    el.style.pointerEvents = 'none';
-                }
-            }).catch(() => { });
+            console.error('[StarterTemplateModal] Failed to close modal:', e);
+            throw e;
         } finally {
             log(`判定ロジック全体の合計処理時間: ${Date.now() - startTime}ms`);
         }
@@ -1031,23 +1022,14 @@ export class EditorHelper {
 
         // クリックと非表示確認をセットにしてリトライ（toPass）させる
         await expect(async () => {
-            const isVisible = await alertDialog.isVisible().catch(() => false);
+            const isVisible = await alertDialog.isVisible();
             if (isVisible) {
                 // force: trueのクリックがインターセプトされる環境への対策として
                 // dispatchEvent を使い、ブラウザ本来のイベントフローを自然に発火させる
-                await alertButton.dispatchEvent('click').catch(() => { });
+                await alertButton.dispatchEvent('click');
             }
 
-            try {
-                // アラートが非表示（またはDOMから消滅）になることを期待
-                await expect(alertDialog).toBeHidden({ timeout: 1000 });
-            } catch (e: any) {
-                // ページがクローズ/切断された場合は非表示と同等のため、例外を安全に無視して終了
-                if (e.message.includes('closed') || e.message.includes('Target page')) {
-                    return;
-                }
-                throw e;
-            }
+            await expect(alertDialog).toBeHidden({ timeout: 1000 });
         }).toPass({
             timeout: 15000,
             intervals: [1000] // 1秒おきに再試行
@@ -1585,24 +1567,58 @@ export class EditorHelper {
         await this.waitForFileExplorerLoading();
         const links = explorer.locator('.path-link');
         const beforeCount = await links.count();
-        // リトライ前の階層を固定し、遷移済みなら再度ダブルクリックしない。
-        await expect(async () => {
-            await this.waitForFileExplorerLoading();
-            if (await links.count() === beforeCount) {
-                const dir = explorer.locator('.directory').filter({ hasText: name });
-                // 行内の選択チェックボックスを避け、操作可能なフォルダーアイコンを開く。
-                const folderIcon = dir.locator('.icon-directory');
-                await expect(folderIcon).toBeVisible();
-                await this.page.mouse.up();
-                await folderIcon.dblclick({ delay: 50, timeout: 5000 });
-            }
-            await this.waitForFileExplorerLoading();
-            await expect.poll(() => links.count(), { timeout: 5000 }).toBeGreaterThan(beforeCount);
-            await expect(links.last()).toHaveText(`/${name}`, { timeout: 5000 });
-        }).toPass({
-            timeout: 15000,
-            intervals: [1000]
+        // 操作を変えずに、実際に届いたクリックの間隔と対象だけを失敗時に記録する。
+        await explorer.evaluate((element: any) => {
+            const samples: any[] = [];
+            const listener = (event: Event) => {
+                const target = event.composedPath()[0] as HTMLElement;
+                if (!target?.closest?.('.directory')) return;
+                samples.push({
+                    type: event.type,
+                    elapsedMs: performance.now(),
+                    tag: target.tagName,
+                    className: target.className,
+                    detail: (event as MouseEvent).detail,
+                    trusted: event.isTrusted
+                });
+            };
+            element.__e2eDirectoryProbe = { samples, listener };
+            element.shadowRoot.addEventListener('click', listener, true);
+            element.shadowRoot.addEventListener('dblclick', listener, true);
         });
+        let navigationSucceeded = false;
+        try {
+            // リトライ前の階層を固定し、遷移済みなら再度ダブルクリックしない。
+            await expect(async () => {
+                await this.waitForFileExplorerLoading();
+                if (await links.count() === beforeCount) {
+                    const dir = explorer.locator('.directory').filter({ hasText: name });
+                    // 行内の選択チェックボックスを避け、操作可能なフォルダーアイコンを開く。
+                    const folderIcon = dir.locator('.icon-directory');
+                    await expect(folderIcon).toBeVisible();
+                    await this.page.mouse.up();
+                    await folderIcon.dblclick({ delay: 50, timeout: 5000 });
+                }
+                await this.waitForFileExplorerLoading();
+                await expect.poll(() => links.count(), { timeout: 5000 }).toBeGreaterThan(beforeCount);
+                await expect(links.last()).toHaveText(`/${name}`, { timeout: 5000 });
+            }).toPass({
+                timeout: 15000,
+                intervals: [1000]
+            });
+            navigationSucceeded = true;
+        } finally {
+            if (this.page.isClosed()) throw new Error('Page closed during directory navigation');
+            const samples = await explorer.evaluate((element: any) => {
+                const probe = element.__e2eDirectoryProbe;
+                if (!probe) return [];
+                element.shadowRoot.removeEventListener('click', probe.listener, true);
+                element.shadowRoot.removeEventListener('dblclick', probe.listener, true);
+                delete element.__e2eDirectoryProbe;
+                return probe.samples;
+            });
+            if (!navigationSucceeded) console.log('[DirectoryNavigation] delivered pointer events:', JSON.stringify(samples));
+        }
     }
 
     /**
