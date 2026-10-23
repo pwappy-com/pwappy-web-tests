@@ -748,11 +748,13 @@ export class EditorHelper {
         // 保存後にメニューが閉じていたら再度開く
         await expect(async () => {
             if (!await platformBottomMenu.isVisible()) {
-                await menuButton.click({ force: true, timeout: 2000 }).catch(() => { });
-                await expect(platformBottomMenu).toBeVisible({ timeout: 2000 });
+                await expect(this.page.locator('app-container-loading-overlay')).toBeHidden();
+                await this.page.mouse.up();
+                await menuButton.click({ timeout: 5000 });
             }
+            await expect(platformBottomMenu).toBeVisible({ timeout: 5000 });
         }).toPass({
-            timeout: 10000,
+            timeout: 15000,
             intervals: [1000]
         });
 
@@ -1096,11 +1098,25 @@ export class EditorHelper {
             await this.page.keyboard.press('Escape');
         }
 
-        // 1. 【修正】保存ボタンをクリック
-        await scriptContainer.locator('#fab-save').click();
-
-        // 2. 【追加】新仕様対応：戻るボタン（#fab-close）をクリックしてエディタを閉じ、一覧に戻る
+        // 保存中に戻る操作を始めない。イベント用エディタと同じ完了状態を確認する。
+        const saveButton = scriptContainer.locator('#fab-save');
+        const saveIcon = saveButton.locator('i');
+        await expect(saveIcon).toHaveClass(/shake-save-button/);
+        await saveButton.click();
+        const alert = this.page.locator('alert-component');
+        await expect.poll(async () => {
+            if (await alert.isVisible()) return true;
+            return !(await saveIcon.getAttribute('class'))?.split(/\s+/).includes('shake-save-button');
+        }, { timeout: 20000, message: 'スクリプトの保存完了またはエラー表示を待機' }).toBe(true);
+        if (await alert.isVisible()) {
+            const message = await alert.evaluate((el: any) => el.alertMessage || el.innerText || '');
+            if (/エラー|失敗|修正/.test(message)) throw new Error(`スクリプト保存エラー: ${message}`);
+            await alert.getByRole('button', { name: '閉じる' }).click();
+            await expect(alert).toBeHidden();
+        }
+        await expect(saveIcon).not.toHaveClass(/shake-save-button/);
         await scriptContainer.locator('#fab-close').click();
+        await expect(monacoEditor).toBeHidden();
     }
 
     /**
@@ -1599,9 +1615,12 @@ export class EditorHelper {
             if (await alert.isVisible().catch(() => false)) {
                 await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
             }
-            await explorer.locator('#menu-operation').click({ timeout: 2000, force: true });
             const popupList = explorer.locator('file-explorer-popup-menu ul');
-            await expect(popupList).toBeVisible({ timeout: 2000 });
+            if (!await popupList.isVisible()) {
+                await this.waitForFileExplorerLoading();
+                await explorer.locator('#menu-operation').click({ timeout: 5000 });
+            }
+            await expect(popupList).toBeVisible({ timeout: 5000 });
         }).toPass({ timeout: 15000, intervals: [1000] });
 
         const popupList = explorer.locator('file-explorer-popup-menu ul');
