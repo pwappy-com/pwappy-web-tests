@@ -52,6 +52,20 @@ on:
         default: "75%"
         type: string
 
+      test_scope:
+        description: "通常テストの実行範囲"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - editor-regression
+      retries:
+        description: "通常テストの再試行回数"
+        required: true
+        default: "5"
+        type: string
+
 # ワークフローを構成するジョブを定義
 jobs:
   # ===================================================================
@@ -119,6 +133,7 @@ jobs:
   # ジョブ 2: Normalテストの実行
   # ===================================================================
   e2e-normal:
+    name: e2e-normal (${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}, ${{ matrix.browser }})
     needs: prepare-matrix
     if: ${{ needs.prepare-matrix.outputs.run_normal == 'true' }}
     timeout-minutes: 120
@@ -131,7 +146,8 @@ jobs:
       max-parallel: 5
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
-    runs-on: ${{ matrix.os }}
+    # 7GiB ARMランナーで継続するswapを避け、同じmacOS 26の標準14GiB Intelランナーに固定。
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
@@ -141,7 +157,7 @@ jobs:
       # キャッシュキー接頭辞の設定 (バイナリエンジン単位でキャッシュを共有)
       - name: Set cache key prefix
         run: |
-          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
+          echo "CACHE_KEY_PREFIX=${{ runner.os }}-${{ runner.arch }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -246,9 +262,38 @@ jobs:
           fi
 
           echo "Running tests on $OS_NAME with workers: $WORKERS"
-          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --reporter=line --workers=$WORKERS
+          RETRIES="${TEST_RETRIES:-5}"
+          if ! [[ "$RETRIES" =~ ^[0-5]$ ]]; then
+            echo "retries must be between 0 and 5"
+            exit 1
+          fi
+          TEST_ARGS=(tests/specs/normal)
+          if [ "$TEST_SCOPE" = "editor-regression" ]; then
+            TEST_ARGS=(tests/specs/normal/editor-events-build.spec.ts tests/specs/normal/editor-property-parsing-build.spec.ts
+              --grep 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires')
+          fi
+          # Safariで入力処理自体が停止するため、ホスト負荷を記録する（テスト条件は維持）。
+          if [ "$(uname -s)" = "Darwin" ]; then
+            sysctl hw.memsize hw.ncpu
+            E2E_RESOURCE_LOG="$RUNNER_TEMP/e2e-resources.log"
+            (
+              while true; do
+                date -u '+%Y-%m-%dT%H:%M:%SZ'
+                uptime
+                vm_stat || true
+                # commは実行ファイル名のみ。引数や環境変数は出力しない。
+                ps -axo pid,ppid,%cpu,rss,comm | sort -k3 -nr | sed -n '1,12p' || true
+                sleep 30
+              done
+            ) > "$E2E_RESOURCE_LOG" 2>&1 &
+            E2E_MONITOR_PID=$!
+            trap 'e2e_status=$?; kill "$E2E_MONITOR_PID" 2>/dev/null || true; wait "$E2E_MONITOR_PID" 2>/dev/null || true; echo "::group::macOS runner resource samples"; cat "$E2E_RESOURCE_LOG"; echo "::endgroup::"; exit "$e2e_status"' EXIT
+          fi
+          npx playwright test "${TEST_ARGS[@]}" --project=${{ matrix.browser }} --reporter=line --workers="$WORKERS" --retries="$RETRIES"
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
+          TEST_SCOPE: ${{ inputs.test_scope || 'all' }}
+          TEST_RETRIES: ${{ inputs.retries || '5' }}
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
@@ -259,6 +304,7 @@ jobs:
 
       # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
+        timeout-minutes: 5
         if: always()
         shell: bash
         run: |
@@ -441,6 +487,7 @@ jobs:
 
       # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
+        timeout-minutes: 5
         if: always()
         shell: bash
         run: |

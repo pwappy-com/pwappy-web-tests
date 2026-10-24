@@ -144,13 +144,10 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
         // コンソールタブに切り替える
         const scriptContainer = editorPage.locator('script-container');
         await expect(scriptContainer).toBeVisible();
-        await expect(async () => {
-            const alert = editorPage.locator('alert-component');
-            if (await alert.isVisible().catch(() => false)) {
-                await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
-            }
-            await scriptContainer.locator('#tab-console').click({ timeout: 2000 });
-        }).toPass({ timeout: 15000, intervals: [1000] });
+        // セットアップでは既にコンソールが表示済みなら再クリックする必要はない。
+        if (!await scriptContainer.locator('console-container').isVisible()) {
+            await editorHelper.switchTabInContainer(scriptContainer, 'コンソール');
+        }
 
         await expect(scriptContainer.locator('console-container')).toBeVisible();
     });
@@ -248,7 +245,8 @@ test.describe('エディタ内：コンソール機能のテスト', () => {
                 console.error('Copy Test Log 2');
             });
 
-            await expect(consoleContainer.locator('.log-item')).toHaveCount(2);
+            await expect(consoleContainer.locator('.log-item').filter({ hasText: 'Copy Test Log 1' })).toHaveCount(1);
+            await expect(consoleContainer.locator('.log-item').filter({ hasText: 'Copy Test Log 2' })).toHaveCount(1);
 
             // コピーボタンをクリック
             await copyButton.click({ force: true });

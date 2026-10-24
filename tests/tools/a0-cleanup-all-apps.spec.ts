@@ -27,6 +27,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
     });
 
     const concurrency = 10;
+    const cleanupErrors: unknown[] = [];
 
     // ====================================================
     // 1. アーカイブのクリーンアップ
@@ -89,16 +90,43 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
             await expect(newPage.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
             const restoreConfirm = newPage.locator('message-box#restore-confirm');
             await expect(restoreConfirm).toBeVisible();
-            await restoreConfirm.locator('.confirm-restore-button').click({ force: true });
+            const [restoreResponse] = await Promise.all([
+              newPage.waitForResponse(response => {
+                if (response.request().method() !== 'PUT') return false;
+                try {
+                  return response.request().postDataJSON()?.appKey === appKey;
+                } catch {
+                  return false;
+                }
+              }, { timeout: 30000 }),
+              restoreConfirm.locator('.confirm-restore-button').click()
+            ]);
+            // Read the API status before asserting HTTP success so failures remain diagnosable.
+            // Do not log the full response body, which may contain account data.
+            let restoreResult: { code?: number; status?: unknown } | null;
+            try {
+              restoreResult = await restoreResponse.json();
+            } catch {
+              throw new Error(`Archive restore HTTP ${restoreResponse.status()}: response body is not JSON`);
+            }
+            const restoreStatus = typeof restoreResult?.status === 'string'
+              && /^[a-zA-Z0-9_-]{1,100}$/.test(restoreResult.status)
+              ? restoreResult.status : 'missing-or-invalid-status';
+            const restoreDiagnostic = `Archive restore HTTP ${restoreResponse.status()}, API status: ${restoreStatus}`;
+            expect(restoreResponse.ok(), restoreDiagnostic).toBeTruthy();
+            expect(restoreResult?.code, restoreDiagnostic).toBe(200);
             await expect(newPage.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
             const alertDialog = newPage.locator('alert-component');
             await expect(alertDialog).toBeVisible();
+            await expect(alertDialog).toContainText(`アプリ「${appKey}」を復元しました`);
             await alertDialog.getByRole('button', { name: '閉じる' }).click();
+            await expect(targetRow, 'Restored app must disappear from the archive').toHaveCount(0, { timeout: 30000 });
             console.log(` -> ワークベンチに復元完了: ${appName} (${appKey})`);
           }
         } catch (e) {
           console.error(`[Archive] ${appKey} の処理中にエラーが発生しました:`, e);
+          cleanupErrors.push(e);
         } finally {
           await newPage.close();
         }
@@ -117,6 +145,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
 
       // 全ワーカーの処理が終わるまで待つ
       await Promise.all(archiveWorkers);
+      if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Cleanup operation failed; refusing to repeat unsuccessful mutations');
 
       // 画面更新してまだ残っているか再検証
       await page.reload();
@@ -215,6 +244,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
 
         } catch (e) {
           console.error(`[Workbench] ${appKey} の処理中にエラーが発生しました:`, e);
+          cleanupErrors.push(e);
         } finally {
           await newPage.close();
         }
@@ -233,6 +263,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
 
       // 全ワーカーの処理が終わるまで待つ
       await Promise.all(workbenchWorkers);
+      if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'Cleanup operation failed; refusing to repeat unsuccessful mutations');
 
       // 画面を再読み込みして、残りのアプリがないか確認
       await page.reload();

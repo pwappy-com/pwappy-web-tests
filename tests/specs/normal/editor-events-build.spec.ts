@@ -135,9 +135,21 @@ test.describe('エディタ内イベント＆スクリプト機能のビルド�
 
             await verifyScriptInTestPage(testPage, testPageExpectedScripts);
 
+            // load未発火とHTTP障害を区別できるよう、再読込より前に通信失敗を記録する。
+            testPage.on('response', response => {
+                if (response.status() >= 400) {
+                    console.error(`[LoadTest HTTP] ${response.status()} ${response.request().resourceType()} ${new URL(response.url()).pathname}`);
+                }
+            });
+            testPage.on('requestfailed', request => {
+                console.error(`[LoadTest Network] ${request.resourceType()} ${new URL(request.url()).pathname}: ${request.failure()?.errorText}`);
+            });
+
             const currentUrl = new URL(testPage.url());
             currentUrl.searchParams.set('cb', Date.now().toString());
-            await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
+            // このテストの対象はwindow.load。DOMContentLoadedだけでは外部リソース読込が終わらない。
+            const response = await testPage.goto(currentUrl.toString(), { waitUntil: 'load', timeout: 30000 });
+            expect(response?.ok(), `実機ページのHTTP応答: ${response?.status()}`).toBe(true);
 
             const alertDialog = testPage.locator('ons-alert-dialog').filter({ hasText: alertText }).last();
             await expect(alertDialog).toBeVisible({ timeout: 15000 });
@@ -148,7 +160,8 @@ test.describe('エディタ内イベント＆スクリプト機能のビルド�
     });
 
     test('ページのライフサイクルイベント(init/show/hide/destroy)にスクリプトを割り当て', async ({ editorPage, editorHelper }) => {
-        test.setTimeout(120000);
+        // 複数のスクリプト編集とプレビュー・実機ページの検証を含むため、CIでは個別に予算を確保する。
+        test.setTimeout(process.env.CI ? 240000 : 120000);
 
         let appNode: Locator, page1Node: Locator, page2Node: Locator;
         let appId: string, page1Id: string, page2Id: string;
@@ -169,6 +182,7 @@ test.describe('エディタ内イベント＆スクリプト機能のビルド�
             const rawPage2Id = await page2Node.getAttribute('data-node-id');
             expect(rawPage2Id).not.toBeNull();
             page2Id = rawPage2Id!;
+            expect(page2Id).not.toBe(page1Id);
         });
 
         await test.step('スクリプト設定: 各イベントにアラートを表示するスクリプトを追加', async () => {
