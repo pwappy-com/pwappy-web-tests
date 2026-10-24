@@ -22,3 +22,14 @@ test('rejects configuration before sending credentials',async()=>{
   await assert.rejects(prepareTestPoints({post:()=>assert.fail('must not call')},{...env,...changed},'pwua000'));
  }
 });
+
+test('accepts a canonical integer string from the read API', async()=>{
+ await prepareTestPoints({post:async()=>reply(success),get:async()=>reply({code:200,details:{pwappyPoints:'100'}})},env,'pwua000');
+});
+test('rejects malformed or insufficient readback without coercion or another preparation', async()=>{
+ for(const balance of ['', ' ', '1e2', '100.0', '100x', '+100', '0100', '-100', '99', '9007199254740993', null, true, {}, 100.5, -100]) {
+  let writes=0;
+  await assert.rejects(prepareTestPoints({post:async()=>{writes++;return reply(success)},get:async()=>reply({code:200,details:{pwappyPoints:balance}})},env,'pwua000'));
+  assert.equal(writes,1);
+ }
+});
