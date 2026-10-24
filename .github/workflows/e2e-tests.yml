@@ -292,9 +292,11 @@ jobs:
           if [ "${{ inputs.test_scope }}" = "points-smoke" ]; then
             case "${{ matrix.browser }}" in
               chromium) BC=c ;; mobile-chrome) BC=a ;; webkit) BC=s ;; mobile-safari) BC=i ;;
+              *) echo "Unsupported smoke browser"; exit 1 ;;
             esac
-            case "$OS_NAME" in
+            case "${{ matrix.os }}" in
               ubuntu-latest) OC=u ;; windows-latest) OC=w ;; macos-latest) OC=m ;;
+              *) echo "Unsupported smoke OS"; exit 1 ;;
             esac
             export PWAPPY_SMOKE_IDENT="pw${OC}${BC}998"
             node tests/tools/points-smoke.mjs
