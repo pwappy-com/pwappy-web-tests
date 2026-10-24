@@ -345,7 +345,7 @@ jobs:
       # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
         timeout-minutes: 5
-        if: always()
+        if: always() && inputs.test_scope != 'points-smoke'
         shell: bash
         run: |
           OS_CODE_CHAR="l"
@@ -550,7 +550,7 @@ jobs:
       # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
         timeout-minutes: 5
-        if: always()
+        if: always() && inputs.test_scope != 'points-smoke'
         shell: bash
         run: |
           OS_CODE_CHAR="l"
