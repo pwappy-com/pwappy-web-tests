@@ -27,9 +27,16 @@ export async function prepareTestPoints(api: any, env: NodeJS.ProcessEnv, identK
     const check = await api.get(read.href, { timeout: 30000 });
     if (!check.ok()) throw new Error(`Test points verification HTTP ${check.status()}`);
     const body = await check.json();
-    const balance = body?.details?.pwappyPoints;
-    if (body?.code !== 200 || !Number.isSafeInteger(balance) || balance < result.target) {
-        throw new Error('Test points readback is below the preparation target');
+    // The read API may serialize database integers as decimal strings.
+    // Accept only canonical non-negative integers, never coercible empty/null/fractional values.
+    const rawBalance = body?.details?.pwappyPoints;
+    const balance = typeof rawBalance === 'string' && /^(0|[1-9][0-9]*)$/.test(rawBalance)
+        ? Number(rawBalance) : rawBalance;
+    if (body?.code !== 200 || !Number.isSafeInteger(balance) || balance < 0) {
+        throw new Error(`Invalid test points readback: code=${Number.isSafeInteger(body?.code) ? body.code : 'invalid'}, status=${safe(body?.status)}, balanceType=${typeof rawBalance}`);
+    }
+    if (balance < result.target) {
+        throw new Error(`Test points readback is below the preparation target: balance=${balance}, target=${result.target}`);
     }
     console.log(`[TestPoints] ${identKey} ${phase}: balance=${balance}, target=${result.target}`);
 }
