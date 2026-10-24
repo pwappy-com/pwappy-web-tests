@@ -12,8 +12,10 @@ const api = await request.newContext();
 const passcode = process.env.PWAPPY_TEST_LOGIN_PASSCODE;
 assert.ok(passcode);
 const json = async (response, label) => {
-  assert.equal(response.status(), 200, `${label} HTTP status`);
-  const body = await response.json(); assert.equal(body.code, 200, `${label} API code`); return body;
+  const body = await response.json();
+  const stage = typeof body.stage === 'string' && /^[a-z_]{1,40}$/.test(body.stage) ? body.stage : 'unknown';
+  assert.equal(response.status(), 200, `${label} HTTP status (stage=${stage})`);
+  assert.equal(body.code, 200, `${label} API code`); return body;
 };
 const balance = async () => {
   const b = await json(await api.get(read.href), 'read');
