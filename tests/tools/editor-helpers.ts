@@ -76,20 +76,56 @@ export class EditorHelper {
                 const skipBtn = starterModal.locator('.btn-skip, button:has-text("閉じて一から自分で作る")').first();
                 await expect(skipBtn).toBeVisible({ timeout: 2000 });
 
-                await expect(async () => {
-                    log('スキップボタンのクリックを試行します。');
-
-                    // 操作可能になるまで待ち、閉鎖済みなら再クリックしない。
-                    if (await starterModal.getAttribute('visible') !== null) {
-                        await skipBtn.click({ timeout: 2000 });
-                    }
-
-                    // モーダルが閉じた（visible属性が消えた）ことを検証
-                    await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 1000 });
-                }).toPass({
-                    timeout: 4000,
-                    intervals: [300]
+                // Observe native input and reflected state without changing the modal.
+                await starterModal.evaluate((element: any) => {
+                    const samples: any[] = [];
+                    const record = (sample: object) => {
+                        if (samples.length < 40) samples.push({ at: performance.now(), ...sample });
+                    };
+                    const listener = (event: Event) => {
+                        const target = event.composedPath()[0] as HTMLElement;
+                        if (event.type !== 'starter-modal-closed' && !target?.closest?.('.btn-skip')) return;
+                        record({ type: event.type, trusted: event.isTrusted, visible: element.hasAttribute('visible') });
+                    };
+                    const types = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'starter-modal-closed'];
+                    for (const type of types) element.shadowRoot.addEventListener(type, listener, true);
+                    element.addEventListener('starter-modal-closed', listener, true);
+                    const observer = new MutationObserver(() => record({ type: 'visible-attribute', visible: element.hasAttribute('visible') }));
+                    observer.observe(element, { attributes: true, attributeFilter: ['visible'] });
+                    element.__e2eStarterProbe = { samples, listener, observer, types };
                 });
+                const closeStartedAt = Date.now();
+                let closeSucceeded = false;
+                try {
+                    await expect(async () => {
+                        log('スキップボタンのクリックを試行します。');
+    
+                        // 操作可能になるまで待ち、閉鎖済みなら再クリックしない。
+                        if (await starterModal.getAttribute('visible') !== null) {
+                            await skipBtn.click({ timeout: 2000 });
+                        }
+    
+                        // モーダルが閉じた（visible属性が消えた）ことを検証
+                        await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 1000 });
+                    }).toPass({
+                        timeout: 4000,
+                        intervals: [300]
+                    });
+    
+                    closeSucceeded = true;
+                } finally {
+                    // Emit the runner-side duration before reading the page, even if its renderer is stalled.
+                    if (!closeSucceeded) console.log('[StarterClose] operation failed after ms:', Date.now() - closeStartedAt);
+                    const diagnostic = await starterModal.evaluate((element: any) => {
+                        const probe = element.__e2eStarterProbe;
+                        for (const type of probe.types) element.shadowRoot.removeEventListener(type, probe.listener, true);
+                        element.removeEventListener('starter-modal-closed', probe.listener, true);
+                        probe.observer.disconnect();
+                        delete element.__e2eStarterProbe;
+                        return { samples: probe.samples, visible: element.hasAttribute('visible') };
+                    });
+                    if (!closeSucceeded) console.log('[StarterClose] native events and reflected state:', JSON.stringify(diagnostic));
+                }
 
                 log('モーダルの閉鎖完了。');
                 await this.page.waitForTimeout(300);
