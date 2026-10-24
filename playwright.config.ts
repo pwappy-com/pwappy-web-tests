@@ -12,6 +12,15 @@ import { getStorageStatePath } from './tests/constants';
 
 // CI環境（GitHub Actionsなど）かどうかを判定
 const isCI = !!process.env.CI;
+// Capture the requested cleanup account in the runner before Playwright overwrites
+// TEST_WORKER_INDEX in child processes. The dedicated value is inherited unchanged.
+const isCleanup = process.env.PWAPPY_TEST_POINTS_PHASE === 'cleanup';
+if (isCleanup && process.env.PWAPPY_TEST_ACCOUNT_INDEX === undefined) {
+  if (!/^[0-9]{1,3}$/.test(process.env.TEST_WORKER_INDEX || '')) {
+    throw new Error('Cleanup requires an explicit test account');
+  }
+  process.env.PWAPPY_TEST_ACCOUNT_INDEX = process.env.TEST_WORKER_INDEX;
+}
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -26,9 +35,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
 
   /* Retry on CI only */
-  retries: process.env.CI ? 5 : 0,
+  retries: isCleanup ? 0 : (process.env.CI ? 5 : 0),
   /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? undefined : undefined,
+  workers: isCleanup ? 1 : undefined,
   /** タイムアウト設定
    * CIでは伸ばす
    */
