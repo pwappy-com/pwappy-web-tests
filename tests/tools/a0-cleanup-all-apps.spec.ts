@@ -101,9 +101,20 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
               }, { timeout: 30000 }),
               restoreConfirm.locator('.confirm-restore-button').click()
             ]);
-            expect(restoreResponse.ok(), `Archive restore HTTP ${restoreResponse.status()}`).toBeTruthy();
-            const restoreResult = await restoreResponse.json();
-            expect(restoreResult.code, `Archive restore status: ${restoreResult.status}`).toBe(200);
+            // Read the API status before asserting HTTP success so failures remain diagnosable.
+            // Do not log the full response body, which may contain account data.
+            let restoreResult: { code?: number; status?: unknown } | null;
+            try {
+              restoreResult = await restoreResponse.json();
+            } catch {
+              throw new Error(`Archive restore HTTP ${restoreResponse.status()}: response body is not JSON`);
+            }
+            const restoreStatus = typeof restoreResult?.status === 'string'
+              && /^[a-zA-Z0-9_-]{1,100}$/.test(restoreResult.status)
+              ? restoreResult.status : 'missing-or-invalid-status';
+            const restoreDiagnostic = `Archive restore HTTP ${restoreResponse.status()}, API status: ${restoreStatus}`;
+            expect(restoreResponse.ok(), restoreDiagnostic).toBeTruthy();
+            expect(restoreResult?.code, restoreDiagnostic).toBe(200);
             await expect(newPage.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
             const alertDialog = newPage.locator('alert-component');
