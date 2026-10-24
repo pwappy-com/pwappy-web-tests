@@ -3,9 +3,11 @@ name: Multi-OS E2E Tests
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PWAPPY_TEST_POINTS_ENABLED: ${{ vars.PWAPPY_TEST_POINTS_ENABLED }}
+  PWAPPY_TEST_POINTS_READ_ENDPOINT: ${{ vars.PWAPPY_TEST_POINTS_READ_ENDPOINT }}
 concurrency:
-  # 同じワークフロー名（Multi-OS E2E Tests）でグループ化
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # mainと修正ブランチが共有するステージングのテストアカウントを排他
+  group: pwappy-staging-shared-test-accounts
   # 実行中のジョブをキャンセルせず、順番待ちをさせる
   cancel-in-progress: false
 
@@ -148,7 +150,11 @@ jobs:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     # 7GiB ARMランナーで継続するswapを避け、同じmacOS 26の標準14GiB Intelランナーに固定。
     runs-on: ${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}
+    concurrency:
+      group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
+      cancel-in-progress: false
     env:
+      PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-normal
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
       - name: Checkout repository
@@ -243,6 +249,9 @@ jobs:
           else echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV; fi
 
       # プロジェクト名を指定してテスト実行
+      - name: Check point preparation client
+        run: node --test tests/tools/test-point-preparation.test.mjs
+
       - name: Run Normal E2E Tests
         id: run_tests
         shell: bash
@@ -321,6 +330,7 @@ jobs:
 
           # ローカルで作成された可能性のあるワーカー番号(0〜3)を走査して確実に掃除
           for worker in 0 1 2 3; do
+            export PWAPPY_TEST_POINTS_PHASE="cleanup"
             export TEST_WORKER_INDEX="$worker"
             export PWAPPY_TEST_CLEANUP_BROWSER_CODE="$BROWSER_CODE"
             export TEST_RUN_SUFFIX="${{ env.OS_SHORT_NAME }}"
@@ -381,7 +391,11 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
+    concurrency:
+      group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
+      cancel-in-progress: false
     env:
+      PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-premium
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
       - name: Checkout repository
@@ -469,6 +483,9 @@ jobs:
           else echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV; fi
 
       # テスト実行
+      - name: Check point preparation client
+        run: node --test tests/tools/test-point-preparation.test.mjs
+
       - name: Run Premium E2E Tests
         id: run_tests
         shell: bash
@@ -504,6 +521,7 @@ jobs:
 
           # ローカルで作成された可能性のあるワーカー番号(0〜3)を走査して確実に掃除
           for worker in 0 1 2 3; do
+            export PWAPPY_TEST_POINTS_PHASE="cleanup"
             export TEST_WORKER_INDEX="$worker"
             export PWAPPY_TEST_CLEANUP_BROWSER_CODE="$BROWSER_CODE"
             export TEST_RUN_SUFFIX="${{ env.OS_SHORT_NAME }}"

@@ -1,6 +1,7 @@
 import path from 'path';
 import fs from 'fs';
 import { request } from '@playwright/test';
+import { prepareTestPoints } from './tools/test-point-preparation';
 
 const getOsCode = (): string => {
     const suffix = (process.env.TEST_RUN_SUFFIX || '').toLowerCase();
@@ -49,7 +50,7 @@ export const generateIdentKey = (
 /**
  * 引数の順番を (workerIndex, browserCode) に合わせます。
  */
-export async function ensureAuthenticated(
+async function authenticateSession(
     workerIndex: string | number = process.env.TEST_WORKER_INDEX || '0',
     browserCode: string = 'x'
 ): Promise<string> {
@@ -94,3 +95,24 @@ export async function ensureAuthenticated(
 
     return storageStatePath;
 }
+// One preparation per account/process/phase, including cached authentication sessions.
+const preparations = new Map<string, Promise<void>>();
+export async function ensureAuthenticated(
+    workerIndex: string | number = process.env.TEST_WORKER_INDEX || '0',
+    browserCode: string = 'x'
+): Promise<string> {
+    const storageStatePath = await authenticateSession(workerIndex, browserCode);
+    if (process.env.PWAPPY_TEST_POINTS_ENABLED !== 'true') return storageStatePath;
+    const identKey = generateIdentKey(workerIndex, browserCode);
+    const key = [process.env.PWAPPY_TEST_RUN_ID, identKey, process.env.PWAPPY_TEST_POINTS_PHASE || 'tests'].join(':');
+    if (!preparations.has(key)) {
+        preparations.set(key, (async () => {
+            const api = await request.newContext({ storageState: storageStatePath });
+            try { await prepareTestPoints(api, process.env, identKey); }
+            finally { await api.dispose(); }
+        })());
+    }
+    await preparations.get(key);
+    return storageStatePath;
+}
+
