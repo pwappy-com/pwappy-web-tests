@@ -13,8 +13,11 @@ export async function prepareTestPoints(api: any, env: NodeJS.ProcessEnv, identK
     const response = await api.post(endpoint.href, { data: {
         passcode: env.PWAPPY_TEST_LOGIN_PASSCODE, identKey, runId, phase
     }, timeout: 30000 });
-    if (!response.ok()) throw new Error(`Test points preparation HTTP ${response.status()}`);
-    const result = await response.json();
+    let result: any;
+    try { result = await response.json(); }
+    catch { throw new Error(`Test points preparation HTTP ${response.status()}: non-JSON response`); }
+    const safe = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value) ? value : 'unknown';
+    if (!response.ok()) throw new Error(`Test points preparation HTTP ${response.status()}, status=${safe(result?.status)}, stage=${safe(result?.stage)}`);
     if (result?.code !== 200 || result?.status !== 'test_points_prepared'
         || !Number.isSafeInteger(result.target) || result.target < 100
         || !Number.isSafeInteger(result.balance) || result.balance < result.target) {
