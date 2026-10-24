@@ -79,21 +79,9 @@ export class EditorHelper {
                 await expect(async () => {
                     log('スキップボタンのクリックを試行します。');
 
-                    // JSによる直接クリック
-                    const jsClicked = await skipBtn.evaluate((el: HTMLElement) => {
-                        if (el) {
-                            el.click();
-                            return true;
-                        }
-                        return false;
-                    }).catch(() => false);
-
-                    if (jsClicked) {
-                        log('JSクリック送信成功。');
-                    } else {
-                        await skipBtn.click({ force: true, timeout: 500 }).catch(async () => {
-                            await skipBtn.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                        });
+                    // 操作可能になるまで待ち、閉鎖済みなら再クリックしない。
+                    if (await starterModal.getAttribute('visible') !== null) {
+                        await skipBtn.click({ timeout: 2000 });
                     }
 
                     // モーダルが閉じた（visible属性が消えた）ことを検証
@@ -153,23 +141,11 @@ export class EditorHelper {
                     // --- 3. 「はい、破棄します」をクリック（活性化を待って確実に実行） ---
                     // アニメーション等の遅延による空振りを防ぐため、ボタンが有効化されるまで toPass で再試行します
                     const discardBtn = discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' });
-                    await expect(async () => {
-                        await expect(discardBtn).toBeEnabled({ timeout: 1000 });
-                        await discardBtn.click({ force: true });
-                    }).toPass({
-                        timeout: 5000,
-                        intervals: [500]
-                    });
-
-                    // 4. すべてのモーダルが消え去るのを待つ
-                    // toPassによる再試行で、ダイアログフェードアウト中の過渡期によるFlaky（不安定化）を防止
-                    await expect(async () => {
-                        await expect(snapshotConfirmDialog).toBeHidden({ timeout: 1000 });
-                        await expect(discardConfirmDialog).toBeHidden({ timeout: 1000 });
-                    }).toPass({
-                        timeout: 10000,
-                        intervals: [500]
-                    });
+                    // force クリックの完了だけでは閉鎖を保証できない。
+                    // 通常クリックで操作可能性を待ち、実際の閉鎖まで検証する。
+                    await discardBtn.click({ timeout: 5000 });
+                    await expect(snapshotConfirmDialog).toBeHidden({ timeout: 10000 });
+                    await expect(discardConfirmDialog).toBeHidden({ timeout: 10000 });
                 }
             });
         } finally {
@@ -1597,7 +1573,8 @@ export class EditorHelper {
                     const folderIcon = dir.locator('.icon-directory');
                     await expect(folderIcon).toBeVisible();
                     await this.page.mouse.up();
-                    await folderIcon.dblclick({ delay: 50, timeout: 5000 });
+                    // 追加の押下遅延で独自ダブルクリック判定の200msを超えないようにする。
+                    await folderIcon.dblclick({ timeout: 5000 });
                 }
                 await this.waitForFileExplorerLoading();
                 await expect.poll(() => links.count(), { timeout: 5000 }).toBeGreaterThan(beforeCount);
