@@ -212,6 +212,7 @@ jobs:
         shell: bash
 
       - name: Cache Playwright browsers
+        if: inputs.test_scope != 'points-smoke'
         id: cache-playwright-browsers
         uses: actions/cache@v5
         with:
@@ -222,6 +223,7 @@ jobs:
 
       # キャッシュから復元された不要なロックファイルを事前に強制削除してハングを防ぐ
       - name: Remove stale Playwright locks
+        if: inputs.test_scope != 'points-smoke'
         shell: bash
         run: |
           if [ -d "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" ]; then
@@ -232,14 +234,14 @@ jobs:
 
       # システム依存関係のインストール (プロンプト停止防止)
       - name: Install Playwright system dependencies
-        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        if: inputs.test_scope != 'points-smoke' && steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install-deps ${{ matrix.binary }}
         env:
           DEBIAN_FRONTEND: noninteractive
 
       # 指定されたバイナリをインストール
       - name: Install Playwright Browsers
-        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        if: inputs.test_scope != 'points-smoke' && steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install ${{ matrix.binary }}
         env:
           DEBUG: pw:*
@@ -476,6 +478,7 @@ jobs:
         shell: bash
 
       - name: Cache Playwright browsers
+        if: inputs.test_scope != 'points-smoke'
         id: cache-playwright-browsers
         uses: actions/cache@v5
         with:
@@ -486,6 +489,7 @@ jobs:
 
       # キャッシュから復元された不要なロックファイルを事前に強制削除してハングを防ぐ
       - name: Remove stale Playwright locks
+        if: inputs.test_scope != 'points-smoke'
         shell: bash
         run: |
           if [ -d "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" ]; then
@@ -495,13 +499,13 @@ jobs:
           fi
 
       - name: Install Playwright system dependencies
-        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        if: inputs.test_scope != 'points-smoke' && steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install-deps ${{ matrix.binary }}
         env:
           DEBIAN_FRONTEND: noninteractive
 
       - name: Install Playwright Browsers
-        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        if: inputs.test_scope != 'points-smoke' && steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install ${{ matrix.binary }}
         env:
           DEBUG: pw:*
