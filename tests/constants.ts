@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import { resolveAccountIndex } from './tools/test-account-index.mjs';
 import { request } from '@playwright/test';
 import { prepareTestPoints } from './tools/test-point-preparation';
 
@@ -19,6 +20,7 @@ export const getStorageStatePath = (
     workerIndex: string | number = process.env.TEST_WORKER_INDEX || '0',
     browserCode: string = 'x'
 ): string => {
+    workerIndex = resolveAccountIndex(workerIndex);
     const osCode = getOsCode();
     // 例: .auth/user-u-c-0.json
     const storageStatePath = path.join(process.cwd(), `.auth/user-${osCode}-${browserCode}-${workerIndex}.json`);
@@ -41,6 +43,7 @@ export const generateIdentKey = (
     workerIndex: string | number = process.env.TEST_WORKER_INDEX || '0',
     browserCode: string = 'x'
 ): string => {
+    workerIndex = resolveAccountIndex(workerIndex);
     const osCode = getOsCode();
     const suffix = String(workerIndex).padStart(3, '0');
     // 合計7文字
@@ -54,6 +57,7 @@ async function authenticateSession(
     workerIndex: string | number = process.env.TEST_WORKER_INDEX || '0',
     browserCode: string = 'x'
 ): Promise<string> {
+    workerIndex = resolveAccountIndex(workerIndex);
     const storageStatePath = getStorageStatePath(workerIndex, browserCode);
 
     if (fs.existsSync(storageStatePath)) {
@@ -82,13 +86,11 @@ async function authenticateSession(
     });
 
     if (response.status() !== 200) {
-        const body = await response.text();
         await apiContext.dispose();
-        throw new Error(`On-demand login failed for Worker ${workerIndex} with status ${response.status()}: ${body}`);
+        throw new Error(`On-demand login failed for Worker ${workerIndex} with status ${response.status()}`);
     }
 
-    const result = await response.json();
-    console.log(`[OnDemandAuth] Login success for Worker ${workerIndex}:`, result);
+    console.log(`[OnDemandAuth] Login success for Worker ${workerIndex}`);
 
     await apiContext.storageState({ path: storageStatePath });
     await apiContext.dispose();
@@ -101,6 +103,7 @@ export async function ensureAuthenticated(
     workerIndex: string | number = process.env.TEST_WORKER_INDEX || '0',
     browserCode: string = 'x'
 ): Promise<string> {
+    workerIndex = resolveAccountIndex(workerIndex);
     const storageStatePath = await authenticateSession(workerIndex, browserCode);
     if (process.env.PWAPPY_TEST_POINTS_ENABLED !== 'true') return storageStatePath;
     const identKey = generateIdentKey(workerIndex, browserCode);
