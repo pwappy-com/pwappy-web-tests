@@ -263,9 +263,9 @@ jobs:
           node - <<'JS'
           const fs = require('fs');
           const url = new URL(process.env.LOGIN_ENDPOINT);
-          if (url.protocol !== 'https:' || !/\\/rest\\/v1\\/test-login$/.test(url.pathname)) throw new Error('Unexpected login endpoint');
+          if (url.protocol !== 'https:' || !url.pathname.endsWith('/rest/v1/test-login')) throw new Error('Unexpected login endpoint');
           url.pathname = url.pathname.replace('/rest/', '/read/').replace('test-login', 'pwappy-points');
-          fs.appendFileSync(process.env.GITHUB_ENV, 'PWAPPY_TEST_POINTS_READ_ENDPOINT=' + (process.env.PWAPPY_TEST_POINTS_READ_ENDPOINT || url.href) + '\\n');
+          fs.appendFileSync(process.env.GITHUB_ENV, 'PWAPPY_TEST_POINTS_READ_ENDPOINT=' + (process.env.PWAPPY_TEST_POINTS_READ_ENDPOINT || url.href) + '\n');
           JS
 
       - name: Check point preparation client
@@ -523,9 +523,9 @@ jobs:
           node - <<'JS'
           const fs = require('fs');
           const url = new URL(process.env.LOGIN_ENDPOINT);
-          if (url.protocol !== 'https:' || !/\\/rest\\/v1\\/test-login$/.test(url.pathname)) throw new Error('Unexpected login endpoint');
+          if (url.protocol !== 'https:' || !url.pathname.endsWith('/rest/v1/test-login')) throw new Error('Unexpected login endpoint');
           url.pathname = url.pathname.replace('/rest/', '/read/').replace('test-login', 'pwappy-points');
-          fs.appendFileSync(process.env.GITHUB_ENV, 'PWAPPY_TEST_POINTS_READ_ENDPOINT=' + (process.env.PWAPPY_TEST_POINTS_READ_ENDPOINT || url.href) + '\\n');
+          fs.appendFileSync(process.env.GITHUB_ENV, 'PWAPPY_TEST_POINTS_READ_ENDPOINT=' + (process.env.PWAPPY_TEST_POINTS_READ_ENDPOINT || url.href) + '\n');
           JS
 
       - name: Check point preparation client
