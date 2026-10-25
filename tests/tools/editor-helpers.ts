@@ -378,7 +378,7 @@ export class EditorHelper {
         await this.openMoveingHandle('left');
 
         await nodeLocator.click({ position: { x: 0, y: 10 } });
-        await expect(nodeLocator).toHaveClass(/node-select/);
+        await expect(nodeLocator).toHaveClass(/(?:^|\s)node-select(?:\s|$)/);
     }
 
     /**
