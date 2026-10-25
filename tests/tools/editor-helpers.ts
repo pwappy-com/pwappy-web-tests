@@ -78,7 +78,7 @@ export class EditorHelper {
                 await expect(skipBtn).toBeVisible({ timeout: 2000 });
 
                 // Observe native input and reflected state without changing the modal.
-                await starterModal.evaluate((element: any) => {
+                const initialVisible = await starterModal.evaluate((element: any) => {
                     const samples: any[] = [];
                     const record = (sample: object) => {
                         if (samples.length < 40) samples.push({ at: performance.now(), ...sample });
@@ -105,25 +105,32 @@ export class EditorHelper {
                         if (now - heartbeat.startedAt >= 30000) clearInterval(timer);
                     }, 250);
                     element.__e2eStarterProbe = { samples, listener, observer, types, heartbeat, timer };
+                    // Reuse this state for the first attempt, avoiding a second protocol round trip.
+                    return element.getAttribute('visible');
                 });
                 const closeStartedAt = Date.now();
                 const nodeDelay = monitorEventLoopDelay({ resolution: 20 });
                 nodeDelay.enable();
-                let closePhase = 'read-visible';
+                let closePhase = 'reuse-visible';
                 let phaseStartedAt = Date.now();
                 const phaseTimes: { phase: string; elapsedMs: number }[] = [];
                 const finishPhase = () => {
                     if (phaseTimes.length < 20) phaseTimes.push({ phase: closePhase, elapsedMs: Date.now() - phaseStartedAt });
                 };
                 let closeSucceeded = false;
+                let firstCloseAttempt = true;
                 try {
                     await expect(async () => {
                         log('スキップボタンのクリックを試行します。');
     
                         // 操作可能になるまで待ち、閉鎖済みなら再クリックしない。
-                        closePhase = 'read-visible';
+                        closePhase = firstCloseAttempt ? 'reuse-visible' : 'read-visible';
                         phaseStartedAt = Date.now();
-                        const visible = await starterModal.getAttribute('visible');
+                        // The probe just read this attribute. Re-read on retries so a completed
+                        // close never triggers another click.
+                        const useInitialVisible = firstCloseAttempt;
+                        firstCloseAttempt = false;
+                        const visible = useInitialVisible ? initialVisible : await starterModal.getAttribute('visible');
                         finishPhase();
                         if (visible !== null) {
                             closePhase = 'native-click';
