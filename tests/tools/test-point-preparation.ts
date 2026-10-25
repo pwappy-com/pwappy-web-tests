@@ -18,9 +18,16 @@ export async function prepareTestPoints(api: any, env: NodeJS.ProcessEnv, identK
     catch { throw new Error(`Test points preparation HTTP ${response.status()}: non-JSON response`); }
     const safe = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(value) ? value : 'unknown';
     if (!response.ok()) throw new Error(`Test points preparation HTTP ${response.status()}, status=${safe(result?.status)}, stage=${safe(result?.stage)}`);
+    const receipt = result?.preparationVersion === 1;
+    const validReceipt = receipt && Number.isSafeInteger(result.preparedBalance)
+        && result.preparedBalance >= result.target && typeof result.replayed === 'boolean'
+        && Number.isSafeInteger(result.added) && result.added >= 0
+        && (!result.replayed || result.added === 0);
     if (result?.code !== 200 || result?.status !== 'test_points_prepared'
         || !Number.isSafeInteger(result.target) || result.target < 100
-        || !Number.isSafeInteger(result.balance) || result.balance < result.target) {
+        || !Number.isSafeInteger(result.balance) || result.balance < 0
+        || (result.preparationVersion !== undefined && !validReceipt)
+        || ((!receipt || !result.replayed) && result.balance < result.target)) {
         throw new Error('Invalid test points preparation result');
     }
     // Use the same authenticated read endpoint as the application, not just the write response.
@@ -35,7 +42,10 @@ export async function prepareTestPoints(api: any, env: NodeJS.ProcessEnv, identK
     if (body?.code !== 200 || !Number.isSafeInteger(balance) || balance < 0) {
         throw new Error(`Invalid test points readback: code=${Number.isSafeInteger(body?.code) ? body.code : 'invalid'}, status=${safe(body?.status)}, balanceType=${typeof rawBalance}`);
     }
-    if (balance < result.target) {
+    if (receipt && balance !== result.balance) {
+        throw new Error(`Test points readback differs from prepared response: balance=${balance}, responseBalance=${result.balance}`);
+    }
+    if ((!receipt || !result.replayed) && balance < result.target) {
         throw new Error(`Test points readback is below the preparation target: balance=${balance}, target=${result.target}`);
     }
     console.log(`[TestPoints] ${identKey} ${phase}: balance=${balance}, target=${result.target}`);
