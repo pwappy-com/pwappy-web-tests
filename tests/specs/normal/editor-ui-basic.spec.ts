@@ -1040,7 +1040,17 @@ test.describe('プロジェクトのバックアップ・インポート統合�
 
             const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
             await expect(styleEditor).toBeVisible();
-            await editorHelper.setMonacoValue(styleEditor, 'element.style {\n    height: 2000px;\n}');
+            const expectedStyle = 'element.style {\n    height: 2000px;\n}';
+            const styleResult = await editorHelper.setMonacoValue(styleEditor, expectedStyle);
+            expect(styleResult.success, 'The style editor must accept the scroll fixture CSS').toBe(true);
+            expect(normalizeWhitespace(styleResult.actual)).toBe(normalizeWhitespace(expectedStyle));
+            // Read the model independently; a successful write alone does not prove it stayed applied.
+            const storedStyle = await styleEditor.evaluate((element: any) => {
+                const host = element.getRootNode().host;
+                return host?.styleEditor?.getModel()?.getValue() ?? null;
+            });
+            expect(storedStyle, 'The style editor model must remain available').not.toBeNull();
+            expect(normalizeWhitespace(storedStyle!)).toBe(normalizeWhitespace(expectedStyle));
 
             const previewFrame = editorHelper.getPreviewFrame();
             const pageContent = previewFrame.locator('.page__content');
