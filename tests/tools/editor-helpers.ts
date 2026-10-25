@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Locator, FrameLocator } from '@playwright/test';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { clickAndOpenNewTabSafely } from './window-helpers';
 
 /**
@@ -92,21 +93,50 @@ export class EditorHelper {
                     element.addEventListener('starter-modal-closed', listener, true);
                     const observer = new MutationObserver(() => record({ type: 'visible-attribute', visible: element.hasAttribute('visible') }));
                     observer.observe(element, { attributes: true, attributeFilter: ['visible'] });
-                    element.__e2eStarterProbe = { samples, listener, observer, types };
+                    // Aggregate timer gaps only; background throttling is reported separately.
+                    const heartbeat = { ticks: 0, maxGapMs: 0, lastAt: performance.now(), startedAt: performance.now(), hiddenObserved: document.hidden };
+                    const timer = setInterval(() => {
+                        const now = performance.now();
+                        heartbeat.maxGapMs = Math.max(heartbeat.maxGapMs, now - heartbeat.lastAt);
+                        heartbeat.lastAt = now;
+                        heartbeat.ticks++;
+                        heartbeat.hiddenObserved ||= document.hidden;
+                        // Bound lifetime even if navigation prevents explicit cleanup.
+                        if (now - heartbeat.startedAt >= 30000) clearInterval(timer);
+                    }, 250);
+                    element.__e2eStarterProbe = { samples, listener, observer, types, heartbeat, timer };
                 });
                 const closeStartedAt = Date.now();
+                const nodeDelay = monitorEventLoopDelay({ resolution: 20 });
+                nodeDelay.enable();
+                let closePhase = 'read-visible';
+                let phaseStartedAt = Date.now();
+                const phaseTimes: { phase: string; elapsedMs: number }[] = [];
+                const finishPhase = () => {
+                    if (phaseTimes.length < 20) phaseTimes.push({ phase: closePhase, elapsedMs: Date.now() - phaseStartedAt });
+                };
                 let closeSucceeded = false;
                 try {
                     await expect(async () => {
                         log('スキップボタンのクリックを試行します。');
     
                         // 操作可能になるまで待ち、閉鎖済みなら再クリックしない。
-                        if (await starterModal.getAttribute('visible') !== null) {
+                        closePhase = 'read-visible';
+                        phaseStartedAt = Date.now();
+                        const visible = await starterModal.getAttribute('visible');
+                        finishPhase();
+                        if (visible !== null) {
+                            closePhase = 'native-click';
+                            phaseStartedAt = Date.now();
                             await skipBtn.click({ timeout: 2000 });
+                            finishPhase();
                         }
+                        closePhase = 'assert-hidden';
+                        phaseStartedAt = Date.now();
     
                         // モーダルが閉じた（visible属性が消えた）ことを検証
                         await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 1000 });
+                        finishPhase();
                     }).toPass({
                         timeout: 4000,
                         intervals: [300]
@@ -114,17 +144,30 @@ export class EditorHelper {
     
                     closeSucceeded = true;
                 } finally {
+                    nodeDelay.disable();
+                    // No samples means unknown, not a measured zero delay.
+                    const nodeTiming = {
+                        samples: nodeDelay.count,
+                        maxMs: nodeDelay.count ? nodeDelay.max / 1e6 : null,
+                        meanMs: nodeDelay.count ? nodeDelay.mean / 1e6 : null,
+                        p99Ms: nodeDelay.count ? nodeDelay.percentile(99) / 1e6 : null,
+                        phase: closePhase, phaseElapsedMs: Date.now() - phaseStartedAt, completedPhases: phaseTimes
+                    };
+                    if (!closeSucceeded) console.log('[StarterClose] node timing:', JSON.stringify(nodeTiming));
                     // Emit the runner-side duration before reading the page, even if its renderer is stalled.
                     if (!closeSucceeded) console.log('[StarterClose] operation failed after ms:', Date.now() - closeStartedAt);
+                    const diagnosticStartedAt = Date.now();
                     const diagnostic = await starterModal.evaluate((element: any) => {
                         const probe = element.__e2eStarterProbe;
                         for (const type of probe.types) element.shadowRoot.removeEventListener(type, probe.listener, true);
                         element.removeEventListener('starter-modal-closed', probe.listener, true);
                         probe.observer.disconnect();
+                        clearInterval(probe.timer);
+                        const heartbeat = { ...probe.heartbeat, observationMs: performance.now() - probe.heartbeat.startedAt, tailGapMs: performance.now() - probe.heartbeat.lastAt, hiddenAtRead: document.hidden };
                         delete element.__e2eStarterProbe;
-                        return { samples: probe.samples, visible: element.hasAttribute('visible') };
+                        return { samples: probe.samples, visible: element.hasAttribute('visible'), heartbeat };
                     });
-                    if (!closeSucceeded) console.log('[StarterClose] native events and reflected state:', JSON.stringify(diagnostic));
+                    if (!closeSucceeded) console.log('[StarterClose] native events and reflected state:', JSON.stringify({ ...diagnostic, diagnosticElapsedMs: Date.now() - diagnosticStartedAt }));
                 }
 
                 log('モーダルの閉鎖完了。');
