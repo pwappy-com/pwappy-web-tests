@@ -33,3 +33,18 @@ test('rejects malformed or insufficient readback without coercion or another pre
   assert.equal(writes,1);
  }
 });
+
+const replay = {...success, preparationVersion:1, preparedBalance:100, balance:98, added:0, replayed:true};
+test('consumed balance replay validates receipt and independent current balance without another write',async()=>{
+ let writes=0;
+ await prepareTestPoints({post:async()=>{writes++;return reply(replay)},get:async()=>reply({code:200,details:{pwappyPoints:'98'}})},env,'pwua000');
+ assert.equal(writes,1);
+});
+test('rejects invalid receipts, replay additions, initial shortfall and inconsistent readback',async()=>{
+ for(const write of [
+  {...replay,preparedBalance:98},{...replay,preparedBalance:undefined},
+  {...replay,added:2},{...replay,replayed:false},{...replay,replayed:'true'},
+  {...replay,preparationVersion:2},{...replay,balance:-1}
+ ]) await assert.rejects(prepareTestPoints({post:async()=>reply(write),get:async()=>reply({code:200,details:{pwappyPoints:98}})},env,'pwua000'));
+ await assert.rejects(prepareTestPoints({post:async()=>reply(replay),get:async()=>reply({code:200,details:{pwappyPoints:97}})},env,'pwua000'));
+});
