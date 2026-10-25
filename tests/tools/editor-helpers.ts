@@ -1922,14 +1922,10 @@ export class EditorHelper {
  */
 export async function verifyScriptInTestPage(testPage: Page, expectedContents: string | string[]): Promise<void> {
     await expect(async () => {
-        // 1. キャッシュバイパスのために常にユニークなパラメータを付けてページを再読み込みする
-        const currentUrl = new URL(testPage.url());
-        if (currentUrl.protocol === 'http:' || currentUrl.protocol === 'https:') {
-            currentUrl.searchParams.set('cb', Date.now().toString());
-            await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
-        }
-
-        // 2. ブラウザのコンテキスト内部で main.js をフェッチして内容を取得する
+        // The caller has already loaded the test page. Re-fetch main.js with a
+        // cache-buster below; reloading the whole app on every poll unnecessarily
+        // re-runs lifecycle handlers and rebuilds its UI.
+        // ブラウザのコンテキスト内部で main.js をフェッチして内容を取得する
         // ※ブラウザ内部からのフェッチであれば、認証Cookieが確実に送信され、サーバー(PHP)の404隠蔽を回避できる
         const mainJsContent = await testPage.evaluate(async () => {
             const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
