@@ -63,7 +63,24 @@ async function authenticateSession(
     if (fs.existsSync(storageStatePath)) {
         const content = fs.readFileSync(storageStatePath, 'utf-8').trim();
         if (content !== '{}' && content !== '') {
-            return storageStatePath;
+            // A non-empty storage file can contain an expired authentication token.
+            // Decode only to decide whether to refresh; the server still verifies it.
+            try {
+                const state = JSON.parse(content);
+                const cookieName = process.env.PWAPPY_TEST_AUTH_COOKIE_NAME || 'pwappy_auth';
+                const authCookie = state.cookies?.find((cookie: { name: string }) => cookie.name === cookieName);
+                const parts = authCookie?.value?.split('.');
+                const payload = parts?.length === 3
+                    ? JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
+                    : null;
+                const nowSeconds = Date.now() / 1000;
+                if (Number.isSafeInteger(payload?.exp) && payload.exp > nowSeconds + 60
+                    && (authCookie.expires === -1 || authCookie.expires > nowSeconds + 60)) {
+                    return storageStatePath;
+                }
+            } catch {
+                // Invalid cached state is replaced by a normal authenticated login.
+            }
         }
     }
 
