@@ -193,12 +193,10 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
       console.log(`[Workbench] 今回処理するアプリキー (${workbenchAppKeys.length}件):`, workbenchAppKeys);
 
       // 1件のアプリを処理する関数
-      const processWorkbenchApp = async (appKey: string) => {
-        const newPage = await context.newPage();
+      const processWorkbenchApp = async (newPage: Page, appKey: string) => {
+        const startedAt = Date.now();
+        console.log('[CleanupStage] workbench-item:start');
         try {
-          await newPage.addInitScript(disableAnimationCode);
-          await gotoDashboard(newPage);
-
           const targetRow = newPage.locator('.app-card', { has: newPage.locator('.app-key', { hasText: new RegExp(`^${appKey}$`) }) }).first();
           if (await targetRow.count() === 0) {
             console.log(`[Workbench] ${appKey} は既に見つかりません。スキップします。`);
@@ -255,28 +253,76 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
 
           const confirmDialog = newPage.locator('message-box#delete-confirm-general');
           await expect(confirmDialog).toBeVisible();
-          await confirmDialog.locator('.confirm-ok-button').click({ force: true });
+          const [deleteResponse] = await Promise.all([
+            newPage.waitForResponse(response => {
+              if (response.request().method() !== 'DELETE') return false;
+              try {
+                const body = response.request().postDataJSON();
+                return body?.appKey === appKey && !Object.prototype.hasOwnProperty.call(body, 'version');
+              } catch {
+                return false;
+              }
+            }, { timeout: 30000 }),
+            confirmDialog.locator('.confirm-ok-button').click({ force: true })
+          ]);
+          let deleteResult: { code?: number; status?: unknown } | null;
+          try {
+            deleteResult = await deleteResponse.json();
+          } catch {
+            throw new Error(`Workbench delete HTTP ${deleteResponse.status()}: response body is not JSON`);
+          }
+          const deleteStatus = typeof deleteResult?.status === 'string'
+            && /^[a-zA-Z0-9_-]{1,100}$/.test(deleteResult.status)
+            ? deleteResult.status : 'missing-or-invalid-status';
+          const deleteDiagnostic = `Workbench delete HTTP ${deleteResponse.status()}, API status: ${deleteStatus}`;
+          expect(deleteResponse.ok(), deleteDiagnostic).toBeTruthy();
+          expect(deleteResult?.code, deleteDiagnostic).toBe(200);
 
           await expect(newPage.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
           await expect(newPage.locator('dashboard-loading-overlay')).toBeHidden();
+          await expect(newPage.locator('dashboard-app-content'), 'Deletion must return to the workbench').toBeVisible({ timeout: 30000 });
+          await newPage.waitForLoadState('networkidle');
+          await expect(newPage.locator('dashboard-loading-overlay')).toBeHidden();
+          await expect(targetRow, 'Deleted app must disappear from the workbench').toHaveCount(0, { timeout: 30000 });
           console.log(` -> 削除完了: ${appName} (${appKey})`);
 
         } catch (e) {
           console.error(`[Workbench] ${appKey} の処理中にエラーが発生しました:`, e);
           cleanupErrors.push(e);
         } finally {
-          await newPage.close();
+          console.log(`[CleanupStage] workbench-item:end elapsedMs=${Date.now() - startedAt}`);
         }
       };
 
-      // キューから最大2並行で処理する
-      const workbenchWorkers = Array(concurrency).fill(null).map(async () => {
-        while (workbenchAppKeys.length > 0) {
-          // shift()で配列の先頭から1件取り出す
-          const appKey = workbenchAppKeys.shift();
-          if (appKey) {
-            await processWorkbenchApp(appKey);
+      // A successful deletion returns to the refreshed workbench. Reuse that
+      // page instead of booting a dashboard for every remaining app.
+      const workbenchWorkers = Array(Math.min(concurrency, workbenchAppKeys.length)).fill(null).map(async (_, slot) => {
+        let workerPage: Page | undefined;
+        let stage = 'new-page';
+        const startedAt = Date.now();
+        const enterStage = (next: string) => {
+          stage = next;
+          console.log(`[CleanupStage] workbench-worker=${slot} stage=${stage} elapsedMs=${Date.now() - startedAt}`);
+        };
+        try {
+          enterStage('new-page');
+          workerPage = await context.newPage();
+          await workerPage.addInitScript(disableAnimationCode);
+          enterStage('dashboard');
+          await gotoDashboard(workerPage);
+          await expect(workerPage.locator('dashboard-app-content')).toBeVisible({ timeout: 30000 });
+          await expect(workerPage.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
+          enterStage('items');
+          while (workbenchAppKeys.length > 0 && cleanupErrors.length === 0) {
+            const appKey = workbenchAppKeys.shift();
+            if (appKey) await processWorkbenchApp(workerPage, appKey);
           }
+        } catch (e) {
+          console.error(`[CleanupStage] workbench-worker=${slot} failed stage=${stage} elapsedMs=${Date.now() - startedAt}`);
+          cleanupErrors.push(e);
+        } finally {
+          enterStage('close-page');
+          if (workerPage) await workerPage.close();
         }
       });
 
