@@ -26,7 +26,8 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
       await gotoDashboard(page);
     });
 
-    const concurrency = 10;
+    // Cleanup shares one browser: bound renderer/API pressure to the normal CI worker count.
+    const concurrency = 2;
     const cleanupErrors: unknown[] = [];
 
     // ====================================================
@@ -52,16 +53,10 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
       console.log(`[Archive] 今回処理するアプリキー (${archivedAppKeys.length}件):`, archivedAppKeys);
 
       // 1件のアプリを処理する関数
-      const processArchiveApp = async (appKey: string) => {
-        const newPage = await context.newPage();
+      const processArchiveApp = async (newPage: Page, appKey: string) => {
+        const startedAt = Date.now();
+        console.log('[CleanupStage] archive-item:start');
         try {
-          await newPage.addInitScript(disableAnimationCode);
-          await gotoDashboard(newPage);
-
-          await newPage.getByRole('button', { name: 'アーカイブ' }).click();
-          await expect(newPage.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
-          await newPage.waitForLoadState('networkidle');
-
           const targetRow = newPage.locator('.app-card', { has: newPage.locator('.app-key', { hasText: new RegExp(`^${appKey}$`) }) }).first();
           if (await targetRow.count() === 0) {
             console.log(`[Archive] ${appKey} は既に見つかりません。スキップします。`);
@@ -83,6 +78,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
             await confirmDialog.locator('.confirm-ok-button').click();
             await expect(newPage.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
             await expect(newPage.locator('dashboard-loading-overlay')).toBeHidden();
+            await expect(targetRow, 'Deleted app must disappear from the archive').toHaveCount(0, { timeout: 30000 });
             console.log(` -> アーカイブから削除完了: ${appName} (${appKey})`);
           } else {
             await targetRow.scrollIntoViewIfNeeded();
@@ -128,18 +124,41 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
           console.error(`[Archive] ${appKey} の処理中にエラーが発生しました:`, e);
           cleanupErrors.push(e);
         } finally {
-          await newPage.close();
+          console.log(`[CleanupStage] archive-item:end elapsedMs=${Date.now() - startedAt}`);
         }
       };
 
-      // 最大5並行でキュー（配列）から1件ずつ取り出して処理するワーカーを作成
-      const archiveWorkers = Array(concurrency).fill(null).map(async () => {
-        while (archivedAppKeys.length > 0) {
-          // shift()で配列の先頭から1件取り出す
-          const appKey = archivedAppKeys.shift();
-          if (appKey) {
-            await processArchiveApp(appKey);
+      // Keep each archive page open until its queue is drained. A successful
+      // restore refreshes this page's archive list; it need not boot a new dashboard.
+      const archiveWorkers = Array(Math.min(concurrency, archivedAppKeys.length)).fill(null).map(async (_, slot) => {
+        let workerPage: Page | undefined;
+        let stage = 'new-page';
+        const startedAt = Date.now();
+        const enterStage = (next: string) => {
+          stage = next;
+          console.log(`[CleanupStage] archive-worker=${slot} stage=${stage} elapsedMs=${Date.now() - startedAt}`);
+        };
+        try {
+          enterStage('new-page');
+          workerPage = await context.newPage();
+          await workerPage.addInitScript(disableAnimationCode);
+          enterStage('dashboard');
+          await gotoDashboard(workerPage);
+          enterStage('archive-list');
+          await workerPage.getByRole('button', { name: 'アーカイブ' }).click();
+          await expect(workerPage.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
+          await workerPage.waitForLoadState('networkidle');
+          enterStage('items');
+          while (archivedAppKeys.length > 0 && cleanupErrors.length === 0) {
+            const appKey = archivedAppKeys.shift();
+            if (appKey) await processArchiveApp(workerPage, appKey);
           }
+        } catch (e) {
+          console.error(`[CleanupStage] archive-worker=${slot} failed stage=${stage} elapsedMs=${Date.now() - startedAt}`);
+          cleanupErrors.push(e);
+        } finally {
+          enterStage('close-page');
+          if (workerPage) await workerPage.close();
         }
       });
 
@@ -250,7 +269,7 @@ test.describe.serial('手動実行: 全アプリケーション削除スクリ�
         }
       };
 
-      // 最大5並行でキュー（配列）から1件ずつ取り出して処理するワーカーを作成
+      // キューから最大2並行で処理する
       const workbenchWorkers = Array(concurrency).fill(null).map(async () => {
         while (workbenchAppKeys.length > 0) {
           // shift()で配列の先頭から1件取り出す
