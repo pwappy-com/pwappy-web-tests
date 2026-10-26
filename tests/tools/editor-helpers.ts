@@ -1726,7 +1726,7 @@ export class EditorHelper {
      * 操作メニューからアクションを実行します。
      * @param action 'コピー' | '切り取り' | '貼り付け' | '削除' | '名前変更' | 'パスをコピー' | '新規ディレクトリ'
      */
-    async performFileOperation(action: string): Promise<void> {
+    async performFileOperation(action: string, expectedToast?: string | RegExp): Promise<void> {
         const explorer = this.page.locator('file-explorer');
 
         await expect(async () => {
@@ -1752,7 +1752,15 @@ export class EditorHelper {
         }
 
         await expect(targetItem).toBeVisible();
-        await targetItem.click({ force: true });
+        if (expectedToast !== undefined) {
+            // Observe transient feedback before click completion and menu teardown.
+            await Promise.all([
+                this.expectToastMessage(expectedToast),
+                targetItem.click({ force: true }),
+            ]);
+        } else {
+            await targetItem.click({ force: true });
+        }
 
         await expect(popupList).toBeHidden();
 
