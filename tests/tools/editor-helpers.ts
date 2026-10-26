@@ -1649,10 +1649,14 @@ export class EditorHelper {
             element.shadowRoot.addEventListener('dblclick', listener, true);
         });
         let navigationSucceeded = false;
+        let firstAttempt = true;
         try {
             // リトライ前の階層を固定し、遷移済みなら再度ダブルクリックしない。
             await expect(async () => {
-                await this.waitForFileExplorerLoading();
+                // The initial loading barrier already completed before reading beforeCount.
+                // Only observation/probe setup follows it; retries must wait again.
+                if (!firstAttempt) await this.waitForFileExplorerLoading();
+                firstAttempt = false;
                 if (await links.count() === beforeCount) {
                     const dir = explorer.locator('.directory').filter({ hasText: name });
                     // 行内の選択チェックボックスを避け、操作可能なフォルダーアイコンを開く。
