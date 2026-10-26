@@ -254,8 +254,7 @@ test.describe('ファイルエクスプローラー操作テスト', () => {
         });
 
         await test.step('2. パスをコピー', async () => {
-            await editorHelper.performFileOperation('パスをコピー');
-            await editorHelper.expectToastMessage('パスをコピーしました');
+            await editorHelper.performFileOperation('パスをコピー', 'パスをコピーしました');
         });
 
         await test.step('3. 名前を変更', async () => {
