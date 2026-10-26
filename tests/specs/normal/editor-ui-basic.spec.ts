@@ -826,11 +826,11 @@ test.describe('画面エッジホバーによるパネル自動開閉テスト�
             const targetX = viewport.width - 10;
             const targetY = viewport.height / 2;
 
-            // マウス移動により handleGlobalDragMove をトリガー
-            await editorPage.mouse.move(targetX, targetY);
-
-            // 右のトリガーが hover 状態になるか検証
-            await expect(rightEdgeTrigger).toHaveClass(/hover/);
+            // 800msで解除されるhoverを、操作の応答待ちより先に観測開始する。
+            await Promise.all([
+                expect(rightEdgeTrigger).toHaveClass(/hover/),
+                editorPage.mouse.move(targetX, targetY),
+            ]);
         });
 
         await test.step('3. ホバーを維持すると右パネル（サブウィンドウ）が展開される', async () => {
