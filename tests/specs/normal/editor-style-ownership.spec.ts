@@ -307,7 +307,31 @@ test('native Monaco typing keeps cursor and editor Undo after its deferred commi
     const editor = container.locator('#style-container > .monaco-editor');
     await editor.click({ position: { x: 80, y: 20 } });
     await expect.poll(() => container.evaluate((host: any) => host.styleEditor.hasTextFocus())).toBe(true);
-    await editorPage.keyboard.press('ControlOrMeta+a');
+    // Playwright resolves ControlOrMeta from the runner OS; Monaco resolves its
+    // binding from the emulated browser. Read the actual editor's binding and
+    // still send one native keypress. Unknown bindings must fail, not fall back.
+    const nativeShortcut = async (command: string, key: 'a' | 'z') => {
+        const binding = await container.evaluate((host: any, command) => ({
+            chords: host.styleEditor._standaloneKeybindingService
+                .lookupKeybinding(command)?.getChords(),
+            platform: navigator.platform,
+            maxTouchPoints: navigator.maxTouchPoints
+        }), command);
+        expect(binding.chords, command).toHaveLength(1);
+        const chord = binding.chords[0];
+        expect(chord.keyLabel.toLowerCase(), command).toBe(key);
+        expect(chord.shiftKey, command).toBe(false);
+        expect(chord.altKey, command).toBe(false);
+        expect(typeof chord.ctrlKey, command).toBe('boolean');
+        expect(typeof chord.metaKey, command).toBe('boolean');
+        expect(chord.ctrlKey, command).not.toBe(chord.metaKey);
+        const shortcut = (chord.metaKey ? 'Meta' : 'Control') + '+' + key;
+        console.log('[MonacoNativeBinding]', JSON.stringify({
+            command, shortcut, platform: binding.platform, maxTouchPoints: binding.maxTouchPoints
+        }));
+        return shortcut;
+    };
+    await editorPage.keyboard.press(await nativeShortcut('editor.action.selectAll', 'a'));
     // Assert the real shortcut, rather than silently assuming selection worked.
     expect(await container.evaluate((host: any) => {
         const selection = host.styleEditor.getSelection();
@@ -350,7 +374,7 @@ test('native Monaco typing keeps cursor and editor Undo after its deferred commi
     expect(cursor).toEqual({ lineNumber: 2, column: 15, focused: true });
     // Native editor shortcut; TemplateContainer explicitly ignores Monaco's
     // composed event path, so this must use Monaco Undo, not application Undo.
-    await editorPage.keyboard.press('ControlOrMeta+z');
+    await editorPage.keyboard.press(await nativeShortcut('undo', 'z'));
     await expect.poll(() => modelText(container)).toBe(seed);
     await expect(preview).toHaveCSS('width', '151px');
 });
