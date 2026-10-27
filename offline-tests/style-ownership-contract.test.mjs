@@ -75,7 +75,11 @@ test('native input and nonnative boundaries remain explicitly distinct', () => {
     assert.match(source, /await button\.click\(\)/);
     assert.match(source, /await widthInput\.fill\('281px'\)/);
     assert.match(source, /await editorPage\.keyboard\.insertText\('197'\)/);
-    assert.match(source, /await editorPage\.keyboard\.press\('ControlOrMeta\+z'\)/);
+    assert.match(source, /await editorPage\.keyboard\.press\(await nativeShortcut\('undo', 'z'\)\)/);
+    assert.match(source, /await editorPage\.keyboard\.press\(await nativeShortcut\('editor\.action\.selectAll', 'a'\)\)/);
+    const nativeScenario = source.slice(source.indexOf("test('native Monaco typing"));
+    assert.doesNotMatch(nativeScenario, /keyboard\.press\('(Meta|Control|ControlOrMeta)\+/);
+    assert.match(nativeScenario, /lookupKeybinding\(command\)\?\.getChords\(\)/);
     assert.match(source, /expect\(cursor\)\.toEqual\(\{ lineNumber: 2, column: 15, focused: true \}\)/);
 });
 
