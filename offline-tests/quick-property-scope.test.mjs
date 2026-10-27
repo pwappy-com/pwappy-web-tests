@@ -52,7 +52,7 @@ test('manual choice is wired while defaults, smoke exit and cleanup remain', () 
   const input = workflow.split('      test_scope:\n')[1].split('      prepare_points:')[0];
   assert.match(input, /default: "all"/);
   assert.deepEqual([...input.matchAll(/^          - (.+)$/gm)].map(m => m[1]),
-    ['all', 'editor-regression', 'quick-property-regression', 'points-smoke']);
+    ['all', 'editor-regression', 'quick-property-regression', 'style-ownership-regression', 'points-smoke']);
   assert.match(normal, /TEST_SCOPE: \$\{\{ inputs.test_scope \|\| 'all' \}\}/);
   assert.ok(normal.indexOf('node tests/tools/points-smoke.mjs\n            exit $?') < normal.indexOf(block));
   assert.match(normal, /npx playwright test "\$\{TEST_ARGS\[@\]\}" --project=\$\{\{ matrix.browser \}\} --reporter=line --workers="\$WORKERS" --retries="\$RETRIES"/);

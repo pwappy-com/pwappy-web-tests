@@ -106,7 +106,7 @@ test('safe wiring, nine inputs, no service operations, separate premium matrix',
   assert.match(workflow.split('  e2e-premium:\n')[1], /include: \$\{\{ fromJSON\(needs.prepare-matrix.outputs.matrix\) \}\}/);
 });
 test('undoing browser selector and later focused-scope additions reproduces exact verified remote baseline', () => {
-  // The later quick-property scope has its own executable argument-selection contracts.
+  // The later quick-property and style-ownership scopes have executable selector contracts.
   // Restore precisely that reviewed addition before checking the older immutable baseline.
   const focused = workflow.match(/^          case "\$\{TEST_SCOPE:-all\}" in\n[\s\S]*?^          esac$/m)?.[0];
   const approvedFocused = `          case "\${TEST_SCOPE:-all}" in
@@ -116,6 +116,8 @@ test('undoing browser selector and later focused-scope additions reproduces exac
                 --grep 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires') ;;
             quick-property-regression)
               TEST_ARGS=(tests/specs/normal/editor-quick-property-editor.spec.ts) ;;
+            style-ownership-regression)
+              TEST_ARGS=(tests/specs/normal/editor-style-ownership.spec.ts) ;;
             *) echo "::error::Unsupported normal test scope"; exit 1 ;;
           esac`;
   assert.equal(focused, approvedFocused, 'only the exact approved scope addition may be normalized');
@@ -126,6 +128,7 @@ test('undoing browser selector and later focused-scope additions reproduces exac
           fi`;
   const restored = workflow
     .replace('          - quick-property-regression\n', '')
+    .replace('          - style-ownership-regression\n', '')
     .replace(focused, originalScope)
     .replace(/^      normal_browser:\n[\s\S]*?(?=^      # 手動実行時のワーカー数)/m, '')
     .replace('      normal_matrix: ${{ steps.filter-normal-matrix.outputs.normal_matrix }}\n', '')
