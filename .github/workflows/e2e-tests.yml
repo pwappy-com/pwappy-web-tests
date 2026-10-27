@@ -50,6 +50,15 @@ on:
           - ubuntu-latest
           - windows-latest
           - macos-latest
+      normal_browser:
+        description: "通常テストのブラウザ（OS選択との共通部分）"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - webkit
+          - mobile-safari
       # 手動実行時のワーカー数を指定
       workers:
         description: "実行ワーカー数 (手動用)"
@@ -100,6 +109,7 @@ jobs:
     outputs:
       matrix_parallelism: ${{ steps.validate-parallelism.outputs.matrix_parallelism }}
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      normal_matrix: ${{ steps.filter-normal-matrix.outputs.normal_matrix }}
       run_normal: ${{ steps.get_suite.outputs.run_normal }}
       run_premium: ${{ steps.get_suite.outputs.run_premium }}
     steps:
@@ -170,6 +180,35 @@ jobs:
             if [ "$SUITE" == "premium" ] || [ "$SUITE" == "all" ]; then echo "run_premium=true" >> $GITHUB_OUTPUT; fi
           fi
 
+      - name: Filter normal browser matrix
+        id: filter-normal-matrix
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NORMAL_BROWSER_INPUT: ${{ inputs.normal_browser }}
+          RUN_NORMAL: ${{ steps.get_suite.outputs.run_normal }}
+          BASE_MATRIX: ${{ steps.set-matrix.outputs.matrix }}
+        run: |
+          # Premium-only and scheduled runs retain the original matrix unchanged.
+          node - <<'JS'
+          const fs = require('fs');
+          const { EVENT_NAME, NORMAL_BROWSER_INPUT, RUN_NORMAL, BASE_MATRIX } = process.env;
+          let matrix = BASE_MATRIX;
+          if (EVENT_NAME === 'workflow_dispatch' && RUN_NORMAL === 'true') {
+            const browser = NORMAL_BROWSER_INPUT || 'all';
+            if (!['all', 'webkit', 'mobile-safari'].includes(browser)) {
+              throw new Error('normal_browser must be all, webkit, or mobile-safari');
+            }
+            const entries = JSON.parse(BASE_MATRIX || '[]');
+            const selected = entries.filter(entry => browser === 'all' || entry.browser === browser);
+            if (selected.length === 0) {
+              throw new Error('normal_browser and os select no normal jobs');
+            }
+            matrix = JSON.stringify(selected);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `normal_matrix=${matrix || '[]'}\n`);
+          JS
+
   # ===================================================================
   # ジョブ 2: Normalテストの実行
   # ===================================================================
@@ -186,7 +225,7 @@ jobs:
       # 通常は5ジョブ。手動の負荷比較時のみ検証済みの1/2/5を使用。
       max-parallel: ${{ fromJSON(needs.prepare-matrix.outputs.matrix_parallelism) }}
       matrix:
-        include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
+        include: ${{ fromJSON(needs.prepare-matrix.outputs.normal_matrix) }}
     # 7GiB ARMランナーで継続するswapを避け、同じmacOS 26の標準14GiB Intelランナーに固定。
     runs-on: ${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}
     concurrency:

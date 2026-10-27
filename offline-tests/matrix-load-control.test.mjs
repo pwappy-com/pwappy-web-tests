@@ -59,7 +59,7 @@ test('choice input and safe environment transport are wired without shell interp
   const inputs = workflow.split('  workflow_dispatch:\n    inputs:\n')[1].split('\n# ワークフロー')[0];
   const names = [...inputs.matchAll(/^      (\w+):$/gm)].map(match => match[1]);
   assert.ok(names.length <= 10);
-  assert.equal(names.length, 8);
+  assert.equal(names.length, 9);
   assert.ok(names.includes('trace_snapshots'));
   const declaration = inputs.split('      matrix_parallelism:\n')[1].split('      retries:')[0];
   assert.match(declaration, /^        type: choice$/m);

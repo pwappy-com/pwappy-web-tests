@@ -9,7 +9,7 @@ The first `prepare-matrix` step validates the environment-passed input before
 service-facing dependent jobs can start. Invalid nonempty manual values fail
 closed. Only the validated numeric output reaches normal `max-parallel` through
 `fromJSON`; raw input is not interpolated into shell code. Dispatch inputs total
-8, including the unchanged `trace_snapshots` option.
+9, including `normal_browser` and the unchanged `trace_snapshots` option.
 
 For a separately authorized comparison after the current run and cleanup finish,
 use the same commit, normal suite, full matrix/test scope, per-job workers,
