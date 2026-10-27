@@ -36,6 +36,7 @@ expect.poll = (read, options) => ({
 globalThis.__offlinePlaywright = { test: runtime, expect };
 registerHooks({ resolve(specifier, context, nextResolve) {
     if (specifier === '@playwright/test') return { shortCircuit: true, url: 'data:text/javascript,const p=globalThis.__offlinePlaywright;export const test=p.test,expect=p.expect,FrameLocator=class{},Page=class{},BrowserContext=class{};' };
+    if (specifier === './http-failure-diagnostics') return nextResolve('./http-failure-diagnostics.ts', context);
     if (specifier === './window-helpers') return nextResolve('./window-helpers.ts', context);
     return nextResolve(specifier, context);
 } });

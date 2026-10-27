@@ -6,6 +6,7 @@ import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { restoreApprovedNormalDefaults } from './normal-defaults-contract.mjs';
 
 const workflow = readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8');
 const filterBlock = workflow.match(/^      - name: Filter normal browser matrix\n[\s\S]*?(?=^  # ===)/m)[0];
@@ -91,14 +92,14 @@ test('filter preserves all entry properties rather than rebuilding runners or la
   const result = select({ matrix: JSON.stringify([entry]), run_normal: 'true' }, 'mobile-safari');
   assert.deepEqual(JSON.parse(result.output.normal_matrix), [entry]);
 });
-test('safe wiring, nine inputs, no service operations, separate premium matrix', () => {
+test('safe wiring, ten inputs, no service operations, separate premium matrix', () => {
   assert.doesNotMatch(filter, /\$\{\{|curl|wget|npm|playwright/);
   assert.match(filterBlock, /NORMAL_BROWSER_INPUT: \$\{\{ inputs.normal_browser \}\}/);
   assert.match(filterBlock, /RUN_NORMAL: \$\{\{ steps.get_suite.outputs.run_normal \}\}/);
   assert.match(filterBlock, /BASE_MATRIX: \$\{\{ steps.set-matrix.outputs.matrix \}\}/);
   assert.match(workflow, /normal_matrix: \$\{\{ steps.filter-normal-matrix.outputs.normal_matrix \}\}/);
   const inputs = workflow.split('  workflow_dispatch:\n    inputs:\n')[1].split('\n# ワークフロー')[0];
-  assert.equal([...inputs.matchAll(/^      (\w+):$/gm)].length, 9);
+  assert.equal([...inputs.matchAll(/^      (\w+):$/gm)].length, 10);
   const declaration = inputs.split('      normal_browser:\n')[1].split('      # 手動実行時のワーカー数')[0];
   assert.match(declaration, /default: "all"/); assert.match(declaration, /type: choice/);
   assert.deepEqual([...declaration.matchAll(/^          - (.+)$/gm)].map(m => m[1]), ['all', 'webkit', 'mobile-safari']);
@@ -126,7 +127,9 @@ test('undoing browser selector and later focused-scope additions reproduces exac
             TEST_ARGS=(tests/specs/normal/editor-events-build.spec.ts tests/specs/normal/editor-property-parsing-build.spec.ts
               --grep 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires')
           fi`;
-  const restored = workflow
+  // Reverse only exact reviewed operating-default edits; the original hash stays immutable.
+  const beforeDefaults = restoreApprovedNormalDefaults(workflow);
+  const restored = beforeDefaults
     .replace('          - quick-property-regression\n', '')
     .replace('          - style-ownership-regression\n', '')
     .replace(focused, originalScope)

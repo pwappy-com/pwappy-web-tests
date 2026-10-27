@@ -34,7 +34,7 @@ for (const value of ['1', '2', '5', '', undefined]) {
   test(`manual ${JSON.stringify(value)} produces a safe numeric output`, () => {
     const result = validate(value);
     assert.equal(result.status, 0);
-    assert.equal(result.output, `matrix_parallelism=${value || '5'}\n`);
+    assert.equal(result.output, `matrix_parallelism=${value || '2'}\n`);
   });
 }
 for (const value of ['0', '3', '-1', '10', '01', '1.0', ' 1 ', 'true', 'null',
@@ -48,9 +48,9 @@ for (const value of ['0', '3', '-1', '10', '01', '1.0', ' 1 ', 'true', 'null',
   });
 }
 for (const value of [undefined, '', '1', 'invalid']) {
-  test(`schedule ignores dispatch value ${JSON.stringify(value)} and retains 5`, () => {
+  test(`schedule ignores dispatch value ${JSON.stringify(value)} and uses 2`, () => {
     assert.deepEqual(validate(value, 'schedule'), {
-      status: 0, stdout: '', output: 'matrix_parallelism=5\n',
+      status: 0, stdout: '', output: 'matrix_parallelism=2\n',
     });
   });
 }
@@ -59,11 +59,11 @@ test('choice input and safe environment transport are wired without shell interp
   const inputs = workflow.split('  workflow_dispatch:\n    inputs:\n')[1].split('\n# ワークフロー')[0];
   const names = [...inputs.matchAll(/^      (\w+):$/gm)].map(match => match[1]);
   assert.ok(names.length <= 10);
-  assert.equal(names.length, 9);
+  assert.equal(names.length, 10);
   assert.ok(names.includes('trace_snapshots'));
   const declaration = inputs.split('      matrix_parallelism:\n')[1].split('      retries:')[0];
   assert.match(declaration, /^        type: choice$/m);
-  assert.match(declaration, /^        default: "5"$/m);
+  assert.match(declaration, /^        default: "2"$/m);
   assert.deepEqual([...declaration.matchAll(/^          - "(\d+)"$/gm)].map(m => m[1]), ['1', '2', '5']);
   assert.match(validation, /MATRIX_PARALLELISM_INPUT: \$\{\{ inputs.matrix_parallelism \}\}/);
   assert.match(validation, /EVENT_NAME: \$\{\{ github.event_name \}\}/);

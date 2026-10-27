@@ -3,9 +3,7 @@ name: Multi-OS E2E Tests
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  # event.inputs preserves boolean false as the string 'false'; schedule/missing is empty.
-  # Config validates the string and defaults only missing/empty values to enabled.
-  PWAPPY_TRACE_SNAPSHOTS: ${{ github.event.inputs.trace_snapshots }}
+  # Trace defaults are resolved per suite below; local config still defaults enabled.
   PWAPPY_TEST_POINTS_ENABLED: ${{ inputs.prepare_points && 'true' || vars.PWAPPY_TEST_POINTS_ENABLED }}
   PWAPPY_TEST_POINTS_READ_ENDPOINT: ${{ vars.PWAPPY_TEST_POINTS_READ_ENDPOINT }}
 concurrency:
@@ -61,9 +59,9 @@ on:
           - mobile-safari
       # 手動実行時のワーカー数を指定
       workers:
-        description: "実行ワーカー数 (手動用)"
+        description: "通常テストの実行ワーカー数 (手動用)"
         required: true
-        default: "75%"
+        default: "1"
         type: string
 
       test_scope:
@@ -77,27 +75,35 @@ on:
           - quick-property-regression
           - style-ownership-regression
           - points-smoke
+      normal_prepare_points:
+        description: "通常テストのステージング残高準備（既定有効、falseは診断用）"
+        type: boolean
+        default: true
       prepare_points:
-        description: "ステージングのテスト残高準備を有効化"
+        description: "Premiumの残高準備（通常テストはnormal_prepare_pointsを使用）"
         type: boolean
         default: false
       trace_snapshots:
-        description: "診断比較用DOM/ネットワークtrace記録（通常は有効）"
-        type: boolean
-        default: true
+        description: "DOM/ネットワークtrace記録（auto: 通常は無効、Premiumは有効。trueで診断）"
+        type: choice
+        default: "auto"
+        options:
+          - "auto"
+          - "true"
+          - "false"
       matrix_parallelism:
-        description: "通常テストの同時マトリックスジョブ数（負荷比較用）"
+        description: "通常テストの同時マトリックスジョブ数（既定2、直列診断は1）"
         required: true
-        default: "5"
+        default: "2"
         type: choice
         options:
           - "1"
           - "2"
           - "5"
       retries:
-        description: "通常テストの再試行回数"
+        description: "通常テストの再試行回数（既定0で初回失敗を検出）"
         required: true
-        default: "5"
+        default: "0"
         type: string
 
 # ワークフローを構成するジョブを定義
@@ -110,6 +116,9 @@ jobs:
     # このジョブの出力を定義。後続のジョブの条件分岐やマトリックスとして使用。
     outputs:
       matrix_parallelism: ${{ steps.validate-parallelism.outputs.matrix_parallelism }}
+      normal_prepare_points: ${{ steps.resolve-normal-points.outputs.normal_prepare_points }}
+      normal_trace_snapshots: ${{ steps.resolve-trace.outputs.normal_trace_snapshots }}
+      premium_trace_snapshots: ${{ steps.resolve-trace.outputs.premium_trace_snapshots }}
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       normal_matrix: ${{ steps.filter-normal-matrix.outputs.normal_matrix }}
       run_normal: ${{ steps.get_suite.outputs.run_normal }}
@@ -122,9 +131,9 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           MATRIX_PARALLELISM_INPUT: ${{ inputs.matrix_parallelism }}
         run: |
-          parallelism=5
+          parallelism=2
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            parallelism="${MATRIX_PARALLELISM_INPUT:-5}"
+            parallelism="${MATRIX_PARALLELISM_INPUT:-2}"
           fi
           case "$parallelism" in
             1|2|5) ;;
@@ -182,6 +191,41 @@ jobs:
             if [ "$SUITE" == "premium" ] || [ "$SUITE" == "all" ]; then echo "run_premium=true" >> $GITHUB_OUTPUT; fi
           fi
 
+      - name: Resolve normal point preparation
+        id: resolve-normal-points
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NORMAL_PREPARE_POINTS_INPUT: ${{ github.event.inputs.normal_prepare_points }}
+        run: |
+          prepare=true
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            prepare="${NORMAL_PREPARE_POINTS_INPUT:-true}"
+          fi
+          case "$prepare" in
+            true|false) ;;
+            *) echo "::error::normal_prepare_points must be true or false"; exit 1 ;;
+          esac
+          printf 'normal_prepare_points=%s\n' "$prepare" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve suite trace snapshots
+        id: resolve-trace
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TRACE_SNAPSHOTS_INPUT: ${{ github.event.inputs.trace_snapshots }}
+        run: |
+          trace=auto
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            trace="${TRACE_SNAPSHOTS_INPUT:-auto}"
+          fi
+          case "$trace" in
+            auto) normal=false; premium=true ;;
+            true|false) normal="$trace"; premium="$trace" ;;
+            *) echo "::error::trace_snapshots must be auto, true, or false"; exit 1 ;;
+          esac
+          printf 'normal_trace_snapshots=%s\npremium_trace_snapshots=%s\n' "$normal" "$premium" >> "$GITHUB_OUTPUT"
+
       - name: Filter normal browser matrix
         id: filter-normal-matrix
         shell: bash
@@ -224,7 +268,7 @@ jobs:
       actions: write
     strategy:
       fail-fast: false
-      # 通常は5ジョブ。手動の負荷比較時のみ検証済みの1/2/5を使用。
+      # 通常は最大2ジョブ。1ワーカーと組み合わせ、直列診断には1を指定。
       max-parallel: ${{ fromJSON(needs.prepare-matrix.outputs.matrix_parallelism) }}
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.normal_matrix) }}
@@ -234,6 +278,8 @@ jobs:
       group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
       cancel-in-progress: false
     env:
+      PWAPPY_TEST_POINTS_ENABLED: ${{ needs.prepare-matrix.outputs.normal_prepare_points }}
+      PWAPPY_TRACE_SNAPSHOTS: ${{ needs.prepare-matrix.outputs.normal_trace_snapshots }}
       PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-normal
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
@@ -352,18 +398,10 @@ jobs:
         id: run_tests
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            if [ "$OS_NAME" = "ubuntu-latest" ]; then
-              # 高速なUbuntu環境は高効率な並列実行を維持
-              WORKERS="75%"
-            else
-              # Windows, macOS環境はI/O競合やCPU飽和を防ぐため直列（1ワーカー）で堅実に実行
-              WORKERS="1"
-            fi
-          else
-            # 手動実行時は指定された値（未指定時は2）を適用
-            WORKERS="${{ github.event.inputs.workers }}"
-            WORKERS="${WORKERS:-2}"
+          # Schedule and omitted manual inputs use the same bounded normal defaults.
+          WORKERS=1
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            WORKERS="${TEST_WORKERS:-1}"
           fi
 
           if [ "${{ inputs.test_scope }}" = "points-smoke" ]; then
@@ -381,7 +419,7 @@ jobs:
           fi
 
           echo "Running tests on $OS_NAME with workers: $WORKERS"
-          RETRIES="${TEST_RETRIES:-5}"
+          RETRIES="${TEST_RETRIES:-0}"
           if ! [[ "$RETRIES" =~ ^[0-5]$ ]]; then
             echo "retries must be between 0 and 5"
             exit 1
@@ -418,7 +456,9 @@ jobs:
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
           TEST_SCOPE: ${{ inputs.test_scope || 'all' }}
-          TEST_RETRIES: ${{ inputs.retries || '5' }}
+          TEST_RETRIES: ${{ inputs.retries || '0' }}
+          EVENT_NAME: ${{ github.event_name }}
+          TEST_WORKERS: ${{ github.event.inputs.workers }}
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
@@ -511,6 +551,7 @@ jobs:
       group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
       cancel-in-progress: false
     env:
+      PWAPPY_TRACE_SNAPSHOTS: ${{ needs.prepare-matrix.outputs.premium_trace_snapshots }}
       PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-premium
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:

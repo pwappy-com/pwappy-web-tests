@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { restoreApprovedNormalDefaults } from './normal-defaults-contract.mjs';
 
 const workflow = readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8');
 const normal = workflow.split('  e2e-normal:\n')[1].split('  e2e-premium:\n')[0];
@@ -35,7 +36,7 @@ test('strictly undoing only approved additions preserves the complete previous w
   const choice = '          - style-ownership-regression\n';
   assert.equal(workflow.split(addition).length, 2, 'exactly the approved selector addition');
   assert.equal(workflow.split(choice).length, 2, 'exactly the approved choice addition');
-  const restored = workflow.replace(addition, '').replace(choice, '');
+  const restored = restoreApprovedNormalDefaults(workflow).replace(addition, '').replace(choice, '');
   assert.equal(createHash('sha256').update(restored).digest('hex'), '56d57e7aaa3b5fe1be294add368818eb9cb24448e12358e443c65136ad3a6529');
   // Whole-file hash protects all earlier selectors/defaults, Premium, point
   // preparation, cleanup, timeouts and schedules—not just sampled substrings.

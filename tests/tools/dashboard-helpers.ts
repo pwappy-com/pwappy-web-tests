@@ -1,3 +1,4 @@
+import { observeHttpFailures, observePageHttpFailures } from './http-failure-diagnostics';
 import { expect, type Page, type BrowserContext } from '@playwright/test';
 import { EditorHelper } from './editor-helpers';
 import { clickAndOpenNewTabSafely } from './window-helpers';
@@ -160,6 +161,7 @@ export async function openEditor(
     version: string = '1.0.0',
     options: { skipStarterModal?: boolean } = { skipStarterModal: true }
 ): Promise<Page> {
+    observeHttpFailures(context);
     const versionRow = page.locator('.version-card', { hasText: version }).first();
     await expect(versionRow).toBeVisible({ timeout: 10000 });
 
@@ -607,6 +609,7 @@ export async function waitForVersionStatus(
 }
 
 export async function gotoDashboard(page: Page): Promise<void> {
+    observePageHttpFailures(page);
     // console.log(`[gotoDashboard:Enter] Current URL: ${page.url()}`);
 
     const workerIndex = process.env.TEST_WORKER_INDEX || '0';

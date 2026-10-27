@@ -46,21 +46,3 @@ test('only snapshots changes across A/B, including CI and cleanup config', () =>
   }
 });
 
-test('workflow input is boolean, defaults true, and global env passes the event string without truthy fallback', () => {
-  const declaration = workflow.match(/^      trace_snapshots:\n((?:        .*\n)+)/m)?.[1];
-  assert.ok(declaration);
-  assert.match(declaration, /^        type: boolean$/m);
-  assert.match(declaration, /^        default: true$/m);
-  const mapping = workflow.match(/^  PWAPPY_TRACE_SNAPSHOTS: (.*)$/m)?.[1];
-  assert.equal(mapping, '${{ github.event.inputs.trace_snapshots }}');
-  assert.equal(workflow.match(/PWAPPY_TRACE_SNAPSHOTS:/g)?.length, 1, 'no step/job override');
-  // GitHub event.inputs converts dispatch booleans to strings; absent property resolves empty.
-  // This tests the documented transport contract, not the hosted GitHub expression engine.
-  for (const [event, expected] of [
-    [{ inputs: { trace_snapshots: 'true' } }, true],
-    [{ inputs: { trace_snapshots: 'false' } }, false],
-    [{ inputs: {} }, true], [{ schedule: '0 18 * * *' }, true],
-  ]) {
-    assert.equal(config({ PWAPPY_TRACE_SNAPSHOTS: event.inputs?.trace_snapshots ?? '' }).use.trace.snapshots, expected);
-  }
-});

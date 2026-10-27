@@ -1,3 +1,4 @@
+import { observePageHttpFailures } from './http-failure-diagnostics';
 import { test, expect, type Page, type Locator, FrameLocator } from '@playwright/test';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { clickAndOpenNewTabSafely } from './window-helpers';
@@ -25,6 +26,7 @@ export class EditorHelper {
      * @param isMobile モバイルビューポートでテストを実行しているかどうかのフラグ
      */
     constructor(page: Page, isMobile: boolean) {
+        observePageHttpFailures(page);
         this.page = page;
         this.isMobile = isMobile;
     }
