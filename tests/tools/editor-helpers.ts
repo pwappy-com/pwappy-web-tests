@@ -77,44 +77,69 @@ export class EditorHelper {
                 const skipBtn = starterModal.locator('.btn-skip, button:has-text("閉じて一から自分で作る")').first();
                 await expect(skipBtn).toBeVisible({ timeout: 2000 });
 
-                // Observe native input and reflected state without changing the modal.
-                const initialVisible = await starterModal.evaluate((element: any) => {
-                    const samples: any[] = [];
-                    const record = (sample: object) => {
-                        if (samples.length < 40) samples.push({ at: performance.now(), ...sample });
-                    };
-                    const listener = (event: Event) => {
-                        const target = event.composedPath()[0] as HTMLElement;
-                        if (event.type !== 'starter-modal-closed' && !target?.closest?.('.btn-skip')) return;
-                        record({ type: event.type, trusted: event.isTrusted, visible: element.hasAttribute('visible') });
-                    };
-                    const types = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'starter-modal-closed'];
-                    for (const type of types) element.shadowRoot.addEventListener(type, listener, true);
-                    element.addEventListener('starter-modal-closed', listener, true);
-                    const observer = new MutationObserver(() => record({ type: 'visible-attribute', visible: element.hasAttribute('visible') }));
-                    observer.observe(element, { attributes: true, attributeFilter: ['visible'] });
-                    // Aggregate timer gaps only; background throttling is reported separately.
-                    const heartbeat = { ticks: 0, maxGapMs: 0, lastAt: performance.now(), startedAt: performance.now(), hiddenObserved: document.hidden };
-                    const timer = setInterval(() => {
-                        const now = performance.now();
-                        heartbeat.maxGapMs = Math.max(heartbeat.maxGapMs, now - heartbeat.lastAt);
-                        heartbeat.lastAt = now;
-                        heartbeat.ticks++;
-                        heartbeat.hiddenObserved ||= document.hidden;
-                        // Bound lifetime even if navigation prevents explicit cleanup.
-                        if (now - heartbeat.startedAt >= 30000) cleanup();
-                    }, 250);
-                    const cleanup = () => {
-                        for (const type of types) element.shadowRoot.removeEventListener(type, listener, true);
-                        element.removeEventListener('starter-modal-closed', listener, true);
-                        observer.disconnect();
-                        clearInterval(timer);
-                        delete element.__e2eStarterProbe;
-                    };
-                    element.__e2eStarterProbe = { samples, heartbeat, cleanup };
-                    // Reuse this state before the one native input, avoiding another protocol round trip.
-                    return element.getAttribute('visible');
-                }, undefined, { timeout: 5000 });
+                const warnDiagnosticUnavailable = (phase: string, operationSucceeded: boolean | null, error: unknown) => {
+                    const message = error instanceof Error ? error.message : String(error);
+                    // Fixed classifications only: raw messages can contain authenticated URLs.
+                    const reason = /timeout|timed out/i.test(message) ? 'timeout'
+                        : /closed|detached|destroyed/i.test(message) ? 'page-unavailable'
+                        : 'diagnostic-error';
+                    console.warn('[StarterClose] diagnostic unavailable:', JSON.stringify({
+                        operationSucceeded, unavailable: phase, reason
+                    }));
+                };
+                // Probe installation is optional. Undefined is an UNKNOWN state, never
+                // evidence that the modal is closed. Only a successful DOM read of null
+                // may suppress the native input; the attribute assertion is always required.
+                let initialVisible: string | null | undefined;
+                try {
+                    initialVisible = await starterModal.evaluate((element: any) => {
+                        const samples: any[] = [];
+                        const record = (sample: object) => {
+                            if (samples.length < 40) samples.push({ at: performance.now(), ...sample });
+                        };
+                        const listener = (event: Event) => {
+                            const target = event.composedPath()[0] as HTMLElement;
+                            if (event.type !== 'starter-modal-closed' && !target?.closest?.('.btn-skip')) return;
+                            record({ type: event.type, trusted: event.isTrusted, visible: element.hasAttribute('visible') });
+                        };
+                        const types = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'starter-modal-closed'];
+                        const root = element.shadowRoot;
+                        let observer: MutationObserver | undefined;
+                        let timer: ReturnType<typeof setInterval> | undefined;
+                        // Define rollback before acquiring resources, so partial initialization
+                        // (including observer.observe failure) also removes registered listeners.
+                        const cleanup = () => {
+                            for (const type of types) root?.removeEventListener(type, listener, true);
+                            element.removeEventListener('starter-modal-closed', listener, true);
+                            observer?.disconnect();
+                            if (timer !== undefined) clearInterval(timer);
+                            delete element.__e2eStarterProbe;
+                        };
+                        try {
+                            for (const type of types) root.addEventListener(type, listener, true);
+                            element.addEventListener('starter-modal-closed', listener, true);
+                            observer = new MutationObserver(() => record({ type: 'visible-attribute', visible: element.hasAttribute('visible') }));
+                            observer.observe(element, { attributes: true, attributeFilter: ['visible'] });
+                            const heartbeat = { ticks: 0, maxGapMs: 0, lastAt: performance.now(), startedAt: performance.now(), hiddenObserved: document.hidden };
+                            timer = setInterval(() => {
+                                const now = performance.now();
+                                heartbeat.maxGapMs = Math.max(heartbeat.maxGapMs, now - heartbeat.lastAt);
+                                heartbeat.lastAt = now;
+                                heartbeat.ticks++;
+                                heartbeat.hiddenObserved ||= document.hidden;
+                                if (now - heartbeat.startedAt >= 30000) cleanup();
+                            }, 250);
+                            element.__e2eStarterProbe = { samples, heartbeat, cleanup };
+                            return element.getAttribute('visible');
+                        } catch (error) {
+                            cleanup();
+                            throw error;
+                        }
+                    }, undefined, { timeout: 5000 });
+                } catch (diagnosticError) {
+                    // A diagnostic selector timeout cannot gate required user input.
+                    warnDiagnosticUnavailable('installation', null, diagnosticError);
+                }
                 const closeStartedAt = Date.now();
                 const nodeDelay = monitorEventLoopDelay({ resolution: 20 });
                 nodeDelay.enable();
@@ -166,10 +191,10 @@ export class EditorHelper {
                         }, undefined, { timeout: 5000 });
                         if (!closeSucceeded) console.log('[StarterClose] native events and reflected state:', JSON.stringify({ ...diagnostic, diagnosticElapsedMs: Date.now() - diagnosticStartedAt }));
                     } catch (cleanupError) {
-                        // A detached/closed page must not replace the native action/assertion
-                        // failure. On the success path cleanup failures are still failures.
-                        if (closeSucceeded) throw cleanupError;
-                        console.error('[StarterClose] diagnostic cleanup failed:', cleanupError);
+                        // Optional telemetry is not the behavior oracle. Preserve native
+                        // input/assertion failures, but do not create one after success.
+                        // The probe self-cleans when readback cannot reach the renderer.
+                        warnDiagnosticUnavailable('readback/cleanup', closeSucceeded, cleanupError);
                     }
                 }
 
@@ -223,7 +248,9 @@ export class EditorHelper {
                     const discardBtn = discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' });
                     // force クリックの完了だけでは閉鎖を保証できない。
                     // 通常クリックで操作可能性を待ち、実際の閉鎖まで検証する。
-                    await discardBtn.click({ timeout: 5000 });
+                    // Provisional native-action allowance, not a UI SLA: one Safari trace
+                    // spent 4.892s before dispatch, leaving ~108ms of the old 5s budget.
+                    await discardBtn.click({ timeout: 15000 });
                     await expect(snapshotConfirmDialog).toBeHidden({ timeout: 10000 });
                     await expect(discardConfirmDialog).toBeHidden({ timeout: 10000 });
                 }

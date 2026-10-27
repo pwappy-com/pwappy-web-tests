@@ -31,15 +31,25 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 const { EditorHelper } = await import('../tests/tools/editor-helpers.ts');
 
 function deferred() { let resolve, reject; const promise = new Promise((a,b) => { resolve=a;reject=b; }); return { promise, resolve, reject }; }
-function fixture({ clickError, assertError, cleanupError, clickGate, existing = false, initiallyClosed = false } = {}) {
+function fixture({ clickError, assertError, cleanupError, installError, observeError, stateReadError, installAfterCallbackError, clickGate, existing = false, initiallyClosed = false } = {}) {
     const events = [];
     let now = 0, heartbeat, disconnected = 0, cleared = 0;
-    const shadowRoot = new EventTarget();
-    const element = Object.assign(new EventTarget(), {
-        shadowRoot, hasAttribute: () => !initiallyClosed, getAttribute: () => initiallyClosed ? null : '',
+    let listeners = 0;
+    const trackedTarget = () => {
+        const target = new EventTarget();
+        const registered = new Set();
+        const add = target.addEventListener.bind(target), remove = target.removeEventListener.bind(target);
+        target.addEventListener = (type, fn, options) => { registered.add(type); listeners++; add(type, fn, options); };
+        target.removeEventListener = (type, fn, options) => { if (registered.delete(type)) listeners--; remove(type, fn, options); };
+        return target;
+    };
+    const shadowRoot = trackedTarget();
+    const element = Object.assign(trackedTarget(), {
+        shadowRoot, hasAttribute: () => !initiallyClosed,
+        getAttribute: () => { if (stateReadError) throw stateReadError; return initiallyClosed ? null : ''; },
     });
     const context = { performance: { now: () => now }, document: { hidden: false },
-        MutationObserver: class { observe() {} disconnect() { disconnected++; } },
+        MutationObserver: class { observe() { if (observeError) throw observeError; } disconnect() { disconnected++; } },
         setInterval: fn => { heartbeat = fn; return 1; }, clearInterval: () => { cleared++; },
     };
     const button = { click: async options => {
@@ -53,8 +63,11 @@ function fixture({ clickError, assertError, cleanupError, clickGate, existing = 
         evaluate: async (callback, _arg, options) => {
             const cleanup = evaluations++ > 0;
             events.push([cleanup ? 'cleanup' : 'install', options?.timeout]);
+            if (!cleanup && installError) throw installError;
             if (cleanup && cleanupError) throw cleanupError;
-            return vm.runInNewContext(`(${callback.toString()})`, context)(element);
+            const result = vm.runInNewContext(`(${callback.toString()})`, context)(element);
+            if (!cleanup && installAfterCallbackError) throw installAfterCallbackError;
+            return result;
         },
     };
     const page = { locator: selector => selector === 'starter-template-modal' ? modal : {
@@ -62,7 +75,7 @@ function fixture({ clickError, assertError, cleanupError, clickGate, existing = 
     }, waitForTimeout: async () => {} };
     return { helper: new EditorHelper(page, false), events, element,
         expire: () => { now = 30001; heartbeat(); },
-        cleanupCounts: () => ({ disconnected, cleared }) };
+        cleanupCounts: () => ({ disconnected, cleared }), listenerCount: () => listeners };
 }
 
 // Wait only for microtasks, not wall-clock deadlines.
@@ -110,10 +123,24 @@ test('page closure during cleanup preserves input failure and probe self-cleans'
     assert.deepEqual(f.cleanupCounts(), { disconnected: 1, cleared: 1 });
 });
 
-test('cleanup failure after successful action is not hidden', async () => {
-    const error = new Error('cleanup failed'); const f = fixture({ cleanupError: error });
-    await assert.rejects(f.helper.handleStarterTemplateModal(), e => e === error);
-    f.expire();
+test('optional diagnostic cleanup failure does not fail successful behavior', async () => {
+    for (const [message, reason] of [
+        ['Timeout at https://example.invalid/?token=secret', 'timeout'],
+        ['Page closed https://example.invalid/?token=secret', 'page-unavailable'],
+        ['Unexpected https://example.invalid/?token=secret', 'diagnostic-error'],
+    ]) {
+        const f = fixture({ cleanupError: new Error(message) });
+        const warnings = []; const originalWarn = console.warn;
+        console.warn = (...args) => warnings.push(args);
+        try { await f.helper.handleStarterTemplateModal(); }
+        finally { console.warn = originalWarn; }
+        assert.deepEqual(f.events.map(e=>e[0]), ['install', 'click', 'input-settled', 'assert', 'cleanup']);
+        assert.deepEqual(warnings, [['[StarterClose] diagnostic unavailable:', JSON.stringify({
+            operationSucceeded: true, unavailable: 'readback/cleanup', reason,
+        })]]);
+        assert.equal(JSON.stringify(warnings).includes('secret'), false);
+        f.expire();
+    }
 });
 
 test('existing app does not install probe or click', async () => {
@@ -170,16 +197,16 @@ test('drag succeeds only for exactly one new node', async () => {
     assert.equal(f.events.filter(e=>e[0]==='drag').length, 1);
 });
 
-function snapshotFixture({ inputError, visibleError, initialHiddenError, confirmHiddenError } = {}) {
-    const events = [];
+function snapshotFixture({ inputError, visibleError, initialHiddenError, confirmHiddenError, confirmError } = {}) {
+    const events = []; let confirmTimeout;
     const confirm = { isVisible: async () => false, visibleError, hiddenError: confirmHiddenError,
-        getByRole: () => ({ click: async () => { events.push('confirm'); } }) };
+        getByRole: () => ({ click: async options => { confirmTimeout = options.timeout; events.push('confirm'); if (confirmError) throw confirmError; } }) };
     const initial = { isVisible: async () => true, hiddenError: initialHiddenError, getByRole: () => ({ click: async () => {
         events.push('discard'); if (inputError) throw inputError;
     } }) };
     const page = { on: () => events.push('listen'), off: () => events.push('unlisten'),
         locator: (_selector, options) => options?.hasText?.startsWith('前回') ? initial : options ? confirm : {} };
-    return { helper: new EditorHelper(page, false), events };
+    return { helper: new EditorHelper(page, false), events, confirmBudget: () => confirmTimeout };
 }
 
 test('snapshot native failure remains failure and unregisters dialog listener', async () => {
@@ -220,4 +247,85 @@ test('snapshot requires both dialogs hidden after confirmation', async () => {
         await assert.rejects(f.helper.handleSnapshotRestoreDialog(), e => e === error);
         assert.deepEqual(f.events, ['listen', 'discard', 'confirm', 'unlisten']);
     }
+});
+
+
+test('optional readback failure cannot hide reflected-state assertion failure', async () => {
+    const error = new Error('visible attribute still present');
+    const f = fixture({ cleanupError: new Error('probe read timeout'), assertError: error });
+    await assert.rejects(f.helper.handleStarterTemplateModal(), e => e === error);
+    assert.deepEqual(f.events.map(e=>e[0]), ['install', 'click', 'input-settled', 'assert', 'cleanup']);
+    f.expire();
+});
+
+
+test('installation timeout is unavailable telemetry, not a closed-modal signal', async () => {
+    const f = fixture({ installError: new Error('Timeout https://example.invalid/?token=secret') });
+    const warnings = [], originalWarn = console.warn;
+    console.warn = (...args) => warnings.push(args);
+    try { await f.helper.handleStarterTemplateModal(); }
+    finally { console.warn = originalWarn; }
+    assert.deepEqual(f.events.map(e=>e[0]), ['install', 'click', 'input-settled', 'assert', 'cleanup']);
+    assert.deepEqual(warnings, [['[StarterClose] diagnostic unavailable:', JSON.stringify({
+        operationSucceeded: null, unavailable: 'installation', reason: 'timeout',
+    })]]);
+    assert.equal(JSON.stringify(warnings).includes('secret'), false);
+});
+
+test('installation failure cannot hide native input failure', async () => {
+    const error = new Error('native input failed');
+    const f = fixture({ installError: new Error('probe timeout'), clickError: error });
+    await assert.rejects(f.helper.handleStarterTemplateModal(), e => e === error);
+    assert.deepEqual(f.events.map(e=>e[0]), ['install', 'click', 'cleanup']);
+});
+
+test('installation failure cannot hide required attribute assertion failure', async () => {
+    const error = new Error('modal still visible');
+    const f = fixture({ installError: new Error('probe timeout'), assertError: error });
+    await assert.rejects(f.helper.handleStarterTemplateModal(), e => e === error);
+    assert.deepEqual(f.events.map(e=>e[0]), ['install', 'click', 'input-settled', 'assert', 'cleanup']);
+});
+
+test('partial probe initialization rolls back listeners and observer before required input', async () => {
+    const f = fixture({ observeError: new Error('observer initialization failed') });
+    await f.helper.handleStarterTemplateModal();
+    assert.equal(f.listenerCount(), 0);
+    assert.deepEqual(f.cleanupCounts(), { disconnected: 1, cleared: 0 });
+    assert.equal(f.element.__e2eStarterProbe, undefined);
+    assert.equal(f.events.filter(e=>e[0]==='click').length, 1);
+    assert.equal(f.events.filter(e=>e[0]==='assert').length, 1);
+});
+
+test('late installation exception rolls back timer too and does not skip behavior', async () => {
+    const f = fixture({ stateReadError: new Error('probe state read failed') });
+    await f.helper.handleStarterTemplateModal();
+    assert.equal(f.listenerCount(), 0);
+    assert.deepEqual(f.cleanupCounts(), { disconnected: 1, cleared: 1 });
+    assert.equal(f.element.__e2eStarterProbe, undefined);
+    assert.equal(f.events.filter(e=>e[0]==='click').length, 1);
+});
+
+test('protocol rejection after probe installation retains self-expiring cleanup', async () => {
+    const f = fixture({ installAfterCallbackError: new Error('protocol timeout'), cleanupError: new Error('page unavailable') });
+    await f.helper.handleStarterTemplateModal();
+    assert.equal(f.events.filter(e=>e[0]==='click').length, 1);
+    assert.equal(f.events.filter(e=>e[0]==='assert').length, 1);
+    f.expire();
+    assert.equal(f.listenerCount(), 0);
+    assert.deepEqual(f.cleanupCounts(), { disconnected: 1, cleared: 1 });
+});
+
+
+test('snapshot confirmation uses provisional 15s native-action budget', async () => {
+    const f = snapshotFixture(); await f.helper.handleSnapshotRestoreDialog();
+    assert.equal(f.confirmBudget(), 15000);
+    assert.deepEqual(f.events, ['listen', 'discard', 'confirm', 'unlisten']);
+});
+
+test('snapshot confirmation native error still fails and unregisters listener', async () => {
+    const error = new Error('confirmation click failed after possible dispatch');
+    const f = snapshotFixture({ confirmError: error });
+    await assert.rejects(f.helper.handleSnapshotRestoreDialog(), e => e === error);
+    assert.equal(f.confirmBudget(), 15000);
+    assert.deepEqual(f.events, ['listen', 'discard', 'confirm', 'unlisten']);
 });

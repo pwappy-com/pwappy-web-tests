@@ -74,6 +74,15 @@ on:
         description: "診断比較用DOM/ネットワークtrace記録（通常は有効）"
         type: boolean
         default: true
+      matrix_parallelism:
+        description: "通常テストの同時マトリックスジョブ数（負荷比較用）"
+        required: true
+        default: "5"
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "5"
       retries:
         description: "通常テストの再試行回数"
         required: true
@@ -89,10 +98,28 @@ jobs:
     runs-on: ubuntu-latest
     # このジョブの出力を定義。後続のジョブの条件分岐やマトリックスとして使用。
     outputs:
+      matrix_parallelism: ${{ steps.validate-parallelism.outputs.matrix_parallelism }}
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       run_normal: ${{ steps.get_suite.outputs.run_normal }}
       run_premium: ${{ steps.get_suite.outputs.run_premium }}
     steps:
+      - name: Validate normal matrix parallelism
+        id: validate-parallelism
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MATRIX_PARALLELISM_INPUT: ${{ inputs.matrix_parallelism }}
+        run: |
+          parallelism=5
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            parallelism="${MATRIX_PARALLELISM_INPUT:-5}"
+          fi
+          case "$parallelism" in
+            1|2|5) ;;
+            *) echo "::error::matrix_parallelism must be 1, 2, or 5"; exit 1 ;;
+          esac
+          printf 'matrix_parallelism=%s\n' "$parallelism" >> "$GITHUB_OUTPUT"
+
       - name: Determine test matrix
         id: set-matrix
         shell: bash
@@ -156,8 +183,8 @@ jobs:
       actions: write
     strategy:
       fail-fast: false
-      # 最大並列数をPC(Linux,Windows,Mac),Mobile(Android,iOS)の５つ
-      max-parallel: 5
+      # 通常は5ジョブ。手動の負荷比較時のみ検証済みの1/2/5を使用。
+      max-parallel: ${{ fromJSON(needs.prepare-matrix.outputs.matrix_parallelism) }}
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     # 7GiB ARMランナーで継続するswapを避け、同じmacOS 26の標準14GiB Intelランナーに固定。
