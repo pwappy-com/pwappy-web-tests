@@ -12,6 +12,14 @@ import { getStorageStatePath } from './tests/constants';
 
 // CI環境（GitHub Actionsなど）かどうかを判定
 const isCI = !!process.env.CI;
+// Diagnostic A/B only: missing/empty input keeps the existing snapshot-enabled behavior.
+// workflow_dispatch's event.inputs carries boolean inputs as literal strings.
+const traceSnapshotsInput = process.env.PWAPPY_TRACE_SNAPSHOTS;
+if (traceSnapshotsInput !== undefined && traceSnapshotsInput !== '' &&
+    traceSnapshotsInput !== 'true' && traceSnapshotsInput !== 'false') {
+  throw new Error('PWAPPY_TRACE_SNAPSHOTS must be true or false (or unset)');
+}
+const traceSnapshots = traceSnapshotsInput !== 'false';
 // Capture the requested cleanup account in the runner before Playwright overwrites
 // TEST_WORKER_INDEX in child processes. The dedicated value is inherited unchanged.
 const isCleanup = process.env.PWAPPY_TEST_POINTS_PHASE === 'cleanup';
@@ -57,7 +65,9 @@ export default defineConfig({
     // baseURL: 'http://localhost:3000',
 
     /* テスト失敗時にトレース情報を保存（操作手順、ネットワーク、コンソールログなどをタイムラインで確認可能） */
-    trace: 'retain-on-failure',
+    // Disabling snapshots reduces DOM/network trace evidence, not app network calls.
+    // Other trace options retain Playwright's defaults (screenshots/sources/attachments).
+    trace: { mode: 'retain-on-failure', snapshots: traceSnapshots },
 
     /* テスト失敗時に最終画面のスクリーンショットを保存 */
     screenshot: 'only-on-failure',

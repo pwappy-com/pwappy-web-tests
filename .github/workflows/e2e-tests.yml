@@ -3,6 +3,9 @@ name: Multi-OS E2E Tests
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # event.inputs preserves boolean false as the string 'false'; schedule/missing is empty.
+  # Config validates the string and defaults only missing/empty values to enabled.
+  PWAPPY_TRACE_SNAPSHOTS: ${{ github.event.inputs.trace_snapshots }}
   PWAPPY_TEST_POINTS_ENABLED: ${{ inputs.prepare_points && 'true' || vars.PWAPPY_TEST_POINTS_ENABLED }}
   PWAPPY_TEST_POINTS_READ_ENDPOINT: ${{ vars.PWAPPY_TEST_POINTS_READ_ENDPOINT }}
 concurrency:
@@ -67,6 +70,10 @@ on:
         description: "ステージングのテスト残高準備を有効化"
         type: boolean
         default: false
+      trace_snapshots:
+        description: "診断比較用DOM/ネットワークtrace記録（通常は有効）"
+        type: boolean
+        default: true
       retries:
         description: "通常テストの再試行回数"
         required: true
