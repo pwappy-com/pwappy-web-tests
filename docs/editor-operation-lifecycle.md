@@ -1,4 +1,17 @@
-# Local test-side operation lifecycle patch
+# Editor operation lifecycle: investigation and validation
+
+## Current status — 2026-10-27
+
+[Final same-revision validation](#final-same-revision-normal-suite-validation)
+passed **608 tests across five projects**, with **27 existing skips and zero
+failures**, on tests `856e525c599153a69605b8070c589cd1871f7956` and staging
+frontend `69f76ad09c6ae0c0a817edfc9982236dd75b3775`. All account cleanups passed.
+This combines three runs with one worker, serialized jobs, whole-test retries
+disabled and trace snapshots disabled; it is not validation of the workflow defaults or Premium.
+No main merge or production deployment is represented here. The historical 503
+origin and rapid cross-editor pending-write conflict remain unresolved; the
+latter has a test-sequencing correction, not an application fix. Earlier sections
+preserve the investigation history and superseded outcomes.
 
 Original patch baseline: `pwappy-com/pwappy-web-tests`, branch
 `fix/stabilize-editor-e2e-39687552586`, verified head
@@ -262,8 +275,8 @@ No default-setting change is implied by these results.
 The finalized Windows, successful Mobile Safari and both Ubuntu project logs
 showed no HTTP 503; Mobile Safari and both Ubuntu projects also showed no
 native-input timeout. This does not establish that intermittent
-503s are fixed: their root cause remains unconfirmed without server logs.
-Previously observed frontend explanation-input loss remains unmodified. Code,
+503s are fixed: server logs had not yet been inspected at this stage.
+Frontend explanation-input loss was unmodified by these test-side changes. Code,
 worker count, matrix load and recording settings changed in combinations across
 comparisons, so a passing run does not isolate one causal fix. In particular,
 [scheduled main run 40443598188](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40443598188)
@@ -278,4 +291,132 @@ are not an all-five-project pass on one SHA. Existing scenario assertions and
 pre-existing skips were preserved, but skipped tests and every business feature
 are not validated by the passing counts. Premium was not exercised by the listed
 normal-suite runs. Semantic TypeScript checking remains unverified. No application-code change, main merge
-or production deployment is represented by this test-side validation record.
+or production deployment is represented by the normal-suite runs above.
+
+
+## Subsequent frontend and staging investigation — 2026-10-27
+
+The earlier test-side results above predate the application change. Frontend
+[`69f76ad09c6ae0c0a817edfc9982236dd75b3775`](https://github.com/pwappy-com/pwappy-web/commit/69f76ad09c6ae0c0a817edfc9982236dd75b3775)
+addresses explanation-draft synchronization, focus and startup/bootstrap behavior.
+[Frontend CI 40466341181](https://github.com/pwappy-com/pwappy-web/actions/runs/40466341181)
+passed the full build, 23 state tests and four real-browser combinations
+(Ubuntu/macOS × Chromium/WebKit). These focused checks are not the normal suite.
+[Staging deployment 40466981401](https://github.com/pwappy-com/pwappy-web/actions/runs/40466981401)
+succeeded at 07:28:12 UTC; deployed asset hashes were verified against that build.
+This was staging only, not a production deployment.
+
+Tests commit `f65045d1d884f1972f5dd2f1d62a1e9d6afefe5c` adds the seven-scenario
+`quick-property-regression` selection; the default scope remains `all`. Its 174
+offline checks are separate from live browser validation.
+[Focused E2E 40467795865](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40467795865)
+completed successfully at 07:47:06 UTC on that exact test commit against the
+updated staging frontend: **35 passed, 0 failed, 0 skipped**. Each of the five
+projects passed all seven scenarios, including explanation metadata at
+`editor-quick-property-editor.spec.ts:348` (line number at the tested revision):
+
+| Project | Focused-suite duration | Cleanup result |
+| --- | --- | --- |
+| Ubuntu Chromium | 1.1m | 1 passed (4.5s) |
+| Ubuntu Mobile Chrome | 56.1s | 1 passed (3.9s) |
+| Windows Chromium | 1.2m | 1 passed (5.1s) |
+| macOS WebKit | 2.3m | 1 passed (6.8s) |
+| macOS Mobile Safari | 4.6m | 1 passed (8.4s) |
+
+All five cleanup steps succeeded. Jobs ran sequentially with workers `1`, retries
+`0`, matrix parallelism `1`, trace snapshots `false` and point preparation enabled.
+Finalized logs showed no actual HTTP 503 or native-input timeout warnings. The
+07:33:05–07:47:05 UTC test-job interval did not overlap the inspected main jobs
+(latest end 06:32:21 UTC) or staging deployment (end 07:28:12 UTC).
+These seven scenarios per project validate the focused correction, not the full
+normal or Premium suite, production behavior, or a latency distribution.
+
+[Bounded server-log diagnostic 40462359543](https://github.com/pwappy-com/pwappy-web/actions/runs/40462359543)
+at `d2ac19da5233d6da21d9141d8840db37c676406e` found 19,435 requests in the
+01:18:50–01:30:24 UTC incident window, including 157 HTTP 503 responses
+(29 GET and 10 PUT classified as editor-json), plus three HTTP 507 responses
+classified as GET/other. These are counts in the inspected log data, not guaranteed
+complete incident totals: the current-log read was bounded to 32 MiB and truncated.
+[Error/storage diagnostic 40463551214](https://github.com/pwappy-com/pwappy-web/actions/runs/40463551214)
+at `4e0f5b7de23a9256b352e313312f1e0b3ef548a4` found no attributed error patterns
+in the incident window. Current filesystem usage was 53% and inode usage 1%;
+this does not establish historical capacity or quota state, nor does HTTP 507
+alone identify a disk problem. The server-side root cause remains unresolved;
+neither the frontend correction nor passing browser checks proves it fixed.
+
+### Full normal-suite follow-up on the updated staging frontend
+
+[Run 40469724484](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40469724484)
+completed at 10:43:58 UTC on tests commit
+`f65045d1d884f1972f5dd2f1d62a1e9d6afefe5c` and staging frontend
+`69f76ad09c6ae0c0a817edfc9982236dd75b3775`: **607 passed, 27 skipped, 1 failed**.
+Unlike the earlier cross-revision results, all five projects tested the same test
+commit, but this was not a full pass.
+
+| Project | Passed / failed / skipped | Normal-suite duration |
+| --- | --- | --- |
+| Ubuntu Chromium | 122 / 0 / 5 | 19.8m |
+| Ubuntu Mobile Chrome | 121 / 0 / 6 | 21.2m |
+| Windows Chromium | 121 / 1 / 5 | 18.3m |
+| macOS WebKit | 122 / 0 / 5 | 56.0m |
+| macOS Mobile Safari | 121 / 0 / 6 | 51.8m |
+
+The sole failure was the style-sizing scenario at
+`editor-ui-properties-2.spec.ts:227`, invalid-CSS assertion at line 293.
+Explanation metadata at `editor-quick-property-editor.spec.ts:348` passed in all
+five projects. All five account
+cleanup steps succeeded. Final logs showed no actual HTTP 503 or native-input
+timeout warnings; this still does not resolve the historical server incident.
+The run used scope `all`, workers `1`, matrix parallelism `1`, retries `0`, trace
+snapshots `false` and point preparation enabled, not the workflow defaults.
+Inspected main/deployment job intervals did not overlap this run. Premium was
+not exercised; the 27 existing skips are not passing coverage.
+
+Tests-only follow-up `856e525c599153a69605b8070c589cd1871f7956` adds a raw inline
+declaration `width: 300px` commit barrier after Monaco input/readback and before switching tabs.
+The failing trace showed invalid input beginning 74ms after the Monaco helper,
+while the prior write was deferred by 100ms; later reads still saw `width: 300px`.
+This supports an ordering race, but the trace does not prove the exact dispatch
+interleaving.
+The barrier orders the existing scenario without changing its final invalid-CSS
+assertion or timeouts. See [style-sizing commit ordering](style-sizing-commit-order.md)
+for the evidence and eight offline regression checks (182 offline checks total).
+This does not fix the residual product-level conflict between pending writes from
+different editors. Subsequent full-suite validation is recorded below.
+
+
+### Final same-revision normal-suite validation
+
+All five normal projects completed on tests
+`856e525c599153a69605b8070c589cd1871f7956` against staging frontend
+`69f76ad09c6ae0c0a817edfc9982236dd75b3775`, across the three runs below:
+**608 passed, 27 skipped, 0 failed**. The final run completed at 13:06:10 UTC.
+
+| Run / project | Passed / failed / skipped | Normal-suite duration | Account cleanup |
+| --- | --- | --- | --- |
+| [40491183079](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40491183079), Windows Chromium | 122 / 0 / 5 | 18.8m | 1 passed (4.5s) |
+| [40493991207](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40493991207), Ubuntu Chromium | 122 / 0 / 5 | 17.9m | 1 passed (4.0s) |
+| [40493991207](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40493991207), Ubuntu Mobile Chrome | 121 / 0 / 6 | 19.7m | 1 passed (4.7s) |
+| [40499176746](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40499176746), macOS WebKit | 122 / 0 / 5 | 32.7m | 1 passed (6.3s) |
+| [40499176746](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40499176746), macOS Mobile Safari | 121 / 0 / 6 | 40.2m | 1 passed (9.8s) |
+
+Each run used normal scope `all`, workers `1`, matrix parallelism `1`, retries
+`0`, trace snapshots `false` and point preparation enabled. These manual settings
+do not change the workflow defaults. All five projects passed the style-sizing
+scenario at `editor-ui-properties-2.spec.ts:227` (execution #69) and explanation
+metadata at `editor-quick-property-editor.spec.ts:348`; finalized logs contained
+no actual HTTP 503 or native-input timeout warnings. All five account-cleanup
+steps succeeded. Existing assertions and the 27 pre-existing skips were
+preserved; skipped cases are not validated, and Premium was not exercised.
+
+The final macOS run must not be described as fully isolated: scheduled main run
+[40508600487](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40508600487)
+at `3bd403ae26e7ad447eef495e18b2bd06f659ac18` started Ubuntu Chromium and
+Mobile Chrome test steps at 13:02:48 and 13:02:50 UTC respectively. These overlapped
+the final Mobile Safari test phase until 13:05:40 and its cleanup until 13:05:59.
+Mobile Safari style-sizing at `editor-ui-properties-2.spec.ts:227` (12:48:25) and
+metadata at `editor-quick-property-editor.spec.ts:348` (12:31:28) passed before that
+overlap.
+No deployment overlapped. Passing results do not resolve the historical
+server-side 503 cause or the application's rapid cross-editor pending-write
+conflict, nor establish high-percentile latency or a causal performance gain.
