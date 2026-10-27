@@ -1,6 +1,6 @@
 # Local test-side operation lifecycle patch
 
-Baseline: `pwappy-com/pwappy-web-tests`, branch
+Original patch baseline: `pwappy-com/pwappy-web-tests`, branch
 `fix/stabilize-editor-e2e-39687552586`, verified head
 `4ec2c08458e3f0b96e475d9391c7b6b49582f667`.
 
@@ -85,16 +85,16 @@ assertion negative controls, original-error preservation during page-closure cle
 full probe expiration/cleanup, existing-app short circuit, exact-one insertion and
 snapshot listener removal. No browser, target site, credentials or real data.
 
-The current combined follow-up revision has not yet undergone live Playwright or
-semantic TypeScript validation. Earlier revisions were exercised in the runs
-documented below; those outcomes do not validate these later corrections.
+At the offline-validation stage, live Playwright and semantic TypeScript checks
+were not performed. Subsequent live results are recorded in the dated section
+below; they do not constitute a semantic TypeScript check.
 This local snapshot has no installed Playwright/TypeScript dependencies.
 No dependency installations, workflow triggers,
 remote commits/pushes or deployment were performed during local validation. `node --check` on the TypeScript
 source is not a valid check here (it uses the JS parser and rejects type annotations);
 the actual module is parsed and executed by the offline import tests instead.
 
-Next authorized isolated E2E run should record action+trace completion, assertion
+Further isolated E2E investigation should record action+trace completion, assertion
 latency, input count, and cleanup ordering on each failing browser. Keep native
 input failures visible; an observed modal close does not turn a thrown click into
 success. Validate time budgets from a distribution, not from a single sample.
@@ -148,8 +148,9 @@ Offline lifecycle verification now passes24 tests, including unavailable install
 with successful behavior, native failure and attribute failure; partial listener/
 observer rollback; late initialization timer rollback; and protocol rejection
 with a successfully installed self-expiring probe. Real input cleanup still fails
-on error. Live E2E and TypeScript semantic checking remain separate/unperformed for
-this local correction. Awaited diagnostics can still consume the outer test budget.
+on error. Live E2E and TypeScript semantic checks were not performed at this
+local-correction stage; subsequent live results are recorded below. Awaited
+diagnostics can still consume the outer test budget.
 
 Separate finding (NOT changed by this diagnostic patch): Safari snapshot-confirm
 case2f0d8 call@4480 times out at5005ms. Locator resolution consumes3448ms;
@@ -220,8 +221,9 @@ The combined offline lifecycle harness now passes35 tests, including delayed
 appearance/content, pending/absent/placeholder negatives, no operations before
 readiness, visible-modal precedence, disconnected-marker negatives, strict required-read failure and a late-read
 negative control. State-sequence doubles validate orchestration, not real browser
-latency or Playwright's internal clock. Real E2E and semantic type validation remain
-outstanding; this candidate is local and must not alter the active ec60979 run.
+latency or Playwright's internal clock. Real E2E and semantic type validation were
+outstanding at this stage; the candidate did not alter the then-active ec60979
+run. Subsequent live results are recorded below.
 
 A product-shaped native DOM/ShadowRoot check was prepared outside the publishable
 patch, but installed Chromium could not start under this environment's socket
@@ -230,5 +232,50 @@ browser privileges were escalated, no workaround was attempted, and no real-DOM
 browser pass is claimed. The source-specific same-tree assumption was independently
 verified from [TemplateContainer.js at b89dd73](https://github.com/pwappy-com/pwappy-web/blob/b89dd73/src/components/TemplateContainer.js#L1641-L1660)
 and its [recursive node construction](https://github.com/pwappy-com/pwappy-web/blob/b89dd73/src/components/TemplateContainer.js#L1726-L1793).
-The future authorized E2E run remains the browser-level verification; no new
-browser-dependent test was added to the publishable offline suite.
+The live runs below provide separate browser-level evidence; no new
+browser-dependent test was added to the offline suite.
+
+
+## Live normal-suite validation — 2026-10-27
+
+These are real Playwright normal-suite runs, separate from the mocked offline
+contracts above. Counts exclude the separate cleanup tests; durations are the
+Playwright normal-suite summaries. Every listed project's cleanup step succeeded;
+Ubuntu run `40452803611` completed successfully at 05:38:12 UTC.
+
+| Run / project | Tested commit | Workers | Passed / failed / skipped | Duration |
+| --- | --- | ---: | --- | --- |
+| [40437301666](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40437301666), Windows Chromium | `ec60979e665fa1834874fb53e650f8bcf3f72a2f` | 2 | 122 / 0 / 5 | 28.9m |
+| [40440727088](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40440727088), macOS desktop WebKit | `8ff119000d9441cc75dd68183487fc4d192e29c7` | 2 | 122 / 0 / 5 | 21.6m |
+| [40440727088](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40440727088), macOS Mobile Safari | `8ff119000d9441cc75dd68183487fc4d192e29c7` | 2 | 119 / 2 / 6 | 39.5m |
+| [40449179165](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40449179165), macOS Mobile Safari | `c123249c467a53e17e72c30d320ec71bea4621c0` | 1 | 121 / 0 / 6 | 29.6m |
+| [40452803611](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40452803611), Ubuntu Chromium | `c123249c467a53e17e72c30d320ec71bea4621c0` | 1 | 122 / 0 / 5 | 19.1m |
+| [40452803611](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40452803611), Ubuntu Mobile Chrome | `c123249c467a53e17e72c30d320ec71bea4621c0` | 1 | 121 / 0 / 6 | 17.5m |
+
+All listed runs use normal scope `all`, matrix parallelism `1`, trace snapshots
+`false`, and retries `0`; matrix serialization does not mean one worker per job.
+These are manual validation settings, **not workflow defaults**. At `c123249`,
+[workflow-dispatch defaults](https://github.com/pwappy-com/pwappy-web-tests/blob/c123249c467a53e17e72c30d320ec71bea4621c0/.github/workflows/e2e-tests.yml)
+remain workers `75%`, matrix parallelism `5`, trace snapshots `true`, retries `5`.
+No default-setting change is implied by these results.
+
+The finalized Windows, successful Mobile Safari and both Ubuntu project logs
+showed no HTTP 503; Mobile Safari and both Ubuntu projects also showed no
+native-input timeout. This does not establish that intermittent
+503s are fixed: their root cause remains unconfirmed without server logs.
+Previously observed frontend explanation-input loss remains unmodified. Code,
+worker count, matrix load and recording settings changed in combinations across
+comparisons, so a passing run does not isolate one causal fix. In particular,
+[scheduled main run 40443598188](https://github.com/pwappy-com/pwappy-web-tests/actions/runs/40443598188)
+executed Premium jobs on Ubuntu Chromium, Ubuntu Mobile Chrome and Windows during
+03:20–03:54 UTC, overlapping the failed Mobile Safari phase of `40440727088`
+(03:13–03:52 UTC). This is a shared-staging/server-load confound, not evidence of
+shared Safari-account use: the scheduled macOS jobs were canceled without steps.
+The desktop WebKit phase finished before that scheduled run started.
+
+Windows and desktop WebKit passed earlier commits, not `c123249`; these results
+are not an all-five-project pass on one SHA. Existing scenario assertions and
+pre-existing skips were preserved, but skipped tests and every business feature
+are not validated by the passing counts. Premium was not exercised by the listed
+normal-suite runs. Semantic TypeScript checking remains unverified. No application-code change, main merge
+or production deployment is represented by this test-side validation record.
