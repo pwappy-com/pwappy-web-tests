@@ -52,27 +52,34 @@ export class EditorHelper {
                 const loadingOverlay = this.page.locator('app-container-loading-overlay');
                 await expect(loadingOverlay).toBeHidden({ timeout: 15000 });
 
-                // 2. PlaywrightのロケータでDOMツリーを走査し、空アプリかどうかを判定（Shadow DOM透過）
-                const domTree = this.page.locator('#dom-tree');
-                const hasContents = await domTree.locator('.node[data-node-type="page"], .node[data-node-type="ons-navigator"]').count() > 0;
-                const isEmptyApp = !hasContents;
-
-                log(`アプリの状態判定: ${isEmptyApp ? '【新規・空アプリ】' : '【既存・要素ありアプリ】'}`);
-
-                // 既存の要素があるアプリの場合、モーダルは絶対に表示されないため即終了
-                if (!isEmptyApp) {
-                    log('要素ありアプリのため、待機なしで終了します。[スキップ成功]');
-                    return;
-                }
-
-                // 3. 空アプリの場合のみ、モーダルに 'visible' 属性が付与されるのを最大6秒間待機（Shadow DOM自動透過）
-                log('新規アプリのため、モーダル出現（visible属性）を最大6秒間待機します...');
+                // Loading=false precedes asynchronous initial save/snapshot checks in the
+                // app. Observe a positive startup outcome instead of classifying one empty
+                // count as ready and imposing a separate six-second appearance deadline.
                 const starterModal = this.page.locator('starter-template-modal');
+                const startupMarkers = this.page.locator(
+                    '#dom-tree .node[data-node-type="page"], #dom-tree .node[data-node-type="ons-navigator"], starter-template-modal'
+                );
+                const startup = { state: 'pending' as 'pending' | 'existing-content' | 'starter-visible' };
+                await expect.poll(async () => {
+                    // One atomic, read-only DOM observation. Empty DOM and a hidden modal
+                    // placeholder are pending, never evidence that setup can be skipped.
+                    startup.state = await startupMarkers.evaluateAll(nodes => {
+                        if (nodes.some(node => node.isConnected && node.matches('starter-template-modal[visible]'))) return 'starter-visible';
+                        // TemplateContainer renders #dom-tree and ordinary recursive .node
+                        // descendants in the SAME shadow tree (b89dd73). Recheck that scope
+                        // to reject stale selected nodes moved elsewhere before this read.
+                        if (nodes.some(node => node.isConnected && node.matches('#dom-tree .node[data-node-type="page"], #dom-tree .node[data-node-type="ons-navigator"]'))) return 'existing-content';
+                        return 'pending';
+                    });
+                    return startup.state;
+                }, {
+                    // Inherit configured expect observation budget (CI20s/local10s), not
+                    // a product SLA. No clicks, probe installation or state writes in poll.
+                    message: 'Editor startup must expose existing content or the visible starter modal'
+                }).not.toBe('pending');
+                if (startup.state === 'existing-content') return;
 
-                // expect の組み込みリトライ（toHaveAttribute）を使って確実に属性の付与を待つ
-                await expect(starterModal).toHaveAttribute('visible', '', { timeout: 6000 });
-                log('モーダルの出現を確認しました！');
-
+                // A known visible starter takes priority over content: never skip a blocker.
                 // 4. モーダルのスキップ処理
                 const skipBtn = starterModal.locator('.btn-skip, button:has-text("閉じて一から自分で作る")').first();
                 await expect(skipBtn).toBeVisible({ timeout: 2000 });

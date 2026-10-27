@@ -18,10 +18,21 @@ function expect(locator) {
         } },
     };
 }
-expect.poll = (read, options) => ({ toHaveLength: async length => {
-    assert.equal(options.timeout, 10000);
-    assert.equal((await read()).length, length);
-} });
+expect.poll = (read, options) => ({
+    toHaveLength: async length => {
+        assert.equal(options.timeout, 10000);
+        assert.equal((await read()).length, length);
+    },
+    not: { toBe: async value => {
+        // Test double's finite observation rounds, not a replacement production timeout.
+        // The actual helper must inherit Playwright's configured expect budget.
+        assert.equal(options.timeout, undefined);
+        for (let round = 0; round < 12; round++) {
+            if (await read() !== value) return;
+        }
+        assert.fail('startup observation budget exhausted: still pending');
+    } },
+});
 globalThis.__offlinePlaywright = { test: runtime, expect };
 registerHooks({ resolve(specifier, context, nextResolve) {
     if (specifier === '@playwright/test') return { shortCircuit: true, url: 'data:text/javascript,const p=globalThis.__offlinePlaywright;export const test=p.test,expect=p.expect,FrameLocator=class{},Page=class{},BrowserContext=class{};' };
@@ -31,7 +42,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 const { EditorHelper } = await import('../tests/tools/editor-helpers.ts');
 
 function deferred() { let resolve, reject; const promise = new Promise((a,b) => { resolve=a;reject=b; }); return { promise, resolve, reject }; }
-function fixture({ clickError, assertError, cleanupError, installError, observeError, stateReadError, installAfterCallbackError, clickGate, existing = false, initiallyClosed = false } = {}) {
+function fixture({ clickError, assertError, cleanupError, installError, observeError, stateReadError, installAfterCallbackError, clickGate, startupStates, startupGate, startupReadError, existing = false, initiallyClosed = false } = {}) {
     const events = [];
     let now = 0, heartbeat, disconnected = 0, cleared = 0;
     let listeners = 0;
@@ -70,10 +81,33 @@ function fixture({ clickError, assertError, cleanupError, installError, observeE
             return result;
         },
     };
-    const page = { locator: selector => selector === 'starter-template-modal' ? modal : {
-        locator: () => ({ count: async () => existing ? 1 : 0 }),
-    }, waitForTimeout: async () => {} };
-    return { helper: new EditorHelper(page, false), events, element,
+    const startupReads = [];
+    const readinessStates = startupStates ?? [existing ? 'content' : 'modal'];
+    const startupMarkers = { evaluateAll: async callback => {
+        if (startupGate) await startupGate.promise;
+        if (startupReadError) throw startupReadError;
+        const state = readinessStates[Math.min(startupReads.length, readinessStates.length - 1)];
+        startupReads.push(state);
+        const node = (kind, visible = false, connected = true, inTree = true) => ({ isConnected: connected, matches: selector =>
+            selector === 'starter-template-modal[visible]' ? kind === 'modal' && visible
+                : selector === 'starter-template-modal' ? kind === 'modal'
+                : inTree && (kind === 'page' || kind === 'navigator') });
+        const nodes = state === 'modal' ? [node('modal', true)]
+            : state === 'content' ? [node('page')]
+            : state === 'navigator' ? [node('navigator')]
+            : state === 'both' ? [node('page'), node('modal', true)]
+            : state === 'placeholder' ? [node('modal')]
+            : state === 'moved-content' ? [node('page', false, true, false)]
+            : state === 'detached-content' ? [node('page', false, false)]
+            : state === 'detached-modal' ? [node('modal', true, false)]
+            : state === 'content-detached-modal' ? [node('page'), node('modal', true, false)]
+            : [];
+        return callback(nodes);
+    } };
+    const page = { locator: selector => selector === 'starter-template-modal' ? modal
+        : selector.startsWith('#dom-tree .node') ? startupMarkers : {},
+        waitForTimeout: async () => {} };
+    return { helper: new EditorHelper(page, false), events, element, startupReads,
         expire: () => { now = 30001; heartbeat(); },
         cleanupCounts: () => ({ disconnected, cleared }), listenerCount: () => listeners };
 }
@@ -328,4 +362,89 @@ test('snapshot confirmation native error still fails and unregisters listener', 
     await assert.rejects(f.helper.handleSnapshotRestoreDialog(), e => e === error);
     assert.equal(f.confirmBudget(), 15000);
     assert.deepEqual(f.events, ['listen', 'discard', 'confirm', 'unlisten']);
+});
+
+
+test('startup tolerates repeated pending reads before late visible modal without premature input', async () => {
+    const f = fixture({ startupStates: [...Array(8).fill('placeholder'), 'modal'] });
+    await f.helper.handleStarterTemplateModal();
+    assert.equal(f.startupReads.length, 9);
+    assert.equal(f.events.filter(e=>e[0]==='click').length, 1);
+    assert.equal(f.events.filter(e=>e[0]==='assert').length, 1);
+});
+
+test('no native input or diagnostics start until awaited readiness read completes', async () => {
+    const gate = deferred(); const f = fixture({ startupGate: gate });
+    let settled = false;
+    const operation = f.helper.handleStarterTemplateModal().finally(() => { settled = true; });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false); assert.deepEqual(f.events, []);
+    gate.resolve(); await operation;
+    assert.equal(f.events.filter(e=>e[0]==='click').length, 1);
+});
+
+test('absent DOM or permanently hidden placeholder fails setup without any input', async () => {
+    for (const state of ['absent', 'placeholder']) {
+        const f = fixture({ startupStates: [state] });
+        await assert.rejects(f.helper.handleStarterTemplateModal(), /still pending/);
+        assert.deepEqual(f.events, []);
+        assert.equal(f.startupReads.length, 12);
+    }
+});
+
+test('late existing page or navigator retains no-modal-input fast path', async () => {
+    for (const state of ['content', 'navigator']) {
+        const f = fixture({ startupStates: ['absent', 'placeholder', state] });
+        await f.helper.handleStarterTemplateModal();
+        assert.deepEqual(f.events, []);
+        assert.deepEqual(f.startupReads, ['absent', 'placeholder', state]);
+    }
+});
+
+test('visible starter takes priority over content so an open blocker is not skipped', async () => {
+    const f = fixture({ startupStates: ['both'] });
+    await f.helper.handleStarterTemplateModal();
+    assert.equal(f.events.filter(e=>e[0]==='click').length, 1);
+});
+
+test('read-only readiness failure cannot be downgraded as optional diagnostic failure', async () => {
+    const error = new Error('required startup observation failed');
+    const f = fixture({ startupReadError: error });
+    await assert.rejects(f.helper.handleStarterTemplateModal(), e => e === error);
+    assert.deepEqual(f.events, []);
+});
+
+test('late completion of a read after poll rejection cannot start native input', async () => {
+    // Model an outer poll deadline while a protocol read is still pending. The read
+    // is deliberately retained and awaited here; production never races native input.
+    const gate = deferred(); const f = fixture({ startupGate: gate });
+    const deadline = new Error('startup poll deadline');
+    const originalPoll = expect.poll; let pendingRead;
+    expect.poll = read => {
+        pendingRead = read();
+        return { not: { toBe: async () => { throw deadline; } } };
+    };
+    try {
+        await assert.rejects(f.helper.handleStarterTemplateModal(), e => e === deadline);
+        assert.deepEqual(f.events, []);
+        gate.resolve(); await pendingRead;
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepEqual(f.events, []);
+        assert.deepEqual(f.startupReads, ['modal']);
+    } finally { expect.poll = originalPoll; gate.resolve(); await pendingRead; }
+});
+
+
+test('detached markers remain pending and cannot skip setup', async () => {
+    for (const state of ['detached-content', 'detached-modal', 'moved-content']) {
+        const f = fixture({ startupStates: [state] });
+        await assert.rejects(f.helper.handleStarterTemplateModal(), /still pending/);
+        assert.deepEqual(f.events, []);
+    }
+});
+
+test('detached visible modal does not override connected existing content', async () => {
+    const f = fixture({ startupStates: ['content-detached-modal'] });
+    await f.helper.handleStarterTemplateModal();
+    assert.deepEqual(f.events, []);
 });

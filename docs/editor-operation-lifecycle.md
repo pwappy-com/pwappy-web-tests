@@ -40,8 +40,15 @@ that 15 seconds is sufficient.
 
 Starter input 15s and reflected-state assertion 10s are **provisional orchestration
 budgets**. Installation/readback each use 5s locator resolution timeouts. Combined
-with existing loading15s, appearance6s, button2s and settling0.3s, configured phases
-sum to58.3s, plus protocol and runtime overhead. They are not a wall-clock upper bound:
+with loading15s, configured startup observation20s CI/10s local, button2s and
+settling0.3s, configured phases sum to72.3s CI/62.3s local, plus protocol/runtime
+overhead (the previous six-second appearance phase summed to58.3s). These are not
+a wall-clock upper bound or a guarantee all phase maxima fit the outer fixture:
+shared setup currently has120s CI/60s local. Per-phase maxima are not guaranteed
+entitlements: the outer timeout intentionally caps cumulative execution. The local
+sum exceeding60s is a headroom limitation, not proof every phase must receive its
+maximum. This candidate preserves outer fixture/scenario budgets and does not
+automatically inflate global timeouts.
 Playwright locator evaluation's timeout is a resolution budget, not cancellation
 of JavaScript already running, and trace/protocol completion can overrun an action
 budget. The test/fixture needs additional headroom; do not wrap these calls in a
@@ -158,3 +165,61 @@ native-error propagation/listener removal, bringing the combined suite to26 test
 The existing separate negative controls still require both dialogs to be hidden.
 15s is not a product response-time SLA or proof of sufficient high-percentile
 latency; live verification and fixture-budget monitoring remain necessary.
+
+
+## Separate local candidate after ec60979: startup readiness observation
+
+Baseline `ec60979e665fa1834874fb53e650f8bcf3f72a2f`. The e963 WebKit script-cancel
+fixture failed its6s starter appearance assertion at1901010.570ms; the same editor
+page's1902313.849ms frame shows the starter modal fully visible (1.303s later and
+7.304s after waiting began). The earlier frame shows a real empty root and starter
+placeholder, not proof of missing DOM. This is evidence of a premature readiness
+gate, not proof that save, IndexedDB or browser scheduling was the single cause.
+Frontend startup sets loading=false before awaiting initial save and orphaned
+snapshot checking, so overlay-hidden alone is not full startup completion.
+
+The helper now uses one read-only locator.evaluateAll observation per expect.poll
+iteration to classify attached page/ons-navigator nodes and starter-modal visibility.
+Both marker predicates require isConnected. The native full #dom-tree descendant
+predicate is source-specific: TemplateContainer.js at deployed reference b89dd73
+renders a plain #dom-tree div inside its ShadowRoot (L2520); displayDOMTree gets that
+same div (L1641) and appends rootNode (L1660); createNode clones an ordinary .node
+(L1732) and recursively node.appendChild creates descendants (L1793). Thus #dom-tree
+and its content nodes share the same native tree. Native matches does not cross
+shadow-host boundaries; if this product structure changes, this assumption and the
+classifier must be revisited rather than assuming Playwright and native selectors
+have identical shadow semantics. Full-scope rechecking rejects moved-out nodes. A connected visible starter takes priority if both markers exist. Existing content preserves
+the previous no-modal-action path. No DOM, an empty tree, or hidden placeholder stays
+pending and ultimately fails setup if no positive state appears. The poll inherits
+configured expect timeout (20s CI/10s local) rather than imposing another short4/6s
+cap. Caller opt-out (skipStarterModal:false) remains outside this helper and unchanged;
+no new demo/empty-app success exemption was invented.
+
+This is a narrow replacement of the prior content-or-starter decision, not a claim
+of a universal editor startup-complete flag. Existing overlay-hidden prerequisite
+and snapshot-dialog handling remain unchanged. In particular, this patch does not
+silently dismiss any late snapshot dialog or expand startup orchestration.
+
+All mutation/probe installation is after the awaited successful poll. A pending
+protocol read can finish after a poll deadline, but it cannot cause a later click:
+the helper already rejected, and the callback only reads DOM/assigns local result.
+The offline regression explicitly models this ordering and waits for that late
+read to finish. This distinguishes harmless late reads from the removed mutating
+toPass callbacks; it does not claim browser protocol cancellation.
+
+The combined offline lifecycle harness now passes35 tests, including delayed
+appearance/content, pending/absent/placeholder negatives, no operations before
+readiness, visible-modal precedence, disconnected-marker negatives, strict required-read failure and a late-read
+negative control. State-sequence doubles validate orchestration, not real browser
+latency or Playwright's internal clock. Real E2E and semantic type validation remain
+outstanding; this candidate is local and must not alter the active ec60979 run.
+
+A product-shaped native DOM/ShadowRoot check was prepared outside the publishable
+patch, but installed Chromium could not start under this environment's socket
+restriction (`process_singleton_posix socket(): Operation not permitted`). No
+browser privileges were escalated, no workaround was attempted, and no real-DOM
+browser pass is claimed. The source-specific same-tree assumption was independently
+verified from [TemplateContainer.js at b89dd73](https://github.com/pwappy-com/pwappy-web/blob/b89dd73/src/components/TemplateContainer.js#L1641-L1660)
+and its [recursive node construction](https://github.com/pwappy-com/pwappy-web/blob/b89dd73/src/components/TemplateContainer.js#L1726-L1793).
+The future authorized E2E run remains the browser-level verification; no new
+browser-dependent test was added to the publishable offline suite.
