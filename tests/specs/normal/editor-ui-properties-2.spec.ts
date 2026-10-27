@@ -267,7 +267,14 @@ test.describe('エディタ内機能のテスト (後半)', () => {
             await expect(styleEditor).toBeVisible();
 
             const brokenStyle = 'element.style {\n    width: 300px\n}';
-            await editorHelper.setMonacoValue(styleEditor, brokenStyle);
+            const brokenStyleUpdate = await editorHelper.setMonacoValue(styleEditor, brokenStyle);
+            expect(brokenStyleUpdate.success).toBe(true);
+            expect(brokenStyleUpdate.actual).toBe(brokenStyle);
+
+            // Monaco commits asynchronously. Finish this edit before switching to
+            // the attribute editor so its pending write cannot overwrite the next edit.
+            const previewBeforeSizing = editorHelper.getPreviewElement(previewSelector);
+            await expect(previewBeforeSizing).toHaveAttribute('style', /^\s*width:\s*300px\s*;?\s*$/);
 
             await editorHelper.switchTabInContainer(propertyContainer, '属性');
             const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
