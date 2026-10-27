@@ -15,7 +15,9 @@ type EditorFixtures = {
 };
 
 const test = base.extend<EditorFixtures>({
-    editorPage: async ({ page, context }, use) => {
+    // Keep dashboard/editor startup separate from the scenario budget.
+    // A slow startup must still fail within the existing CI/local test limit.
+    editorPage: [async ({ page, context }, use) => {
         await gotoDashboard(page);
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
@@ -27,7 +29,7 @@ const test = base.extend<EditorFixtures>({
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
         await editorPage.close();
-    },
+    }, { timeout: process.env.CI ? 120000 : 60000 }],
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
         await use(helper);

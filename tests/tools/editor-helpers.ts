@@ -102,12 +102,19 @@ export class EditorHelper {
                         heartbeat.ticks++;
                         heartbeat.hiddenObserved ||= document.hidden;
                         // Bound lifetime even if navigation prevents explicit cleanup.
-                        if (now - heartbeat.startedAt >= 30000) clearInterval(timer);
+                        if (now - heartbeat.startedAt >= 30000) cleanup();
                     }, 250);
-                    element.__e2eStarterProbe = { samples, listener, observer, types, heartbeat, timer };
-                    // Reuse this state for the first attempt, avoiding a second protocol round trip.
+                    const cleanup = () => {
+                        for (const type of types) element.shadowRoot.removeEventListener(type, listener, true);
+                        element.removeEventListener('starter-modal-closed', listener, true);
+                        observer.disconnect();
+                        clearInterval(timer);
+                        delete element.__e2eStarterProbe;
+                    };
+                    element.__e2eStarterProbe = { samples, heartbeat, cleanup };
+                    // Reuse this state before the one native input, avoiding another protocol round trip.
                     return element.getAttribute('visible');
-                });
+                }, undefined, { timeout: 5000 });
                 const closeStartedAt = Date.now();
                 const nodeDelay = monitorEventLoopDelay({ resolution: 20 });
                 nodeDelay.enable();
@@ -118,37 +125,22 @@ export class EditorHelper {
                     if (phaseTimes.length < 20) phaseTimes.push({ phase: closePhase, elapsedMs: Date.now() - phaseStartedAt });
                 };
                 let closeSucceeded = false;
-                let firstCloseAttempt = true;
                 try {
-                    await expect(async () => {
-                        log('スキップボタンのクリックを試行します。');
-    
-                        // 操作可能になるまで待ち、閉鎖済みなら再クリックしない。
-                        closePhase = firstCloseAttempt ? 'reuse-visible' : 'read-visible';
+                    // One awaited native input, never a mutating toPass callback. A toPass
+                    // deadline does not cancel its callback or a protocol call in flight.
+                    // Provisional orchestration budgets, NOT a product SLA: one observed
+                    // client action took 9.739s (including post-action tracing).
+                    if (initialVisible !== null) {
+                        closePhase = 'native-click';
                         phaseStartedAt = Date.now();
-                        // The probe just read this attribute. Re-read on retries so a completed
-                        // close never triggers another click.
-                        const useInitialVisible = firstCloseAttempt;
-                        firstCloseAttempt = false;
-                        const visible = useInitialVisible ? initialVisible : await starterModal.getAttribute('visible');
+                        await skipBtn.click({ timeout: 15000 });
                         finishPhase();
-                        if (visible !== null) {
-                            closePhase = 'native-click';
-                            phaseStartedAt = Date.now();
-                            await skipBtn.click({ timeout: 2000 });
-                            finishPhase();
-                        }
-                        closePhase = 'assert-hidden';
-                        phaseStartedAt = Date.now();
-    
-                        // モーダルが閉じた（visible属性が消えた）ことを検証
-                        await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 1000 });
-                        finishPhase();
-                    }).toPass({
-                        timeout: 4000,
-                        intervals: [300]
-                    });
-    
+                    }
+                    closePhase = 'assert-hidden';
+                    phaseStartedAt = Date.now();
+                    await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 10000 });
+                    finishPhase();
+
                     closeSucceeded = true;
                 } finally {
                     nodeDelay.disable();
@@ -164,17 +156,21 @@ export class EditorHelper {
                     // Emit the runner-side duration before reading the page, even if its renderer is stalled.
                     if (!closeSucceeded) console.log('[StarterClose] operation failed after ms:', Date.now() - closeStartedAt);
                     const diagnosticStartedAt = Date.now();
-                    const diagnostic = await starterModal.evaluate((element: any) => {
-                        const probe = element.__e2eStarterProbe;
-                        for (const type of probe.types) element.shadowRoot.removeEventListener(type, probe.listener, true);
-                        element.removeEventListener('starter-modal-closed', probe.listener, true);
-                        probe.observer.disconnect();
-                        clearInterval(probe.timer);
-                        const heartbeat = { ...probe.heartbeat, observationMs: performance.now() - probe.heartbeat.startedAt, tailGapMs: performance.now() - probe.heartbeat.lastAt, hiddenAtRead: document.hidden };
-                        delete element.__e2eStarterProbe;
-                        return { samples: probe.samples, visible: element.hasAttribute('visible'), heartbeat };
-                    });
-                    if (!closeSucceeded) console.log('[StarterClose] native events and reflected state:', JSON.stringify({ ...diagnostic, diagnosticElapsedMs: Date.now() - diagnosticStartedAt }));
+                    try {
+                        const diagnostic = await starterModal.evaluate((element: any) => {
+                            const probe = element.__e2eStarterProbe;
+                            if (!probe) return { unavailable: 'probe expired or already cleaned' };
+                            const heartbeat = { ...probe.heartbeat, observationMs: performance.now() - probe.heartbeat.startedAt, tailGapMs: performance.now() - probe.heartbeat.lastAt, hiddenAtRead: document.hidden };
+                            probe.cleanup();
+                            return { samples: probe.samples, visible: element.hasAttribute('visible'), heartbeat };
+                        }, undefined, { timeout: 5000 });
+                        if (!closeSucceeded) console.log('[StarterClose] native events and reflected state:', JSON.stringify({ ...diagnostic, diagnosticElapsedMs: Date.now() - diagnosticStartedAt }));
+                    } catch (cleanupError) {
+                        // A detached/closed page must not replace the native action/assertion
+                        // failure. On the success path cleanup failures are still failures.
+                        if (closeSucceeded) throw cleanupError;
+                        console.error('[StarterClose] diagnostic cleanup failed:', cleanupError);
+                    }
                 }
 
                 log('モーダルの閉鎖完了。');
@@ -216,16 +212,14 @@ export class EditorHelper {
                     const discardConfirmDialog = this.page.locator('message-box', {
                         hasText: 'すべてのスナップショットを破棄しますか？'
                     });
-                    await expect(async () => {
-                        if (!await discardConfirmDialog.isVisible()) {
-                            await discardInitialBtn.click({ timeout: 5000 });
-                        }
-                        // クリックの完了ではなく、次の確認画面への遷移を成功条件にする。
-                        await expect(discardConfirmDialog).toBeVisible({ timeout: 5000 });
-                    }).toPass({ timeout: 15000, intervals: [500] });
+                    if (!await discardConfirmDialog.isVisible()) {
+                        await discardInitialBtn.click({ timeout: 10000 });
+                    }
+                    // Await the postcondition without replaying a mutating input.
+                    await expect(discardConfirmDialog).toBeVisible({ timeout: 10000 });
 
                     // --- 3. 「はい、破棄します」をクリック（活性化を待って確実に実行） ---
-                    // アニメーション等の遅延による空振りを防ぐため、ボタンが有効化されるまで toPass で再試行します
+                    // 通常クリックを一度だけ実行し、閉鎖を別途検証します
                     const discardBtn = discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' });
                     // force クリックの完了だけでは閉鎖を保証できない。
                     // 通常クリックで操作可能性を待ち、実際の閉鎖まで検証する。
@@ -298,29 +292,25 @@ export class EditorHelper {
             nodes.map(node => node.getAttribute('data-node-id'))
                 .filter((id): id is string => id !== null && !previousIds.includes(id)), existingIds);
 
-        // 既存ノードを成功と誤認せず、途中で失敗したドラッグの押下状態も解除する。
-        let attempt = 0;
-        await expect(async () => {
-            const attemptStarted = Date.now();
-            console.log(`[EditorSync:addComponent] component=${componentName} attempt=${++attempt} start`);
+        // Native drag is performed once. Retrying an input after a slow postcondition
+        // can create duplicates, and toPass can outlive its outer deadline.
+        await expect(this.page.locator('app-container-loading-overlay')).toBeHidden({ timeout: 10000 });
+        await this.page.mouse.up();
+        let dragSucceeded = false;
+        try {
+            await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, {
+                targetPosition: { x: 10, y: 10 }, timeout: 15000
+            });
+            dragSucceeded = true;
+        } finally {
             try {
-                if ((await getAddedIds()).length === 0) {
-                    await expect(this.page.locator('app-container-loading-overlay')).toBeHidden({ timeout: 10000 });
-                    await this.page.mouse.up();
-                    try {
-                        await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, {
-                            targetPosition: { x: 10, y: 10 }, timeout: 10000
-                        });
-                    } finally {
-                        await this.page.mouse.up();
-                    }
-                }
-                await expect.poll(getAddedIds, { timeout: 5000 }).toHaveLength(1);
-            } catch (error) {
-                console.error(`[EditorSync:addComponent] attempt=${attempt} elapsedMs=${Date.now() - attemptStarted}: ${error instanceof Error ? error.message : String(error)}`);
-                throw error;
+                await this.page.mouse.up();
+            } catch (cleanupError) {
+                if (dragSucceeded) throw cleanupError;
+                console.error('[EditorSync:addComponent] mouse release failed:', cleanupError);
             }
-        }).toPass({ timeout: 30000, intervals: [1000] });
+        }
+        await expect.poll(getAddedIds, { timeout: 10000 }).toHaveLength(1);
 
         const [addedId] = await getAddedIds();
         const newComponentNode = componentNodes.and(this.page.locator(`[data-node-id="${addedId}"]`));
@@ -2040,3 +2030,4 @@ export async function verifyScriptInTestPage(testPage: Page, expectedContents: s
 export const normalizeWhitespace = (str: string): string => {
     return str.replace(/\s+/g, ' ').trim();
 };
+
