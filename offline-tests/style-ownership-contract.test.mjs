@@ -74,9 +74,9 @@ test('native input and nonnative boundaries remain explicitly distinct', () => {
     assert.match(source, /NON-NATIVE boundary probe/);
     assert.match(source, /await button\.click\(\)/);
     assert.match(source, /await widthInput\.fill\('281px'\)/);
-    assert.match(source, /await editorPage\.keyboard\.insertText\(typed\)/);
+    assert.match(source, /await editorPage\.keyboard\.insertText\('197'\)/);
     assert.match(source, /await editorPage\.keyboard\.press\('ControlOrMeta\+z'\)/);
-    assert.match(source, /expect\(cursor\)\.toEqual\(\{ lineNumber: 3, column: 2, focused: true \}\)/);
+    assert.match(source, /expect\(cursor\)\.toEqual\(\{ lineNumber: 2, column: 15, focused: true \}\)/);
 });
 
 test('attribute and Undo probes wait for their exact timer before switching to B', () => {
@@ -115,4 +115,39 @@ test('real Undo selection followup is observed and cleaned before selecting B', 
 test('new fixture card selection preserves native actionability checks', () => {
     assert.match(source, /await appRow\.click\(\)/);
     assert.doesNotMatch(source, /force\s*:\s*true/);
+});
+
+
+test('overlap commits a native blur without a forged composed input change', () => {
+    const scenario = source.slice(source.indexOf("test('newer attribute change wins"), source.indexOf("test('quoted CSS whitespace"));
+    assert.match(scenario, /\(input as HTMLInputElement\)\.blur\(\)/);
+    assert.doesNotMatch(scenario, /dispatchEvent/);
+    assert.ok(scenario.indexOf('getModel().setValue(value)') < scenario.indexOf('(input as HTMLInputElement).blur()'));
+});
+
+test('native select-all and numeric selection are verified before typing', () => {
+    const scenario = source.slice(source.indexOf("test('native Monaco typing"));
+    assert.match(scenario, /startLineNumber: 1, startColumn: 1, endLineNumber: 3, endColumn: 2/);
+    assert.match(scenario, /getValueInRange\(host.styleEditor.getSelection\(\)\)/);
+    assert.match(scenario, /toBe\('151'\)/);
+    assert.match(scenario, /expect\(await modelText\(container\)\)\.toBe\(typed\)/);
+    assert.match(scenario, /expect.poll\(\(\) => modelText\(container\)\)\.toBe\(seed\)/);
+    assert.doesNotMatch(scenario, /setSelection|setPosition|executeEdits|pushEditOperations/);
+});
+
+
+test('numeric navigation observes native cursor progress instead of assuming soft-tab width', () => {
+    const scenario = source.slice(source.indexOf("test('native Monaco typing"));
+    assert.match(scenario, /step < 11 && position.column < 12/);
+    assert.match(scenario, /await editorPage\.keyboard\.press\('ArrowRight'\)/);
+    assert.match(scenario, /expect\(next\.column\)\.toBeGreaterThan\(position\.column\)/);
+    assert.match(scenario, /expect\(position\)\.toEqual\(\{ lineNumber: 2, column: 12 \}\)/);
+});
+
+test('native overlap requires focus and rejects page errors before its UI oracle', () => {
+    const scenario = source.slice(source.indexOf("test('newer attribute change wins"), source.indexOf("test('quoted CSS whitespace"));
+    assert.match(scenario, /await expect\(widthInput\)\.toBeFocused\(\)/);
+    assert.match(scenario, /editorPage\.on\('pageerror', recordOverlapError\)/);
+    assert.match(scenario, /editorPage\.off\('pageerror', recordOverlapError\)/);
+    assert.match(scenario, /expect\(overlapErrors, [^\n]+\)\.toEqual\(\[\]\)/);
 });

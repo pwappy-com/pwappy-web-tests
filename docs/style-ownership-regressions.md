@@ -52,8 +52,8 @@ handler/event in the same browser turn:
 
 - DOM-tree `node.click()` invokes selection, without assigning selected classes.
 - `propertyContainer.tabChange('attributes')` invokes the real tab handler.
-- A native-filled, visible width input dispatches its actual `change` event;
-  its value is never assigned by the probe. Monaco remains mounted behind the
+- A native-filled, focused width input is blurred in the same turn, causing
+  the browser's native non-composed `change`; its value is never assigned by the probe. Monaco remains mounted behind the
   attribute tab. This is a deliberately controlled overlap, not a claim that a
   user simultaneously types into two visible controls.
 - The actual Undo toolbar button's `click()` invokes application history.
@@ -107,8 +107,40 @@ so the fourth scenario's keyboard Undo exercises the real Monaco undo stack.
   This establishes a useful negative control for the fence, **not browser proof**.
 - Real browser/staging execution, native mobile Monaco compatibility and full
   real-store/history integration remain **unverified until the candidate runs**.
-  The local environment has no installed Playwright/browser dependencies.
+  See the later correction section for the local browser launch limitation.
 
 Deploying the target frontend and running a focused hosted staging validation
 must be coordinated after the existing comparison run; the candidate itself
 does not deploy or dispatch anything. A focused pass is not a full-matrix pass.
+
+
+## Focused run 40529892242: orchestration corrections
+
+The initial candidate produced 12 passes and 8 failures across five projects.
+All five failed the native multiline typing exact-text expectation; three
+desktop projects also failed the attribute probe's subsequent B selection.
+
+- The attribute probe incorrectly forged a composed input `change`.
+  `StyleSizingEditor` emits its own composed custom change with width detail;
+  the forged original also reached `AttributesContainer` without detail and
+  raised `Cannot read properties of undefined (reading 'width')`. It also left
+  the dirty input focused. Native blur now commits the original input once in
+  the controlled overlap turn, before the independent native B selection.
+  A separate genuine native edit-to-node-click focus/rerender issue is an
+  unverified possibility, not a confirmed product defect: the observed failure
+  also contained the forged-event exception. This correction does not establish
+  whether that separate native sequence has a defect.
+- Whole multiline `keyboard.insertText` follows Monaco typing behavior, not
+  verbatim paste: observed output had automatic indentation and another closing
+  brace, while the old 151 value was fully replaced with 197. The corrected
+  test asserts Ctrl/Meta+A's exact full-model selection, then uses native arrows
+  to select exactly `151` and types `197`. Bounded read-only cursor feedback
+  accommodates soft-tab cursor steps without setting selection or position.
+  Exact model, cursor, focus and native
+  Undo assertions remain; no direct selection/model edits bypass these checks.
+
+The corrected orchestration is locally checked, not yet proven on staging.
+Python Playwright and Chromium exist locally, but sandbox browser launch is
+blocked; an attempted authorized isolated fixture escalation failed because
+the environment could not create its restricted sessions path. No bypass was
+attempted. Offline contracts are not native browser evidence.

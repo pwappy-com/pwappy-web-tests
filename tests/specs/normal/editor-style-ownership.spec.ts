@@ -183,22 +183,31 @@ test('newer attribute change wins over a pending Monaco draft (non-native overla
     const widthInput = editorHelper.getPropertyInput('style-sizing').locator('input').first();
     await expect(widthInput).toBeEditable();
     await widthInput.fill('281px'); // Real native input, not a DOM value assignment.
+    await expect(widthInput).toBeFocused();
     const hostHandle = await container.elementHandle();
     expect(hostHandle).not.toBeNull();
+    const overlapErrors: string[] = [];
+    const recordOverlapError = (error: Error) => overlapErrors.push(error.message);
+    editorPage.on('pageerror', recordOverlapError);
     try {
         // NON-NATIVE overlap probe: commit the already-native-filled attribute
-        // through its actual change listener after creating the older draft.
+        // through its native blur/change after creating the older draft.
         // Monaco remains mounted while the attribute tab is visible.
         const timer = await widthInput.evaluate((input, { host, value }) => {
             (host as any).styleEditor.getModel().setValue(value);
             const timer = (host as any)._styleDispatchTimer as number;
-            input.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+            // Native change is non-composed; the sizing component emits its own
+            // composed CustomEvent with detail. Forging a composed input change
+            // reaches the outer handler a second time with undefined detail.
+            (input as HTMLInputElement).blur();
             return timer;
         }, { host: hostHandle!, value: css('width: 999px;') });
         await awaitCapturedStyleTimer(container, timer);
     } finally {
+        editorPage.off('pageerror', recordOverlapError);
         await hostHandle?.dispose();
     }
+    expect(overlapErrors, 'native attribute overlap must not raise page errors').toEqual([]);
     await expect(previewA).toHaveCSS('width', '281px');
     await expect(widthInput).toHaveValue('281px');
     await commitStyleOnB(editorHelper, container, b, previewB);
@@ -299,8 +308,38 @@ test('native Monaco typing keeps cursor and editor Undo after its deferred commi
     await editor.click({ position: { x: 80, y: 20 } });
     await expect.poll(() => container.evaluate((host: any) => host.styleEditor.hasTextFocus())).toBe(true);
     await editorPage.keyboard.press('ControlOrMeta+a');
+    // Assert the real shortcut, rather than silently assuming selection worked.
+    expect(await container.evaluate((host: any) => {
+        const selection = host.styleEditor.getSelection();
+        return { startLineNumber: selection.startLineNumber, startColumn: selection.startColumn,
+            endLineNumber: selection.endLineNumber, endColumn: selection.endColumn };
+    })).toEqual({ startLineNumber: 1, startColumn: 1, endLineNumber: 3, endColumn: 2 });
+    // Multiline insertText is typing, not paste: Monaco applies indentation and
+    // bracket completion. Edit only the value so this test isolates ownership,
+    // cursor and Undo preservation rather than expecting typing to be verbatim.
+    await editorPage.keyboard.press('ArrowLeft');
+    await editorPage.keyboard.press('ArrowDown');
+    // Read-only cursor feedback avoids assuming one column per arrow through
+    // indentation (Monaco can move across a soft tab stop in one keypress).
+    const readPosition = () => container.evaluate((host: any) => ({
+        lineNumber: host.styleEditor.getPosition().lineNumber,
+        column: host.styleEditor.getPosition().column
+    }));
+    let position = await readPosition();
+    expect(position).toEqual({ lineNumber: 2, column: 1 });
+    for (let step = 0; step < 11 && position.column < 12; step++) {
+        await editorPage.keyboard.press('ArrowRight');
+        const next = await readPosition();
+        expect(next.lineNumber).toBe(2);
+        expect(next.column).toBeGreaterThan(position.column);
+        position = next;
+    }
+    expect(position).toEqual({ lineNumber: 2, column: 12 });
+    for (let digit = 0; digit < 3; digit++) await editorPage.keyboard.press('Shift+ArrowRight');
+    expect(await container.evaluate((host: any) =>
+        host.styleEditor.getModel().getValueInRange(host.styleEditor.getSelection()))).toBe('151');
     const typed = css('width: 197px;');
-    await editorPage.keyboard.insertText(typed);
+    await editorPage.keyboard.insertText('197');
     await expect(preview).toHaveCSS('width', '197px');
     expect(await modelText(container)).toBe(typed);
     const cursor = await container.evaluate((host: any) => ({
@@ -308,7 +347,7 @@ test('native Monaco typing keeps cursor and editor Undo after its deferred commi
         column: host.styleEditor.getPosition().column,
         focused: host.styleEditor.hasTextFocus()
     }));
-    expect(cursor).toEqual({ lineNumber: 3, column: 2, focused: true });
+    expect(cursor).toEqual({ lineNumber: 2, column: 15, focused: true });
     // Native editor shortcut; TemplateContainer explicitly ignores Monaco's
     // composed event path, so this must use Monaco Undo, not application Undo.
     await editorPage.keyboard.press('ControlOrMeta+z');
