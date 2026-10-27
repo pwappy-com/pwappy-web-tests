@@ -303,16 +303,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Test Results
+      # Public artifacts contain workflow metadata only. Never upload raw evidence.
+      - name: Prepare safe artifact summary
+        id: safe_artifact
         if: always()
+        run: node scripts/artifact-safe-summary.mjs
+        env:
+          SAFE_TEST_SUITE: normal
+          SAFE_TEST_OS: ${{ matrix.os }}
+          SAFE_TEST_BROWSER: ${{ matrix.browser }}
+          SAFE_TEST_EXIT_CODE: ${{ steps.run_tests.outputs.EXIT_CODE }}
+
+      - name: Upload safe workflow summary
+        if: ${{ always() && steps.safe_artifact.outcome == 'success' && steps.safe_artifact.outputs.verified == 'true' && steps.safe_artifact.outputs.summary_path != '' }}
         uses: actions/upload-artifact@v6
         with:
           name:
-            playwright-report-normal-${{ matrix.os }}-${{ matrix.browser }}-${{
+            workflow-summary-normal-${{ matrix.os }}-${{ matrix.browser }}-${{
             github.run_id }}
-          path: test-results/
+          path: ${{ steps.safe_artifact.outputs.summary_path }}
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
+          include-hidden-files: false
 
       - name: Mark Job Failure
         if: steps.run_tests.outputs.EXIT_CODE != '0'
@@ -484,16 +496,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Test Results
+      # Public artifacts contain workflow metadata only. Never upload raw evidence.
+      - name: Prepare safe artifact summary
+        id: safe_artifact
         if: always()
+        run: node scripts/artifact-safe-summary.mjs
+        env:
+          SAFE_TEST_SUITE: premium
+          SAFE_TEST_OS: ${{ matrix.os }}
+          SAFE_TEST_BROWSER: ${{ matrix.browser }}
+          SAFE_TEST_EXIT_CODE: ${{ steps.run_tests.outputs.EXIT_CODE }}
+
+      - name: Upload safe workflow summary
+        if: ${{ always() && steps.safe_artifact.outcome == 'success' && steps.safe_artifact.outputs.verified == 'true' && steps.safe_artifact.outputs.summary_path != '' }}
         uses: actions/upload-artifact@v6
         with:
           name:
-            playwright-report-premium-${{ matrix.os }}-${{ matrix.browser }}-${{
+            workflow-summary-premium-${{ matrix.os }}-${{ matrix.browser }}-${{
             github.run_id }}
-          path: test-results/
+          path: ${{ steps.safe_artifact.outputs.summary_path }}
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
+          include-hidden-files: false
 
       - name: Mark Job Failure
         if: steps.run_tests.outputs.EXIT_CODE != '0'
