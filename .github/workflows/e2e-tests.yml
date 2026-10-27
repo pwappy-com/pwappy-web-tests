@@ -74,6 +74,7 @@ on:
         options:
           - all
           - editor-regression
+          - quick-property-regression
           - points-smoke
       prepare_points:
         description: "ステージングのテスト残高準備を有効化"
@@ -384,11 +385,15 @@ jobs:
             echo "retries must be between 0 and 5"
             exit 1
           fi
-          TEST_ARGS=(tests/specs/normal)
-          if [ "$TEST_SCOPE" = "editor-regression" ]; then
-            TEST_ARGS=(tests/specs/normal/editor-events-build.spec.ts tests/specs/normal/editor-property-parsing-build.spec.ts
-              --grep 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires')
-          fi
+          case "${TEST_SCOPE:-all}" in
+            all) TEST_ARGS=(tests/specs/normal) ;;
+            editor-regression)
+              TEST_ARGS=(tests/specs/normal/editor-events-build.spec.ts tests/specs/normal/editor-property-parsing-build.spec.ts
+                --grep 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires') ;;
+            quick-property-regression)
+              TEST_ARGS=(tests/specs/normal/editor-quick-property-editor.spec.ts) ;;
+            *) echo "::error::Unsupported normal test scope"; exit 1 ;;
+          esac
           # Safariで入力処理自体が停止するため、ホスト負荷を記録する（テスト条件は維持）。
           if [ "$(uname -s)" = "Darwin" ]; then
             sysctl hw.memsize hw.ncpu
