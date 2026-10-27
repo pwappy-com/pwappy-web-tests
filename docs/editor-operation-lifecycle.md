@@ -19,12 +19,21 @@ Baseline: `pwappy-com/pwappy-web-tests`, branch
   Release failure cannot replace the original drag failure.
 - Initial snapshot discard: one native click and separate confirmation assertion,
   retaining the existing finally listener removal.
-- Quick-property, file-explorer, event-build and property-parsing-build specs:
+- Quick-property, file-explorer, event-build, property-parsing-build and script specs:
   give the `editorPage` fixture its own
   bounded setup/teardown budget (CI 120s, local 60s), leaving scenario bodies,
   assertions and their existing limits unchanged. Dependencies such as `page`
   and `context` are not automatically excluded from the scenario budget. This
   intentionally increases the possible total elapsed time; it is not a speed claim.
+
+The script-deletion failure in run `40440727088` provides a further exact example:
+`editorPage` setup consumed 33.388390s of 37.607503s before-hooks, and the scenario's
+own setup consumed 81.178794s. Deletion began with approximately 1.144s remaining
+in its 120s scenario budget. Only the editorPage fixture is separated by the script
+spec correction; the remaining 4.219113s of before-hooks and the full scenario
+setup still count. Under identical timings this would leave about 34.533s at
+deletion, but it is an accounting illustration, not a guarantee of success. The
+120s body ceiling, all assertions and existing afterAll app cleanup are unchanged.
 
 No forced/synthetic input, product state writes, skipped assertions, or swallowed
 native input errors were added. Changes elsewhere in the helper are preserved.
