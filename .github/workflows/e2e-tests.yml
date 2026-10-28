@@ -82,7 +82,7 @@ on:
       prepare_points:
         description: "Premiumの残高準備（通常テストはnormal_prepare_pointsを使用）"
         type: boolean
-        default: false
+        default: true
       trace_snapshots:
         description: "DOM/ネットワークtrace記録（auto: 通常は無効、Premiumは有効。trueで診断）"
         type: choice
@@ -117,6 +117,7 @@ jobs:
     outputs:
       matrix_parallelism: ${{ steps.validate-parallelism.outputs.matrix_parallelism }}
       normal_prepare_points: ${{ steps.resolve-normal-points.outputs.normal_prepare_points }}
+      premium_prepare_points: ${{ steps.resolve-premium-points.outputs.premium_prepare_points }}
       normal_trace_snapshots: ${{ steps.resolve-trace.outputs.normal_trace_snapshots }}
       premium_trace_snapshots: ${{ steps.resolve-trace.outputs.premium_trace_snapshots }}
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -207,6 +208,23 @@ jobs:
             *) echo "::error::normal_prepare_points must be true or false"; exit 1 ;;
           esac
           printf 'normal_prepare_points=%s\n' "$prepare" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve premium point preparation
+        id: resolve-premium-points
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PREMIUM_PREPARE_POINTS_INPUT: ${{ github.event.inputs.prepare_points }}
+        run: |
+          prepare=true
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            prepare="${PREMIUM_PREPARE_POINTS_INPUT:-true}"
+          fi
+          case "$prepare" in
+            true|false) ;;
+            *) echo "::error::prepare_points must be true or false"; exit 1 ;;
+          esac
+          printf 'premium_prepare_points=%s\n' "$prepare" >> "$GITHUB_OUTPUT"
 
       - name: Resolve suite trace snapshots
         id: resolve-trace
@@ -584,6 +602,7 @@ jobs:
       group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
       cancel-in-progress: false
     env:
+      PWAPPY_TEST_POINTS_ENABLED: ${{ needs.prepare-matrix.outputs.premium_prepare_points }}
       PWAPPY_TRACE_SNAPSHOTS: ${{ needs.prepare-matrix.outputs.premium_trace_snapshots }}
       PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-premium
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers

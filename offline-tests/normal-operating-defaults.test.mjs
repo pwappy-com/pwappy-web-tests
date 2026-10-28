@@ -5,7 +5,10 @@ import { readFileSync, mkdtempSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-const workflow = readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8');
+import { restoreApprovedPremiumPointPreparation } from './premium-repairs-contract.mjs';
+// Reverse only the approved Premium points delta for these historical assertions.
+// Current RAW Premium defaults are tested in premium-points-defaults.test.mjs.
+const workflow = restoreApprovedPremiumPointPreparation(readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8'));
 const config = readFileSync(new URL('../playwright.config.ts', import.meta.url), 'utf8');
 const normal = workflow.split('  e2e-normal:\n')[1].split('  e2e-premium:\n')[0];
 const premium = workflow.split('  e2e-premium:\n')[1];
