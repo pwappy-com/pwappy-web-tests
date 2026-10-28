@@ -116,14 +116,20 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         });
 
         await test.step('テスト: アーカイブタブで表示されることを確認', async () => {
-            const alert = page.locator('alert-component');
-            if (await alert.isVisible().catch(() => false)) {
-                await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });
-            }
+            try {
+                const alert = page.locator('alert-component');
+                if (await alert.isVisible()) {
+                    await alert.getByRole('button', { name: '閉じる' }).click();
+                    await expect(alert).toBeHidden();
+                }
 
-            await page.getByRole('button', { name: ' アーカイブ' }).click({ force: true });
-            const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });
-            await expect(archivedAppCard).toBeVisible({ timeout: 10000 });
+                await openArchiveView(page);
+                const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });
+                await expect(archivedAppCard).toBeVisible({ timeout: 10000 });
+            } catch (error) {
+                await logArchiveViewState(page);
+                throw error;
+            }
         });
 
         await test.step('テスト: アーカイブから復元する', async () => {

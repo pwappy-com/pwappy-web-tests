@@ -103,8 +103,20 @@ const archiveNavigationEdits = [
         "after": "            try {\n                await openArchiveView(page);\n\n                const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });\n                await expect(archivedAppCard).toBeVisible({ timeout: 10000 });\n\n                // dashboard-app-menu-group がマウントされ、表示されていることを確認\n                const menuGroup = archivedAppCard.locator('dashboard-app-menu-group');\n                await expect(menuGroup).toBeVisible();\n            } catch (error) {\n                await logArchiveViewState(page);\n                throw error;\n            }\n"
     }
 ];
+// Normalize only the reviewed standard-flow navigation delta before older spec oracles.
+const standardArchiveNavigation = {
+    "before": "            const alert = page.locator('alert-component');\n            if (await alert.isVisible().catch(() => false)) {\n                await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });\n            }\n\n            await page.getByRole('button', { name: ' アーカイブ' }).click({ force: true });\n            const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });\n            await expect(archivedAppCard).toBeVisible({ timeout: 10000 });\n",
+    "after": "            try {\n                const alert = page.locator('alert-component');\n                if (await alert.isVisible()) {\n                    await alert.getByRole('button', { name: '閉じる' }).click();\n                    await expect(alert).toBeHidden();\n                }\n\n                await openArchiveView(page);\n                const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });\n                await expect(archivedAppCard).toBeVisible({ timeout: 10000 });\n            } catch (error) {\n                await logArchiveViewState(page);\n                throw error;\n            }\n"
+};
+function restoreStandardArchiveNavigation(source) {
+    assert.equal(source.split(standardArchiveNavigation.after).length - 1, 1, 'standard navigation edit must be unique');
+    const restored = source.replace(standardArchiveNavigation.after, standardArchiveNavigation.before);
+    const hash = createHash('sha1').update('blob ' + Buffer.byteLength(restored) + '\0').update(restored).digest('hex');
+    assert.equal(hash, 'ad5d93cfb35a1d6d81b24f8d67b5a218e7f486ba');
+    return restored;
+}
 function assertOnlyApprovedArchiveChanges(source) {
-    let restored = source;
+    let restored = restoreStandardArchiveNavigation(source);
     for (const { before, after } of [...archiveNavigationEdits].reverse()) {
         assert.equal(restored.split(after).length - 1, 1, 'authorized archive edit must be unique');
         restored = restored.replace(after, before);
@@ -159,4 +171,23 @@ test('navigation cap removal leaves all other Premium helper budgets unchanged',
     assertPriorHelper(source);
     assert.throws(() => assertPriorHelper(source.replace(current, previous)));
     assert.throws(() => assertPriorHelper(source.replace('performance.now() + 20000', 'performance.now() + 20001')));
+});
+
+test('both Premium Archive-tab entries use native navigation without changing other scenario steps', () => {
+    const source = read('../tests/specs/premium/archive.spec.ts');
+    restoreStandardArchiveNavigation(source);
+    assert.throws(() => restoreStandardArchiveNavigation(source.replace(standardArchiveNavigation.after,
+        standardArchiveNavigation.after.replace('timeout: 10000', 'timeout: 10001'))));
+    assert.throws(() => restoreStandardArchiveNavigation(source.replace('await deleteApp(page, appKey);', '')));
+    assert.equal((source.match(/await openArchiveView\(page\);/g) || []).length, 2);
+    assert.doesNotMatch(source, /getByRole\('button', \{ name: ' アーカイブ' \}\)/);
+    const standardStep = source.split("await test.step('テスト: アーカイブタブで表示されることを確認'")[1].split("await test.step('テスト: アーカイブから復元する'")[0];
+    assert.match(standardStep, /if \(await alert\.isVisible\(\)\)/);
+    const close = standardStep.indexOf("alert.getByRole('button', { name: '閉じる' }).click();");
+    const hidden = standardStep.indexOf('await expect(alert).toBeHidden();');
+    const navigate = standardStep.indexOf('await openArchiveView(page);');
+    assert.ok(close >= 0 && hidden > close && navigate > hidden);
+    assert.match(standardStep, /logArchiveViewState\(page\);\s+throw error;/);
+    assert.equal((standardStep.match(/await openArchiveView\(page\);/g) || []).length, 1);
+    assert.doesNotMatch(standardStep, /force|toPass|waitForTimeout|\.evaluate|\.catch\(/);
 });
