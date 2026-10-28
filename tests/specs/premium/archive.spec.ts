@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import 'dotenv/config';
-import { confirmArchiveRestore } from '../../tools/premium-control-helpers';
+import { confirmArchiveRestore, archivePublishedAppOnce, openArchiveView, logArchiveViewState } from '../../tools/premium-control-helpers';
 import {
     createApp,
     deleteApp,
@@ -168,51 +168,26 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         });
 
         await test.step('テスト: アプリケーションをアーカイブする', async () => {
-            await expect(async () => {
-                const alert = page.locator('alert-component');
-                if (await alert.isVisible().catch(() => false)) {
-                    await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
-                }
-
-                const appSettingBtn = page.getByText('アプリ設定');
-                await appSettingBtn.click();
-                await page.waitForTimeout(500);
-
-                await page.getByRole('button', { name: ' アーカイブする' }).click();
-                const confirmDialog = page.locator('message-box#archive-confirm');
-                await page.waitForTimeout(500);
-                await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-
-                // console.log(`[ArchiveTest:Action] アーカイブ実行ボタンをクリックします`);
-                await page.getByRole('button', { name: 'アーカイブ', exact: true }).click();
-                await page.waitForTimeout(500);
-
-                const closeBtn = page.getByRole('button', { name: '閉じる' });
-                if (await closeBtn.isVisible().catch(() => false)) {
-                    await closeBtn.click();
-                }
-
-                await expect(confirmDialog).toBeHidden({ timeout: 5000 });
-            }).toPass({ timeout: 20000, intervals: [1000] });
+            await archivePublishedAppOnce(page);
 
             await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
             await expectAppVisibility(page, appKey, false);
         });
 
         await test.step('テスト: アーカイブタブでメニューグループ（QRコード等）が表示されることを確認', async () => {
-            const alert = page.locator('alert-component');
-            if (await alert.isVisible().catch(() => false)) {
-                await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });
+            try {
+                await openArchiveView(page);
+
+                const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });
+                await expect(archivedAppCard).toBeVisible({ timeout: 10000 });
+
+                // dashboard-app-menu-group がマウントされ、表示されていることを確認
+                const menuGroup = archivedAppCard.locator('dashboard-app-menu-group');
+                await expect(menuGroup).toBeVisible();
+            } catch (error) {
+                await logArchiveViewState(page);
+                throw error;
             }
-
-            await page.getByRole('button', { name: ' アーカイブ' }).click({ force: true });
-
-            const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });
-            await expect(archivedAppCard).toBeVisible({ timeout: 10000 });
-
-            // dashboard-app-menu-group がマウントされ、表示されていることを確認
-            const menuGroup = archivedAppCard.locator('dashboard-app-menu-group');
-            await expect(menuGroup).toBeVisible();
         });
 
         await test.step('クリーンアップ: アプリを復元し、非公開にして削除する', async () => {

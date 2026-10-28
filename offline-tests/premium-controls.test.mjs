@@ -87,3 +87,60 @@ test('restore is one native confirmation attempt, with persistent success and me
     }
     assert.ok(read('../tests/specs/premium/publish-management.spec.ts').includes('expect(initialPoints).toBeGreaterThanOrEqual(20);'));
 });
+
+// Reversing only these reviewed published-flow edits must recover the exact prior spec.
+const archiveNavigationEdits = [
+    {
+        "before": "import { confirmArchiveRestore }",
+        "after": "import { confirmArchiveRestore, archivePublishedAppOnce, openArchiveView, logArchiveViewState }"
+    },
+    {
+        "before": "            await expect(async () => {\n                const alert = page.locator('alert-component');\n                if (await alert.isVisible().catch(() => false)) {\n                    await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });\n                }\n\n                const appSettingBtn = page.getByText('アプリ設定');\n                await appSettingBtn.click();\n                await page.waitForTimeout(500);\n\n                await page.getByRole('button', { name: ' アーカイブする' }).click();\n                const confirmDialog = page.locator('message-box#archive-confirm');\n                await page.waitForTimeout(500);\n                await expect(confirmDialog).toBeVisible({ timeout: 5000 });\n\n                // console.log(`[ArchiveTest:Action] アーカイブ実行ボタンをクリックします`);\n                await page.getByRole('button', { name: 'アーカイブ', exact: true }).click();\n                await page.waitForTimeout(500);\n\n                const closeBtn = page.getByRole('button', { name: '閉じる' });\n                if (await closeBtn.isVisible().catch(() => false)) {\n                    await closeBtn.click();\n                }\n\n                await expect(confirmDialog).toBeHidden({ timeout: 5000 });\n            }).toPass({ timeout: 20000, intervals: [1000] });\n\n",
+        "after": "            await archivePublishedAppOnce(page);\n\n"
+    },
+    {
+        "before": "            const alert = page.locator('alert-component');\n            if (await alert.isVisible().catch(() => false)) {\n                await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });\n            }\n\n            await page.getByRole('button', { name: ' アーカイブ' }).click({ force: true });\n\n            const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });\n            await expect(archivedAppCard).toBeVisible({ timeout: 10000 });\n\n            // dashboard-app-menu-group がマウントされ、表示されていることを確認\n            const menuGroup = archivedAppCard.locator('dashboard-app-menu-group');\n            await expect(menuGroup).toBeVisible();\n",
+        "after": "            try {\n                await openArchiveView(page);\n\n                const archivedAppCard = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });\n                await expect(archivedAppCard).toBeVisible({ timeout: 10000 });\n\n                // dashboard-app-menu-group がマウントされ、表示されていることを確認\n                const menuGroup = archivedAppCard.locator('dashboard-app-menu-group');\n                await expect(menuGroup).toBeVisible();\n            } catch (error) {\n                await logArchiveViewState(page);\n                throw error;\n            }\n"
+    }
+];
+function assertOnlyApprovedArchiveChanges(source) {
+    let restored = source;
+    for (const { before, after } of [...archiveNavigationEdits].reverse()) {
+        assert.equal(restored.split(after).length - 1, 1, 'authorized archive edit must be unique');
+        restored = restored.replace(after, before);
+    }
+    const hash = createHash('sha1').update('blob ' + Buffer.byteLength(restored) + '\0').update(restored).digest('hex');
+    assert.equal(hash, '626d013be369875d60c212fe3515f7b83719a65e');
+}
+test('published archive changes preserve exact prior card/menu/cleanup and other scenario source', () => {
+    const spec = read('../tests/specs/premium/archive.spec.ts');
+    assertOnlyApprovedArchiveChanges(spec);
+    assert.throws(() => assertOnlyApprovedArchiveChanges(spec.replace('toBeVisible({ timeout: 10000 })', 'toBeVisible({ timeout: 10001 })')));
+    assert.throws(() => assertOnlyApprovedArchiveChanges(spec.replace(archiveNavigationEdits[2].after,
+        archiveNavigationEdits[2].after.replace('timeout: 10000', 'timeout: 10001'))));
+    assert.throws(() => assertOnlyApprovedArchiveChanges(spec.replace('await expect(menuGroup).toBeVisible();', '')));
+    const published = spec.split("test('WB-APP-ARC-PUB:")[1];
+    assert.equal((published.match(/archivePublishedAppOnce\(page\)/g) || []).length, 1);
+    assert.equal((published.match(/openArchiveView\(page\)/g) || []).length, 1);
+    assert.doesNotMatch(published, /toPass|waitForTimeout/);
+});
+test('published archive uses one mutation and verified persistent success within the old total budget', () => {
+    const helper = read('../tests/tools/premium-control-helpers.ts').split('export async function archivePublishedAppOnce')[1].split('export async function openArchiveView')[0];
+    assert.match(helper, /performance\.now\(\) \+ 20000/);
+    assert.match(helper, /Math\.min\(limit, left\)/);
+    assert.equal((helper.match(/confirmDialog\.getByRole\('button'/g) || []).length, 1);
+    assert.match(helper, /name: 'アーカイブ', exact: true/);
+    assert.doesNotMatch(helper, /force|toPass|waitForTimeout|\.evaluate|catch|while|for\s*\(/);
+    const success = helper.indexOf("toContainText('をアーカイブしました'");
+    const close = helper.indexOf("alert.getByRole('button'", success);
+    const hidden = helper.indexOf('expect(alert).toBeHidden', close);
+    assert.ok(success >= 0 && close > success && hidden > close);
+});
+test('archive navigation keeps native actionability and confirms a genuinely mounted scoped view', () => {
+    const helper = read('../tests/tools/premium-control-helpers.ts').split('export async function openArchiveView')[1].split('export async function logArchiveViewState')[0];
+    assert.equal((helper.match(/\.click\(/g) || []).length, 1);
+    assert.match(helper, /click\(\{ timeout: 2000 \}\)/);
+    assert.match(helper, /page\.locator\('dashboard-archive-content'\)/);
+    assert.match(helper, /archive\.getByRole\('heading', \{ name: 'アーカイブ一覧', exact: true \}\)/);
+    assert.doesNotMatch(helper, /force|toPass|waitForTimeout|\.evaluate|catch|while|for\s*\(/);
+});

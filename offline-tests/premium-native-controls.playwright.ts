@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { expectNativeRangeValue, confirmArchiveRestore } from '../tests/tools/premium-control-helpers';
+import { expectNativeRangeValue, confirmArchiveRestore, archivePublishedAppOnce, openArchiveView, logArchiveViewState } from '../tests/tools/premium-control-helpers';
 
 for (const input of ['0.0', '0.1', '0.7', '1.0', '1.9', '2.0']) {
     test('native range retains numeric meaning for ' + input, async ({ page }) => {
@@ -58,4 +58,102 @@ test('disabled native confirmation fails closed without mutation or cancellation
     expect(await page.evaluate(() => (window as any).counts)).toEqual({ confirm: 0, cancel: 0 });
     await expect(page.locator('alert-component')).toBeHidden();
     await expect(page.locator('message-box#restore-confirm')).toBeVisible();
+});
+
+// Generic fixture only: no private component source, account, or hosted service.
+const archiveNavigationFixture = (success = true) => `<!doctype html>
+<style>
+[hidden] { display:none !important; }
+message-box, alert-component, dashboard-loading-overlay { position:fixed; inset:0; z-index:10; background:#ddd; padding:40px; }
+dashboard-loading-overlay { z-index:20; }
+dashboard-app-content, dashboard-archive-content { display:block; padding:24px; }
+</style>
+<div id="detail"><button id="settings">アプリ設定</button>
+<button id="archive-action" hidden> アーカイブする</button></div>
+<message-box id="archive-confirm" hidden><button id="confirm">アーカイブ</button></message-box>
+<alert-component><p id="message">先行操作が完了しました</p><button id="close">閉じる</button></alert-component>
+<script>
+window.counts = { priorClose:0, archive:0, successClose:0, navigation:0, overlay:0 };
+let archived = false;
+const alert = document.querySelector('alert-component');
+const confirm = document.querySelector('message-box');
+document.querySelector('#settings').onclick = () => document.querySelector('#archive-action').hidden = false;
+document.querySelector('#archive-action').onclick = () => confirm.hidden = false;
+document.querySelector('#confirm').onclick = () => {
+    window.counts.archive++; archived = true; confirm.hidden = true;
+    document.querySelector('#message').textContent = ${JSON.stringify(success ? 'アプリ「sample」をアーカイブしました' : 'アーカイブ中にエラーが発生しました')};
+    alert.hidden = false;
+};
+document.querySelector('#close').onclick = () => {
+    alert.hidden = true;
+    if (!archived) { window.counts.priorClose++; return; }
+    window.counts.successClose++;
+    document.querySelector('#detail').remove();
+    const home = document.createElement('dashboard-app-content');
+    const button = document.createElement('button'); button.textContent = ' アーカイブ';
+    button.onclick = () => {
+        window.counts.navigation++; home.remove();
+        const archive = document.createElement('dashboard-archive-content');
+        archive.innerHTML = '<h1>アーカイブ一覧</h1><div class="app-card"><span class="app-key">sample-key</span><dashboard-app-menu-group>Menu</dashboard-app-menu-group></div>';
+        document.body.append(archive);
+    };
+    home.append(button); document.body.append(home);
+    const overlay = document.createElement('dashboard-loading-overlay');
+    overlay.onclick = () => window.counts.overlay++;
+    document.body.append(overlay);
+};
+window.releaseOverlay = () => document.querySelector('dashboard-loading-overlay').remove();
+</script>`;
+
+test('native archive path confirms once, closes success, and waits for overlay before navigation', async ({ page }) => {
+    await page.setContent(archiveNavigationFixture());
+    await archivePublishedAppOnce(page);
+    await expect(page.locator('dashboard-loading-overlay')).toBeVisible();
+    // Controlled fixture delay tests actionability; the production helper contains no sleep.
+    await page.evaluate(() => setTimeout(() => (window as any).releaseOverlay(), 250));
+    await openArchiveView(page);
+    const card = page.locator('.app-card', { has: page.locator('.app-key', { hasText: 'sample-key' }) });
+    await expect(card).toBeVisible();
+    await expect(card.locator('dashboard-app-menu-group')).toBeVisible();
+    expect(await page.evaluate(() => (window as any).counts)).toEqual({
+        priorClose:1, archive:1, successClose:1, navigation:1, overlay:0,
+    });
+});
+
+test('forced navigation under the same overlay misses the target deterministically', async ({ page }) => {
+    await page.setContent(archiveNavigationFixture());
+    await archivePublishedAppOnce(page);
+    await page.getByRole('button', { name: ' アーカイブ', exact: true }).click({ force: true });
+    expect(await page.evaluate(() => (window as any).counts)).toEqual({
+        priorClose:1, archive:1, successClose:1, navigation:0, overlay:1,
+    });
+    await expect(page.locator('dashboard-archive-content')).toHaveCount(0);
+});
+
+test('permanently blocked native navigation fails closed with safe state diagnostics', async ({ page }) => {
+    await page.setContent(archiveNavigationFixture());
+    await archivePublishedAppOnce(page);
+    let failure: unknown;
+    try { await openArchiveView(page); } catch (error) { failure = error; }
+    expect((failure as Error)?.name).toBe('TimeoutError');
+    expect(await page.evaluate(() => (window as any).counts)).toEqual({
+        priorClose:1, archive:1, successClose:1, navigation:0, overlay:0,
+    });
+    const logs: string[] = [];
+    const originalLog = console.log;
+    console.log = message => logs.push(String(message));
+    try { await logArchiveViewState(page); } finally { console.log = originalLog; }
+    expect(logs).toEqual(['[ArchiveViewState] {"homeMounted":true,"archiveMounted":false,"archiveVisible":false,"loadingOverlayPresent":true,"alertVisible":false}']);
+});
+
+test('archive failure alert never closes, navigates, or repeats the mutation', async ({ page }) => {
+    await page.setContent(archiveNavigationFixture(false));
+    let failure: unknown;
+    try { await archivePublishedAppOnce(page); } catch (error) { failure = error; }
+    expect(failure).toBeTruthy();
+    expect(await page.evaluate(() => (window as any).counts)).toEqual({
+        priorClose:1, archive:1, successClose:0, navigation:0, overlay:0,
+    });
+    await expect(page.locator('alert-component')).toBeVisible();
+    await expect(page.locator('dashboard-app-content')).toHaveCount(0);
 });
