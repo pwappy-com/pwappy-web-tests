@@ -3,9 +3,12 @@ name: Multi-OS E2E Tests
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Trace defaults are resolved per suite below; local config still defaults enabled.
+  PWAPPY_TEST_POINTS_ENABLED: ${{ inputs.prepare_points && 'true' || vars.PWAPPY_TEST_POINTS_ENABLED }}
+  PWAPPY_TEST_POINTS_READ_ENDPOINT: ${{ vars.PWAPPY_TEST_POINTS_READ_ENDPOINT }}
 concurrency:
-  # 同じワークフロー名（Multi-OS E2E Tests）でグループ化
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # mainと修正ブランチが共有するステージングのテストアカウントを排他
+  group: pwappy-staging-shared-test-accounts
   # 実行中のジョブをキャンセルせず、順番待ちをさせる
   cancel-in-progress: false
 
@@ -45,11 +48,62 @@ on:
           - ubuntu-latest
           - windows-latest
           - macos-latest
+      normal_browser:
+        description: "通常テストのブラウザ（OS選択との共通部分）"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - webkit
+          - mobile-safari
       # 手動実行時のワーカー数を指定
       workers:
-        description: "実行ワーカー数 (手動用)"
+        description: "通常テストの実行ワーカー数 (手動用)"
         required: true
-        default: "75%"
+        default: "1"
+        type: string
+
+      test_scope:
+        description: "通常テストの実行範囲"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - editor-regression
+          - quick-property-regression
+          - style-ownership-regression
+          - points-smoke
+      normal_prepare_points:
+        description: "通常テストのステージング残高準備（既定有効、falseは診断用）"
+        type: boolean
+        default: true
+      prepare_points:
+        description: "Premiumの残高準備（通常テストはnormal_prepare_pointsを使用）"
+        type: boolean
+        default: false
+      trace_snapshots:
+        description: "DOM/ネットワークtrace記録（auto: 通常は無効、Premiumは有効。trueで診断）"
+        type: choice
+        default: "auto"
+        options:
+          - "auto"
+          - "true"
+          - "false"
+      matrix_parallelism:
+        description: "通常テストの同時マトリックスジョブ数（既定2、直列診断は1）"
+        required: true
+        default: "2"
+        type: choice
+        options:
+          - "1"
+          - "2"
+          - "5"
+      retries:
+        description: "通常テストの再試行回数（既定0で初回失敗を検出）"
+        required: true
+        default: "0"
         type: string
 
 # ワークフローを構成するジョブを定義
@@ -61,10 +115,32 @@ jobs:
     runs-on: ubuntu-latest
     # このジョブの出力を定義。後続のジョブの条件分岐やマトリックスとして使用。
     outputs:
+      matrix_parallelism: ${{ steps.validate-parallelism.outputs.matrix_parallelism }}
+      normal_prepare_points: ${{ steps.resolve-normal-points.outputs.normal_prepare_points }}
+      normal_trace_snapshots: ${{ steps.resolve-trace.outputs.normal_trace_snapshots }}
+      premium_trace_snapshots: ${{ steps.resolve-trace.outputs.premium_trace_snapshots }}
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      normal_matrix: ${{ steps.filter-normal-matrix.outputs.normal_matrix }}
       run_normal: ${{ steps.get_suite.outputs.run_normal }}
       run_premium: ${{ steps.get_suite.outputs.run_premium }}
     steps:
+      - name: Validate normal matrix parallelism
+        id: validate-parallelism
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MATRIX_PARALLELISM_INPUT: ${{ inputs.matrix_parallelism }}
+        run: |
+          parallelism=2
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            parallelism="${MATRIX_PARALLELISM_INPUT:-2}"
+          fi
+          case "$parallelism" in
+            1|2|5) ;;
+            *) echo "::error::matrix_parallelism must be 1, 2, or 5"; exit 1 ;;
+          esac
+          printf 'matrix_parallelism=%s\n' "$parallelism" >> "$GITHUB_OUTPUT"
+
       - name: Determine test matrix
         id: set-matrix
         shell: bash
@@ -115,10 +191,75 @@ jobs:
             if [ "$SUITE" == "premium" ] || [ "$SUITE" == "all" ]; then echo "run_premium=true" >> $GITHUB_OUTPUT; fi
           fi
 
+      - name: Resolve normal point preparation
+        id: resolve-normal-points
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NORMAL_PREPARE_POINTS_INPUT: ${{ github.event.inputs.normal_prepare_points }}
+        run: |
+          prepare=true
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            prepare="${NORMAL_PREPARE_POINTS_INPUT:-true}"
+          fi
+          case "$prepare" in
+            true|false) ;;
+            *) echo "::error::normal_prepare_points must be true or false"; exit 1 ;;
+          esac
+          printf 'normal_prepare_points=%s\n' "$prepare" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve suite trace snapshots
+        id: resolve-trace
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TRACE_SNAPSHOTS_INPUT: ${{ github.event.inputs.trace_snapshots }}
+        run: |
+          trace=auto
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            trace="${TRACE_SNAPSHOTS_INPUT:-auto}"
+          fi
+          case "$trace" in
+            auto) normal=false; premium=true ;;
+            true|false) normal="$trace"; premium="$trace" ;;
+            *) echo "::error::trace_snapshots must be auto, true, or false"; exit 1 ;;
+          esac
+          printf 'normal_trace_snapshots=%s\npremium_trace_snapshots=%s\n' "$normal" "$premium" >> "$GITHUB_OUTPUT"
+
+      - name: Filter normal browser matrix
+        id: filter-normal-matrix
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          NORMAL_BROWSER_INPUT: ${{ inputs.normal_browser }}
+          RUN_NORMAL: ${{ steps.get_suite.outputs.run_normal }}
+          BASE_MATRIX: ${{ steps.set-matrix.outputs.matrix }}
+        run: |
+          # Premium-only and scheduled runs retain the original matrix unchanged.
+          node - <<'JS'
+          const fs = require('fs');
+          const { EVENT_NAME, NORMAL_BROWSER_INPUT, RUN_NORMAL, BASE_MATRIX } = process.env;
+          let matrix = BASE_MATRIX;
+          if (EVENT_NAME === 'workflow_dispatch' && RUN_NORMAL === 'true') {
+            const browser = NORMAL_BROWSER_INPUT || 'all';
+            if (!['all', 'webkit', 'mobile-safari'].includes(browser)) {
+              throw new Error('normal_browser must be all, webkit, or mobile-safari');
+            }
+            const entries = JSON.parse(BASE_MATRIX || '[]');
+            const selected = entries.filter(entry => browser === 'all' || entry.browser === browser);
+            if (selected.length === 0) {
+              throw new Error('normal_browser and os select no normal jobs');
+            }
+            matrix = JSON.stringify(selected);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `normal_matrix=${matrix || '[]'}\n`);
+          JS
+
   # ===================================================================
   # ジョブ 2: Normalテストの実行
   # ===================================================================
   e2e-normal:
+    name: e2e-normal (${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}, ${{ matrix.browser }})
     needs: prepare-matrix
     if: ${{ needs.prepare-matrix.outputs.run_normal == 'true' }}
     timeout-minutes: 120
@@ -127,12 +268,19 @@ jobs:
       actions: write
     strategy:
       fail-fast: false
-      # 最大並列数をPC(Linux,Windows,Mac),Mobile(Android,iOS)の５つ
-      max-parallel: 5
+      # 通常は最大2ジョブ。1ワーカーと組み合わせ、直列診断には1を指定。
+      max-parallel: ${{ fromJSON(needs.prepare-matrix.outputs.matrix_parallelism) }}
       matrix:
-        include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
-    runs-on: ${{ matrix.os }}
+        include: ${{ fromJSON(needs.prepare-matrix.outputs.normal_matrix) }}
+    # 7GiB ARMランナーで継続するswapを避け、同じmacOS 26の標準14GiB Intelランナーに固定。
+    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}
+    concurrency:
+      group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
+      cancel-in-progress: false
     env:
+      PWAPPY_TEST_POINTS_ENABLED: ${{ needs.prepare-matrix.outputs.normal_prepare_points }}
+      PWAPPY_TRACE_SNAPSHOTS: ${{ needs.prepare-matrix.outputs.normal_trace_snapshots }}
+      PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-normal
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
       - name: Checkout repository
@@ -141,7 +289,7 @@ jobs:
       # キャッシュキー接頭辞の設定 (バイナリエンジン単位でキャッシュを共有)
       - name: Set cache key prefix
         run: |
-          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
+          echo "CACHE_KEY_PREFIX=${{ runner.os }}-${{ runner.arch }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -185,6 +333,7 @@ jobs:
         shell: bash
 
       - name: Cache Playwright browsers
+        if: inputs.test_scope != 'points-smoke'
         id: cache-playwright-browsers
         uses: actions/cache@v5
         with:
@@ -195,6 +344,7 @@ jobs:
 
       # キャッシュから復元された不要なロックファイルを事前に強制削除してハングを防ぐ
       - name: Remove stale Playwright locks
+        if: inputs.test_scope != 'points-smoke'
         shell: bash
         run: |
           if [ -d "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" ]; then
@@ -205,14 +355,14 @@ jobs:
 
       # システム依存関係のインストール (プロンプト停止防止)
       - name: Install Playwright system dependencies
-        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        if: inputs.test_scope != 'points-smoke' && steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install-deps ${{ matrix.binary }}
         env:
           DEBIAN_FRONTEND: noninteractive
 
       # 指定されたバイナリをインストール
       - name: Install Playwright Browsers
-        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        if: inputs.test_scope != 'points-smoke' && steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install ${{ matrix.binary }}
         env:
           DEBUG: pw:*
@@ -227,28 +377,109 @@ jobs:
           else echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV; fi
 
       # プロジェクト名を指定してテスト実行
+      - name: Resolve points read endpoint
+        if: env.PWAPPY_TEST_POINTS_ENABLED == 'true' || inputs.test_scope == 'points-smoke'
+        env:
+          LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
+        shell: bash
+        run: |
+          node - <<'JS'
+          const fs = require('fs');
+          const url = new URL(process.env.LOGIN_ENDPOINT);
+          if (url.protocol !== 'https:' || !url.pathname.endsWith('/rest/v1/test-login')) throw new Error('Unexpected login endpoint');
+          url.pathname = url.pathname.replace('/rest/', '/read/').replace('test-login', 'pwappy-points');
+          fs.appendFileSync(process.env.GITHUB_ENV, 'PWAPPY_TEST_POINTS_READ_ENDPOINT=' + (process.env.PWAPPY_TEST_POINTS_READ_ENDPOINT || url.href) + '\n');
+          JS
+
+      - name: Check point preparation client
+        run: node --test tests/tools/test-point-preparation.test.mjs
+
       - name: Run Normal E2E Tests
         id: run_tests
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            if [ "$OS_NAME" = "ubuntu-latest" ]; then
-              # 高速なUbuntu環境は高効率な並列実行を維持
-              WORKERS="75%"
-            else
-              # Windows, macOS環境はI/O競合やCPU飽和を防ぐため直列（1ワーカー）で堅実に実行
-              WORKERS="1"
-            fi
-          else
-            # 手動実行時は指定された値（未指定時は2）を適用
-            WORKERS="${{ github.event.inputs.workers }}"
-            WORKERS="${WORKERS:-2}"
+          # Schedule and omitted manual inputs use the same bounded normal defaults.
+          WORKERS=1
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            WORKERS="${TEST_WORKERS:-1}"
+          fi
+
+          if [ "${{ inputs.test_scope }}" = "points-smoke" ]; then
+            case "${{ matrix.browser }}" in
+              chromium) BC=c ;; mobile-chrome) BC=a ;; webkit) BC=s ;; mobile-safari) BC=i ;;
+              *) echo "Unsupported smoke browser"; exit 1 ;;
+            esac
+            case "${{ matrix.os }}" in
+              ubuntu-latest) OC=u ;; windows-latest) OC=w ;; macos-latest) OC=m ;;
+              *) echo "Unsupported smoke OS"; exit 1 ;;
+            esac
+            export PWAPPY_SMOKE_IDENT="pw${OC}${BC}998"
+            node tests/tools/points-smoke.mjs
+            exit $?
           fi
 
           echo "Running tests on $OS_NAME with workers: $WORKERS"
-          npx playwright test tests/specs/normal --project=${{ matrix.browser }} --reporter=line --workers=$WORKERS
+          RETRIES="${TEST_RETRIES:-0}"
+          if ! [[ "$RETRIES" =~ ^[0-5]$ ]]; then
+            echo "retries must be between 0 and 5"
+            exit 1
+          fi
+          case "${TEST_SCOPE:-all}" in
+            all) TEST_ARGS=(tests/specs/normal) ;;
+            editor-regression)
+              TEST_ARGS=(tests/specs/normal/editor-events-build.spec.ts tests/specs/normal/editor-property-parsing-build.spec.ts
+                --grep 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires') ;;
+            quick-property-regression)
+              TEST_ARGS=(tests/specs/normal/editor-quick-property-editor.spec.ts) ;;
+            style-ownership-regression)
+              TEST_ARGS=(tests/specs/normal/editor-style-ownership.spec.ts) ;;
+            *) echo "::error::Unsupported normal test scope"; exit 1 ;;
+          esac
+          # Safariで入力処理自体が停止するため、ホスト負荷を記録する（テスト条件は維持）。
+          if [ "$(uname -s)" = "Darwin" ]; then
+            sysctl hw.memsize hw.ncpu
+            E2E_RESOURCE_LOG="$RUNNER_TEMP/e2e-resources.log"
+            (
+              while true; do
+                date -u '+%Y-%m-%dT%H:%M:%SZ'
+                uptime
+                vm_stat || true
+                # commは実行ファイル名のみ。引数や環境変数は出力しない。
+                ps -axo pid,ppid,%cpu,rss,comm | sort -k3 -nr | sed -n '1,12p' || true
+                sleep 30
+              done
+            ) > "$E2E_RESOURCE_LOG" 2>&1 &
+            E2E_MONITOR_PID=$!
+            # Credential-free static GET timings only; no test/retry decisions.
+            E2E_TRANSPORT_LOG="$RUNNER_TEMP/e2e-transport.log"
+            node scripts/transport-sampler.mjs > "$E2E_TRANSPORT_LOG" 2>/dev/null &
+            E2E_TRANSPORT_PID=$!
+            finish_e2e_diagnostics() {
+              e2e_status=$?
+              trap - EXIT
+              kill "$E2E_MONITOR_PID" 2>/dev/null || true
+              if jobs -pr | grep -Fxq -- "$E2E_TRANSPORT_PID"; then
+                kill "$E2E_TRANSPORT_PID" 2>/dev/null || true
+              fi
+              wait "$E2E_MONITOR_PID" 2>/dev/null || true
+              wait "$E2E_TRANSPORT_PID" 2>/dev/null || true
+              echo "::group::macOS runner resource samples"
+              cat "$E2E_RESOURCE_LOG" || true
+              echo "::endgroup::"
+              echo "::group::macOS static transport samples"
+              cat "$E2E_TRANSPORT_LOG" || true
+              echo "::endgroup::"
+              exit "$e2e_status"
+            }
+            trap finish_e2e_diagnostics EXIT
+          fi
+          npx playwright test "${TEST_ARGS[@]}" --project=${{ matrix.browser }} --reporter=line --workers="$WORKERS" --retries="$RETRIES"
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
+          TEST_SCOPE: ${{ inputs.test_scope || 'all' }}
+          TEST_RETRIES: ${{ inputs.retries || '0' }}
+          EVENT_NAME: ${{ github.event_name }}
+          TEST_WORKERS: ${{ github.event.inputs.workers }}
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
@@ -259,7 +490,8 @@ jobs:
 
       # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
-        if: always()
+        timeout-minutes: 5
+        if: always() && inputs.test_scope != 'points-smoke'
         shell: bash
         run: |
           OS_CODE_CHAR="l"
@@ -275,6 +507,7 @@ jobs:
 
           # ローカルで作成された可能性のあるワーカー番号(0〜3)を走査して確実に掃除
           for worker in 0 1 2 3; do
+            export PWAPPY_TEST_POINTS_PHASE="cleanup"
             export TEST_WORKER_INDEX="$worker"
             export PWAPPY_TEST_CLEANUP_BROWSER_CODE="$BROWSER_CODE"
             export TEST_RUN_SUFFIX="${{ env.OS_SHORT_NAME }}"
@@ -347,7 +580,12 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
+    concurrency:
+      group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
+      cancel-in-progress: false
     env:
+      PWAPPY_TRACE_SNAPSHOTS: ${{ needs.prepare-matrix.outputs.premium_trace_snapshots }}
+      PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-premium
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/pw-browsers
     steps:
       - name: Checkout repository
@@ -395,6 +633,7 @@ jobs:
         shell: bash
 
       - name: Cache Playwright browsers
+        if: inputs.test_scope != 'points-smoke'
         id: cache-playwright-browsers
         uses: actions/cache@v5
         with:
@@ -405,6 +644,7 @@ jobs:
 
       # キャッシュから復元された不要なロックファイルを事前に強制削除してハングを防ぐ
       - name: Remove stale Playwright locks
+        if: inputs.test_scope != 'points-smoke'
         shell: bash
         run: |
           if [ -d "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" ]; then
@@ -414,13 +654,13 @@ jobs:
           fi
 
       - name: Install Playwright system dependencies
-        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        if: inputs.test_scope != 'points-smoke' && steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install-deps ${{ matrix.binary }}
         env:
           DEBIAN_FRONTEND: noninteractive
 
       - name: Install Playwright Browsers
-        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        if: inputs.test_scope != 'points-smoke' && steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install ${{ matrix.binary }}
         env:
           DEBUG: pw:*
@@ -435,6 +675,23 @@ jobs:
           else echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV; fi
 
       # テスト実行
+      - name: Resolve points read endpoint
+        if: env.PWAPPY_TEST_POINTS_ENABLED == 'true' || inputs.test_scope == 'points-smoke'
+        env:
+          LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
+        shell: bash
+        run: |
+          node - <<'JS'
+          const fs = require('fs');
+          const url = new URL(process.env.LOGIN_ENDPOINT);
+          if (url.protocol !== 'https:' || !url.pathname.endsWith('/rest/v1/test-login')) throw new Error('Unexpected login endpoint');
+          url.pathname = url.pathname.replace('/rest/', '/read/').replace('test-login', 'pwappy-points');
+          fs.appendFileSync(process.env.GITHUB_ENV, 'PWAPPY_TEST_POINTS_READ_ENDPOINT=' + (process.env.PWAPPY_TEST_POINTS_READ_ENDPOINT || url.href) + '\n');
+          JS
+
+      - name: Check point preparation client
+        run: node --test tests/tools/test-point-preparation.test.mjs
+
       - name: Run Premium E2E Tests
         id: run_tests
         shell: bash
@@ -453,7 +710,8 @@ jobs:
 
       # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
-        if: always()
+        timeout-minutes: 5
+        if: always() && inputs.test_scope != 'points-smoke'
         shell: bash
         run: |
           OS_CODE_CHAR="l"
@@ -469,6 +727,7 @@ jobs:
 
           # ローカルで作成された可能性のあるワーカー番号(0〜3)を走査して確実に掃除
           for worker in 0 1 2 3; do
+            export PWAPPY_TEST_POINTS_PHASE="cleanup"
             export TEST_WORKER_INDEX="$worker"
             export PWAPPY_TEST_CLEANUP_BROWSER_CODE="$BROWSER_CODE"
             export TEST_RUN_SUFFIX="${{ env.OS_SHORT_NAME }}"

@@ -17,7 +17,9 @@ type EditorFixtures = {
 };
 
 const test = base.extend<EditorFixtures>({
-    editorPage: async ({ page, context, browserName }, use) => {
+    // Keep dashboard/editor startup separate from the scenario budget.
+    // A slow startup must still fail within the existing CI/local test limit.
+    editorPage: [async ({ page, context, browserName }, use) => {
         // Chromium環境向けにクリップボード操作の権限を付与
         if (browserName === 'chromium') {
             await context.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -35,7 +37,7 @@ const test = base.extend<EditorFixtures>({
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
         await editorPage.close();
-    },
+    }, { timeout: process.env.CI ? 120000 : 60000 }],
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
         await use(helper);
@@ -254,8 +256,7 @@ test.describe('ファイルエクスプローラー操作テスト', () => {
         });
 
         await test.step('2. パスをコピー', async () => {
-            await editorHelper.performFileOperation('パスをコピー');
-            await editorHelper.expectToastMessage('パスをコピーしました');
+            await editorHelper.performFileOperation('パスをコピー', 'パスをコピーしました');
         });
 
         await test.step('3. 名前を変更', async () => {

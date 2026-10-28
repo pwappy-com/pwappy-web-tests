@@ -15,7 +15,9 @@ type EditorFixtures = {
 };
 
 const test = base.extend<EditorFixtures>({
-    editorPage: async ({ page, context }, use) => {
+    // Keep dashboard/editor startup separate from the scenario budget.
+    // A slow startup must still fail within the existing CI/local test limit.
+    editorPage: [async ({ page, context }, use) => {
         await gotoDashboard(page);
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
 
@@ -27,7 +29,7 @@ const test = base.extend<EditorFixtures>({
         const editorPage = await openEditor(page, context, appName);
         await use(editorPage);
         await editorPage.close();
-    },
+    }, { timeout: process.env.CI ? 120000 : 60000 }],
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
         await use(helper);
@@ -344,7 +346,8 @@ test.describe('クイックプロパティエディタ（QuickPropertyEditor）�
     });
 
     test('基本情報編集: 保存を押さずに要素を切り替えた時の「一括自動保存」と「ID重複防止ガード」が機能すること', async ({ editorPage, editorHelper }) => {
-        test.setTimeout(90000); // 💡 モバイルの低速実行に対応するため、タイムアウトを90秒に設定
+        // CIの2ワーカーではセットアップ・自動保存検証後のID重複ガードまで90秒に収まらない。
+        test.setTimeout(process.env.CI ? 180000 : 90000);
         let node1Id: string;
         let node2Id: string;
 
@@ -411,19 +414,26 @@ test.describe('クイックプロパティエディタ（QuickPropertyEditor）�
             // 各項目を入力し、コミット（確定）させる
             const domIdInput = modal.locator('#qe-meta-domid');
             await domIdInput.fill(`${node1TargetId}-edited`);
-            await domIdInput.blur();
+            await domIdInput.press('Tab');
+            await expect(domIdInput).toHaveValue(`${node1TargetId}-edited`);
 
             const explainInput = modal.locator('#qe-meta-explain');
             await explainInput.fill('自動保存のテスト説明');
-            await explainInput.blur();
+            await explainInput.press('Tab');
 
             const classInput = modal.locator('#qe-meta-class');
             await classInput.fill('class-auto-save');
-            await classInput.blur();
+            await classInput.press('Tab');
 
             const textInput = modal.locator('#qe-meta-text');
             await textInput.fill('自動保存テキスト');
-            await textInput.blur();
+            await textInput.press('Tab');
+
+            // 次の入力で再描画されても、保存前の全フィールドが編集値を保持していることを確認する。
+            await expect(domIdInput).toHaveValue(`${node1TargetId}-edited`);
+            await expect(explainInput).toHaveValue('自動保存のテスト説明');
+            await expect(classInput).toHaveValue('class-auto-save');
+            await expect(textInput).toHaveValue('自動保存テキスト');
         });
 
         await test.step('3. 確定せずにプレビュー上の要素2（ボタン）を選択し、自動で一括保存されていることを検証', async () => {

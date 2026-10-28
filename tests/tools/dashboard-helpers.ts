@@ -1,3 +1,5 @@
+import { gotoInitialDashboard } from './initial-dashboard-navigation';
+import { observeHttpFailures, observePageHttpFailures } from './http-failure-diagnostics';
 import { expect, type Page, type BrowserContext } from '@playwright/test';
 import { EditorHelper } from './editor-helpers';
 import { clickAndOpenNewTabSafely } from './window-helpers';
@@ -82,20 +84,31 @@ export async function createApp(page: Page, appName: string, appKey: string): Pr
     await expect(appKeyInput).toBeEditable();
     await appKeyInput.fill(appKey);
 
-    await expect(async () => {
-        const alert = page.locator('alert-component');
-        if (await alert.isVisible().catch(() => false)) {
-            await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });
-        }
-        await appModal.locator('.submit-button').click({ force: true, timeout: 2000 });
-    }).toPass({ timeout: 15000, intervals: [1000] });
+    // Share the former 15s retry budget across alert dismissal and one native submit.
+    const inputDeadline = performance.now() + 15000;
+    const remainingInputTime = (): number => {
+        const remaining = inputDeadline - performance.now();
+        if (remaining <= 0) throw new Error('createApp input budget exhausted before submission');
+        return remaining;
+    };
+    const alert = page.locator('alert-component');
+    if (await alert.isVisible()) {
+        await alert.getByRole('button', { name: '閉じる' }).click({ timeout: remainingInputTime() });
+        await expect(alert).toBeHidden({ timeout: remainingInputTime() });
+    }
 
+    // A timed-out click may already have submitted; never replay or suppress its error.
+    await appModal.locator('.submit-button').click({ timeout: remainingInputTime() });
+
+    // Observe completion only after native input settles; a hidden modal alone is not success.
+    await expect(appModal).toBeHidden({ timeout: 30000 });
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
-    await expect(appModal).toBeHidden();
+    await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 30000 });
 
-    await page.waitForTimeout(500);
-
-    await expect(page.locator('dashboard-app-detail')).toBeVisible({ timeout: 15000 });
+    const appDetail = page.locator('dashboard-app-detail');
+    await expect(appDetail).toBeVisible({ timeout: 15000 });
+    await expect(appDetail.locator('.app-key')).toHaveText(appKey);
+    await expect(appDetail.locator('.app-name')).toHaveText(appName);
 }
 
 /**
@@ -160,6 +173,7 @@ export async function openEditor(
     version: string = '1.0.0',
     options: { skipStarterModal?: boolean } = { skipStarterModal: true }
 ): Promise<Page> {
+    observeHttpFailures(context);
     const versionRow = page.locator('.version-card', { hasText: version }).first();
     await expect(versionRow).toBeVisible({ timeout: 10000 });
 
@@ -607,6 +621,7 @@ export async function waitForVersionStatus(
 }
 
 export async function gotoDashboard(page: Page): Promise<void> {
+    observePageHttpFailures(page);
     // console.log(`[gotoDashboard:Enter] Current URL: ${page.url()}`);
 
     const workerIndex = process.env.TEST_WORKER_INDEX || '0';
@@ -638,6 +653,7 @@ export async function gotoDashboard(page: Page): Promise<void> {
         (page as any).__hasErrorLogger = true;
     }
 
+    const recoveryDeadline = performance.now() + 15000;
     const dashboardInitPromise = page.waitForResponse(response =>
         response.url().includes('dashboard-init') && response.status() === 200,
         { timeout: 15000 }
@@ -646,7 +662,9 @@ export async function gotoDashboard(page: Page): Promise<void> {
     // console.log(`[gotoDashboard:Navigating] to ${String(process.env.PWAPPY_TEST_BASE_URL)}`);
 
     // 3. Cookieが注入された状態でダッシュボードページへ遷移
-    await page.goto(String(process.env.PWAPPY_TEST_BASE_URL), { waitUntil: 'domcontentloaded' });
+    await gotoInitialDashboard(page, String(process.env.PWAPPY_TEST_BASE_URL), {
+        expectedOnline: true, recoveryDeadline
+    });
     // console.log(`[gotoDashboard:Navigated] Current URL: ${page.url()}`);
 
     // デフォルトでツアーを表示させないようにする

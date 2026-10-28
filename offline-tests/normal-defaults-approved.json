@@ -1,0 +1,78 @@
+[
+  {
+    "before": "  # event.inputs preserves boolean false as the string 'false'; schedule/missing is empty.\n  # Config validates the string and defaults only missing/empty values to enabled.\n  PWAPPY_TRACE_SNAPSHOTS: ${{ github.event.inputs.trace_snapshots }}\n",
+    "after": "  # Trace defaults are resolved per suite below; local config still defaults enabled.\n"
+  },
+  {
+    "before": "description: \"実行ワーカー数 (手動用)\"\n        required: true\n        default: \"75%\"",
+    "after": "description: \"通常テストの実行ワーカー数 (手動用)\"\n        required: true\n        default: \"1\""
+  },
+  {
+    "before": "      trace_snapshots:\n        description: \"診断比較用DOM/ネットワークtrace記録（通常は有効）\"\n        type: boolean\n        default: true",
+    "after": "      trace_snapshots:\n        description: \"DOM/ネットワークtrace記録（auto: 通常は無効、Premiumは有効。trueで診断）\"\n        type: choice\n        default: \"auto\"\n        options:\n          - \"auto\"\n          - \"true\"\n          - \"false\""
+  },
+  {
+    "before": "description: \"通常テストの同時マトリックスジョブ数（負荷比較用）\"\n        required: true\n        default: \"5\"",
+    "after": "description: \"通常テストの同時マトリックスジョブ数（既定2、直列診断は1）\"\n        required: true\n        default: \"2\""
+  },
+  {
+    "before": "description: \"通常テストの再試行回数\"\n        required: true\n        default: \"5\"",
+    "after": "description: \"通常テストの再試行回数（既定0で初回失敗を検出）\"\n        required: true\n        default: \"0\""
+  },
+  {
+    "before": "      matrix_parallelism: ${{ steps.validate-parallelism.outputs.matrix_parallelism }}\n",
+    "after": "      matrix_parallelism: ${{ steps.validate-parallelism.outputs.matrix_parallelism }}\n      normal_trace_snapshots: ${{ steps.resolve-trace.outputs.normal_trace_snapshots }}\n      premium_trace_snapshots: ${{ steps.resolve-trace.outputs.premium_trace_snapshots }}\n"
+  },
+  {
+    "before": "          parallelism=5\n          if [[ \"$EVENT_NAME\" == \"workflow_dispatch\" ]]; then\n            parallelism=\"${MATRIX_PARALLELISM_INPUT:-5}\"",
+    "after": "          parallelism=2\n          if [[ \"$EVENT_NAME\" == \"workflow_dispatch\" ]]; then\n            parallelism=\"${MATRIX_PARALLELISM_INPUT:-2}\""
+  },
+  {
+    "before": "      - name: Filter normal browser matrix\n",
+    "after": "      - name: Resolve suite trace snapshots\n        id: resolve-trace\n        shell: bash\n        env:\n          EVENT_NAME: ${{ github.event_name }}\n          TRACE_SNAPSHOTS_INPUT: ${{ github.event.inputs.trace_snapshots }}\n        run: |\n          trace=auto\n          if [[ \"$EVENT_NAME\" == \"workflow_dispatch\" ]]; then\n            trace=\"${TRACE_SNAPSHOTS_INPUT:-auto}\"\n          fi\n          case \"$trace\" in\n            auto) normal=false; premium=true ;;\n            true|false) normal=\"$trace\"; premium=\"$trace\" ;;\n            *) echo \"::error::trace_snapshots must be auto, true, or false\"; exit 1 ;;\n          esac\n          printf 'normal_trace_snapshots=%s\\npremium_trace_snapshots=%s\\n' \"$normal\" \"$premium\" >> \"$GITHUB_OUTPUT\"\n\n      - name: Filter normal browser matrix\n"
+  },
+  {
+    "before": "      # 通常は5ジョブ。手動の負荷比較時のみ検証済みの1/2/5を使用。",
+    "after": "      # 通常は最大2ジョブ。1ワーカーと組み合わせ、直列診断には1を指定。"
+  },
+  {
+    "before": "    env:\n      PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-normal",
+    "after": "    env:\n      PWAPPY_TRACE_SNAPSHOTS: ${{ needs.prepare-matrix.outputs.normal_trace_snapshots }}\n      PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-normal"
+  },
+  {
+    "before": "    env:\n      PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-premium",
+    "after": "    env:\n      PWAPPY_TRACE_SNAPSHOTS: ${{ needs.prepare-matrix.outputs.premium_trace_snapshots }}\n      PWAPPY_TEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-premium"
+  },
+  {
+    "before": "          if [ \"${{ github.event_name }}\" = \"schedule\" ]; then\n            if [ \"$OS_NAME\" = \"ubuntu-latest\" ]; then\n              # 高速なUbuntu環境は高効率な並列実行を維持\n              WORKERS=\"75%\"\n            else\n              # Windows, macOS環境はI/O競合やCPU飽和を防ぐため直列（1ワーカー）で堅実に実行\n              WORKERS=\"1\"\n            fi\n          else\n            # 手動実行時は指定された値（未指定時は2）を適用\n            WORKERS=\"${{ github.event.inputs.workers }}\"\n            WORKERS=\"${WORKERS:-2}\"\n          fi",
+    "after": "          # Schedule and omitted manual inputs use the same bounded normal defaults.\n          WORKERS=1\n          if [[ \"$EVENT_NAME\" == \"workflow_dispatch\" ]]; then\n            WORKERS=\"${TEST_WORKERS:-1}\"\n          fi"
+  },
+  {
+    "before": "          RETRIES=\"${TEST_RETRIES:-5}\"",
+    "after": "          RETRIES=\"${TEST_RETRIES:-0}\""
+  },
+  {
+    "before": "          TEST_RETRIES: ${{ inputs.retries || '5' }}",
+    "after": "          TEST_RETRIES: ${{ inputs.retries || '0' }}\n          EVENT_NAME: ${{ github.event_name }}\n          TEST_WORKERS: ${{ github.event.inputs.workers }}"
+  },
+  {
+    "before": "      prepare_points:\n        description: \"ステージングのテスト残高準備を有効化\"",
+    "after": "      normal_prepare_points:\n        description: \"通常テストのステージング残高準備（既定有効、falseは診断用）\"\n        type: boolean\n        default: true\n      prepare_points:\n        description: \"Premiumの残高準備（通常テストはnormal_prepare_pointsを使用）\""
+  },
+  {
+    "before": "      normal_trace_snapshots: ${{ steps.resolve-trace.outputs.normal_trace_snapshots }}",
+    "after": "      normal_prepare_points: ${{ steps.resolve-normal-points.outputs.normal_prepare_points }}\n      normal_trace_snapshots: ${{ steps.resolve-trace.outputs.normal_trace_snapshots }}"
+  },
+  {
+    "before": "      - name: Resolve suite trace snapshots\n",
+    "after": "      - name: Resolve normal point preparation\n        id: resolve-normal-points\n        shell: bash\n        env:\n          EVENT_NAME: ${{ github.event_name }}\n          NORMAL_PREPARE_POINTS_INPUT: ${{ github.event.inputs.normal_prepare_points }}\n        run: |\n          prepare=true\n          if [[ \"$EVENT_NAME\" == \"workflow_dispatch\" ]]; then\n            prepare=\"${NORMAL_PREPARE_POINTS_INPUT:-true}\"\n          fi\n          case \"$prepare\" in\n            true|false) ;;\n            *) echo \"::error::normal_prepare_points must be true or false\"; exit 1 ;;\n          esac\n          printf 'normal_prepare_points=%s\\n' \"$prepare\" >> \"$GITHUB_OUTPUT\"\n\n      - name: Resolve suite trace snapshots\n"
+  },
+  {
+    "before": "    env:\n      PWAPPY_TRACE_SNAPSHOTS: ${{ needs.prepare-matrix.outputs.normal_trace_snapshots }}",
+    "after": "    env:\n      PWAPPY_TEST_POINTS_ENABLED: ${{ needs.prepare-matrix.outputs.normal_prepare_points }}\n      PWAPPY_TRACE_SNAPSHOTS: ${{ needs.prepare-matrix.outputs.normal_trace_snapshots }}"
+  },
+  {
+    "before": "            trap 'e2e_status=$?; kill \"$E2E_MONITOR_PID\" 2>/dev/null || true; wait \"$E2E_MONITOR_PID\" 2>/dev/null || true; echo \"::group::macOS runner resource samples\"; cat \"$E2E_RESOURCE_LOG\"; echo \"::endgroup::\"; exit \"$e2e_status\"' EXIT",
+    "after": "            # Credential-free static GET timings only; no test/retry decisions.\n            E2E_TRANSPORT_LOG=\"$RUNNER_TEMP/e2e-transport.log\"\n            node scripts/transport-sampler.mjs > \"$E2E_TRANSPORT_LOG\" 2>/dev/null &\n            E2E_TRANSPORT_PID=$!\n            finish_e2e_diagnostics() {\n              e2e_status=$?\n              trap - EXIT\n              kill \"$E2E_MONITOR_PID\" 2>/dev/null || true\n              if jobs -pr | grep -Fxq -- \"$E2E_TRANSPORT_PID\"; then\n                kill \"$E2E_TRANSPORT_PID\" 2>/dev/null || true\n              fi\n              wait \"$E2E_MONITOR_PID\" 2>/dev/null || true\n              wait \"$E2E_TRANSPORT_PID\" 2>/dev/null || true\n              echo \"::group::macOS runner resource samples\"\n              cat \"$E2E_RESOURCE_LOG\" || true\n              echo \"::endgroup::\"\n              echo \"::group::macOS static transport samples\"\n              cat \"$E2E_TRANSPORT_LOG\" || true\n              echo \"::endgroup::\"\n              exit \"$e2e_status\"\n            }\n            trap finish_e2e_diagnostics EXIT"
+  }
+]

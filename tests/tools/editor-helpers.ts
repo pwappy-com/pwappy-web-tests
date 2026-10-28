@@ -1,4 +1,6 @@
+import { observePageHttpFailures } from './http-failure-diagnostics';
 import { test, expect, type Page, type Locator, FrameLocator } from '@playwright/test';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { clickAndOpenNewTabSafely } from './window-helpers';
 
 /**
@@ -24,6 +26,7 @@ export class EditorHelper {
      * @param isMobile モバイルビューポートでテストを実行しているかどうかのフラグ
      */
     constructor(page: Page, isMobile: boolean) {
+        observePageHttpFailures(page);
         this.page = page;
         this.isMobile = isMobile;
     }
@@ -49,75 +52,184 @@ export class EditorHelper {
 
                 // 1. ローディング表示が消えるのを確実に待つ（エディタDOMの安定化）
                 const loadingOverlay = this.page.locator('app-container-loading-overlay');
-                await expect(loadingOverlay).toBeHidden({ timeout: 15000 }).catch(() => {
-                    log('警告: app-container-loading-overlay が非表示になりませんでした。');
-                });
+                await expect(loadingOverlay).toBeHidden({ timeout: 15000 });
 
-                // 2. PlaywrightのロケータでDOMツリーを走査し、空アプリかどうかを判定（Shadow DOM透過）
-                const domTree = this.page.locator('#dom-tree');
-                const hasContents = await domTree.locator('.node[data-node-type="page"], .node[data-node-type="ons-navigator"]').count() > 0;
-                const isEmptyApp = !hasContents;
-
-                log(`アプリの状態判定: ${isEmptyApp ? '【新規・空アプリ】' : '【既存・要素ありアプリ】'}`);
-
-                // 既存の要素があるアプリの場合、モーダルは絶対に表示されないため即終了
-                if (!isEmptyApp) {
-                    log('要素ありアプリのため、待機なしで終了します。[スキップ成功]');
-                    return;
-                }
-
-                // 3. 空アプリの場合のみ、モーダルに 'visible' 属性が付与されるのを最大6秒間待機（Shadow DOM自動透過）
-                log('新規アプリのため、モーダル出現（visible属性）を最大6秒間待機します...');
+                // Loading=false precedes asynchronous initial save/snapshot checks in the
+                // app. Observe a positive startup outcome instead of classifying one empty
+                // count as ready and imposing a separate six-second appearance deadline.
                 const starterModal = this.page.locator('starter-template-modal');
+                const startupMarkers = this.page.locator(
+                    '#dom-tree .node[data-node-type="page"], #dom-tree .node[data-node-type="ons-navigator"], starter-template-modal, message-box[visible]'
+                );
+                const startup = { state: 'pending' as 'pending' | 'existing-content' | 'starter-visible' | 'snapshot-visible' };
+                const observeStartup = async () => {
+                    await expect.poll(async () => {
+                        // One atomic, read-only DOM observation. Snapshot lookup starts after
+                        // loading disappears, so a late known blocker must not be ignored.
+                        startup.state = await startupMarkers.evaluateAll(nodes => {
+                            if (nodes.some(node => node.isConnected && node.matches('message-box[visible]') &&
+                                node.textContent?.includes('前回正常に終了されなかった可能性'))) return 'snapshot-visible';
+                            if (nodes.some(node => node.isConnected && node.matches('starter-template-modal[visible]'))) return 'starter-visible';
+                            // TemplateContainer renders #dom-tree and recursive .node descendants
+                            // in the same shadow tree. Content is the existing fast path, not proof
+                            // that an asynchronous snapshot check can never show a later dialog.
+                            if (nodes.some(node => node.isConnected && node.matches('#dom-tree .node[data-node-type="page"], #dom-tree .node[data-node-type="ons-navigator"]'))) return 'existing-content';
+                            return 'pending';
+                        });
+                        return startup.state;
+                    }, {
+                        // Configured observation budget (CI20s/local10s), not a product SLA.
+                        // No native actions, probe installation or state writes in this poll.
+                        message: 'Editor startup must expose existing content, the visible starter modal, or a known snapshot blocker'
+                    }).not.toBe('pending');
+                };
+                await observeStartup();
+                if (startup.state === 'snapshot-visible') {
+                    console.log('[EditorStartup]', JSON.stringify({ phase: 'late-snapshot-observed', attempt: 1 }));
+                    // Exactly one invocation OUTSIDE polling; preserve the existing discard,
+                    // confirmation, hidden-state assertions and dialog-listener cleanup.
+                    await this.handleSnapshotRestoreDialog();
+                    // This is a distinct bounded post-dismissal observation phase, never a
+                    // reset/retry of the snapshot input. Missing startup remains a failure.
+                    await observeStartup();
+                    if (startup.state === 'snapshot-visible') {
+                        throw new Error('Snapshot blocker persisted or returned after one startup handling attempt');
+                    }
+                }
+                if (startup.state === 'existing-content') return;
 
-                // expect の組み込みリトライ（toHaveAttribute）を使って確実に属性の付与を待つ
-                await expect(starterModal).toHaveAttribute('visible', '', { timeout: 6000 });
-                log('モーダルの出現を確認しました！');
-
+                // A known visible starter takes priority over content: never skip a blocker.
                 // 4. モーダルのスキップ処理
                 const skipBtn = starterModal.locator('.btn-skip, button:has-text("閉じて一から自分で作る")').first();
                 await expect(skipBtn).toBeVisible({ timeout: 2000 });
 
-                await expect(async () => {
-                    log('スキップボタンのクリックを試行します。');
-
-                    // JSによる直接クリック
-                    const jsClicked = await skipBtn.evaluate((el: HTMLElement) => {
-                        if (el) {
-                            el.click();
-                            return true;
+                const warnDiagnosticUnavailable = (phase: string, operationSucceeded: boolean | null, error: unknown) => {
+                    const message = error instanceof Error ? error.message : String(error);
+                    // Fixed classifications only: raw messages can contain authenticated URLs.
+                    const reason = /timeout|timed out/i.test(message) ? 'timeout'
+                        : /closed|detached|destroyed/i.test(message) ? 'page-unavailable'
+                        : 'diagnostic-error';
+                    console.warn('[StarterClose] diagnostic unavailable:', JSON.stringify({
+                        operationSucceeded, unavailable: phase, reason
+                    }));
+                };
+                // Probe installation is optional. Undefined is an UNKNOWN state, never
+                // evidence that the modal is closed. Only a successful DOM read of null
+                // may suppress the native input; the attribute assertion is always required.
+                let initialVisible: string | null | undefined;
+                try {
+                    initialVisible = await starterModal.evaluate((element: any) => {
+                        const samples: any[] = [];
+                        const record = (sample: object) => {
+                            if (samples.length < 40) samples.push({ at: performance.now(), ...sample });
+                        };
+                        const listener = (event: Event) => {
+                            const target = event.composedPath()[0] as HTMLElement;
+                            if (event.type !== 'starter-modal-closed' && !target?.closest?.('.btn-skip')) return;
+                            record({ type: event.type, trusted: event.isTrusted, visible: element.hasAttribute('visible') });
+                        };
+                        const types = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click', 'starter-modal-closed'];
+                        const root = element.shadowRoot;
+                        let observer: MutationObserver | undefined;
+                        let timer: ReturnType<typeof setInterval> | undefined;
+                        // Define rollback before acquiring resources, so partial initialization
+                        // (including observer.observe failure) also removes registered listeners.
+                        const cleanup = () => {
+                            for (const type of types) root?.removeEventListener(type, listener, true);
+                            element.removeEventListener('starter-modal-closed', listener, true);
+                            observer?.disconnect();
+                            if (timer !== undefined) clearInterval(timer);
+                            delete element.__e2eStarterProbe;
+                        };
+                        try {
+                            for (const type of types) root.addEventListener(type, listener, true);
+                            element.addEventListener('starter-modal-closed', listener, true);
+                            observer = new MutationObserver(() => record({ type: 'visible-attribute', visible: element.hasAttribute('visible') }));
+                            observer.observe(element, { attributes: true, attributeFilter: ['visible'] });
+                            const heartbeat = { ticks: 0, maxGapMs: 0, lastAt: performance.now(), startedAt: performance.now(), hiddenObserved: document.hidden };
+                            timer = setInterval(() => {
+                                const now = performance.now();
+                                heartbeat.maxGapMs = Math.max(heartbeat.maxGapMs, now - heartbeat.lastAt);
+                                heartbeat.lastAt = now;
+                                heartbeat.ticks++;
+                                heartbeat.hiddenObserved ||= document.hidden;
+                                if (now - heartbeat.startedAt >= 30000) cleanup();
+                            }, 250);
+                            element.__e2eStarterProbe = { samples, heartbeat, cleanup };
+                            return element.getAttribute('visible');
+                        } catch (error) {
+                            cleanup();
+                            throw error;
                         }
-                        return false;
-                    }).catch(() => false);
-
-                    if (jsClicked) {
-                        log('JSクリック送信成功。');
-                    } else {
-                        await skipBtn.click({ force: true, timeout: 500 }).catch(async () => {
-                            await skipBtn.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                        });
+                    }, undefined, { timeout: 5000 });
+                } catch (diagnosticError) {
+                    // A diagnostic selector timeout cannot gate required user input.
+                    warnDiagnosticUnavailable('installation', null, diagnosticError);
+                }
+                const closeStartedAt = Date.now();
+                const nodeDelay = monitorEventLoopDelay({ resolution: 20 });
+                nodeDelay.enable();
+                let closePhase = 'reuse-visible';
+                let phaseStartedAt = Date.now();
+                const phaseTimes: { phase: string; elapsedMs: number }[] = [];
+                const finishPhase = () => {
+                    if (phaseTimes.length < 20) phaseTimes.push({ phase: closePhase, elapsedMs: Date.now() - phaseStartedAt });
+                };
+                let closeSucceeded = false;
+                try {
+                    // One awaited native input, never a mutating toPass callback. A toPass
+                    // deadline does not cancel its callback or a protocol call in flight.
+                    // Provisional orchestration budgets, NOT a product SLA: one observed
+                    // client action took 9.739s (including post-action tracing).
+                    if (initialVisible !== null) {
+                        closePhase = 'native-click';
+                        phaseStartedAt = Date.now();
+                        await skipBtn.click({ timeout: 15000 });
+                        finishPhase();
                     }
+                    closePhase = 'assert-hidden';
+                    phaseStartedAt = Date.now();
+                    await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 10000 });
+                    finishPhase();
 
-                    // モーダルが閉じた（visible属性が消えた）ことを検証
-                    await expect(starterModal).not.toHaveAttribute('visible', '', { timeout: 1000 });
-                }).toPass({
-                    timeout: 4000,
-                    intervals: [300]
-                });
+                    closeSucceeded = true;
+                } finally {
+                    nodeDelay.disable();
+                    // No samples means unknown, not a measured zero delay.
+                    const nodeTiming = {
+                        samples: nodeDelay.count,
+                        maxMs: nodeDelay.count ? nodeDelay.max / 1e6 : null,
+                        meanMs: nodeDelay.count ? nodeDelay.mean / 1e6 : null,
+                        p99Ms: nodeDelay.count ? nodeDelay.percentile(99) / 1e6 : null,
+                        phase: closePhase, phaseElapsedMs: Date.now() - phaseStartedAt, completedPhases: phaseTimes
+                    };
+                    if (!closeSucceeded) console.log('[StarterClose] node timing:', JSON.stringify(nodeTiming));
+                    // Emit the runner-side duration before reading the page, even if its renderer is stalled.
+                    if (!closeSucceeded) console.log('[StarterClose] operation failed after ms:', Date.now() - closeStartedAt);
+                    const diagnosticStartedAt = Date.now();
+                    try {
+                        const diagnostic = await starterModal.evaluate((element: any) => {
+                            const probe = element.__e2eStarterProbe;
+                            if (!probe) return { unavailable: 'probe expired or already cleaned' };
+                            const heartbeat = { ...probe.heartbeat, observationMs: performance.now() - probe.heartbeat.startedAt, tailGapMs: performance.now() - probe.heartbeat.lastAt, hiddenAtRead: document.hidden };
+                            probe.cleanup();
+                            return { samples: probe.samples, visible: element.hasAttribute('visible'), heartbeat };
+                        }, undefined, { timeout: 5000 });
+                        if (!closeSucceeded) console.log('[StarterClose] native events and reflected state:', JSON.stringify({ ...diagnostic, diagnosticElapsedMs: Date.now() - diagnosticStartedAt }));
+                    } catch (cleanupError) {
+                        // Optional telemetry is not the behavior oracle. Preserve native
+                        // input/assertion failures, but do not create one after success.
+                        // The probe self-cleans when readback cannot reach the renderer.
+                        warnDiagnosticUnavailable('readback/cleanup', closeSucceeded, cleanupError);
+                    }
+                }
 
                 log('モーダルの閉鎖完了。');
                 await this.page.waitForTimeout(300);
             });
         } catch (e) {
-            log(`警告: 閉鎖処理中に例外が発生。強制破棄フォールバックを実行。内容: ${e}`);
-            // フェイルセーフ：ロケータを通じて直接visible属性を除去
-            await this.page.locator('starter-template-modal').evaluate((el: HTMLElement) => {
-                if (el) {
-                    el.removeAttribute('visible');
-                    el.style.display = 'none';
-                    el.style.pointerEvents = 'none';
-                }
-            }).catch(() => { });
+            console.error('[StarterTemplateModal] Failed to close modal:', e);
+            throw e;
         } finally {
             log(`判定ロジック全体の合計処理時間: ${Date.now() - startTime}ms`);
         }
@@ -148,40 +260,25 @@ export class EditorHelper {
                 if (await snapshotConfirmDialog.isVisible({ timeout: 5000 }).catch(() => false)) {
                     // --- 1. 最初のダイアログ: 「破棄する」をクリック（活性化を待って確実に実行） ---
                     const discardInitialBtn = snapshotConfirmDialog.getByRole('button', { name: '破棄する' });
-                    await expect(async () => {
-                        await expect(discardInitialBtn).toBeEnabled({ timeout: 1000 });
-                        await discardInitialBtn.click({ force: true });
-                    }).toPass({
-                        timeout: 5000,
-                        intervals: [500]
-                    });
-
-                    // --- 2. 再確認ダイアログが表示されるのを待つ ---
                     const discardConfirmDialog = this.page.locator('message-box', {
                         hasText: 'すべてのスナップショットを破棄しますか？'
                     });
-                    await expect(discardConfirmDialog).toBeVisible({ timeout: 5000 });
+                    if (!await discardConfirmDialog.isVisible()) {
+                        await discardInitialBtn.click({ timeout: 10000 });
+                    }
+                    // Await the postcondition without replaying a mutating input.
+                    await expect(discardConfirmDialog).toBeVisible({ timeout: 10000 });
 
                     // --- 3. 「はい、破棄します」をクリック（活性化を待って確実に実行） ---
-                    // アニメーション等の遅延による空振りを防ぐため、ボタンが有効化されるまで toPass で再試行します
+                    // 通常クリックを一度だけ実行し、閉鎖を別途検証します
                     const discardBtn = discardConfirmDialog.getByRole('button', { name: 'はい、破棄します' });
-                    await expect(async () => {
-                        await expect(discardBtn).toBeEnabled({ timeout: 1000 });
-                        await discardBtn.click({ force: true });
-                    }).toPass({
-                        timeout: 5000,
-                        intervals: [500]
-                    });
-
-                    // 4. すべてのモーダルが消え去るのを待つ
-                    // toPassによる再試行で、ダイアログフェードアウト中の過渡期によるFlaky（不安定化）を防止
-                    await expect(async () => {
-                        await expect(snapshotConfirmDialog).toBeHidden({ timeout: 1000 });
-                        await expect(discardConfirmDialog).toBeHidden({ timeout: 1000 });
-                    }).toPass({
-                        timeout: 10000,
-                        intervals: [500]
-                    });
+                    // force クリックの完了だけでは閉鎖を保証できない。
+                    // 通常クリックで操作可能性を待ち、実際の閉鎖まで検証する。
+                    // Provisional native-action allowance, not a UI SLA: one Safari trace
+                    // spent 4.892s before dispatch, leaving ~108ms of the old 5s budget.
+                    await discardBtn.click({ timeout: 15000 });
+                    await expect(snapshotConfirmDialog).toBeHidden({ timeout: 10000 });
+                    await expect(discardConfirmDialog).toBeHidden({ timeout: 10000 });
                 }
             });
         } finally {
@@ -197,6 +294,11 @@ export class EditorHelper {
     async addPage(): Promise<Locator> {
         await this.page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
         await this.openMoveingHandle('left');
+        const pageNodes = this.page.locator('#dom-tree > .node[data-node-type="page"]');
+        const previousIds = await pageNodes.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-node-id')));
+        const getAddedIds = () => pageNodes.evaluateAll((nodes, ids) =>
+            nodes.map(node => node.getAttribute('data-node-id'))
+                .filter((id): id is string => id !== null && !ids.includes(id)), previousIds);
         const humburgerButton = this.page.locator('template-container #hamburger');
         await expect(humburgerButton).toBeVisible();
         await humburgerButton.click();
@@ -204,7 +306,10 @@ export class EditorHelper {
         await expect(contextMenu).toBeVisible();
         await contextMenu.getByText('ページ追加').click();
 
-        const newPageNode = this.page.locator('#dom-tree > .node[data-node-type="page"]').last();
+        // .last() は次のページ追加で参照先が変わるため、追加完了とIDを確定して返す。
+        await expect.poll(getAddedIds).toHaveLength(1);
+        const [addedId] = await getAddedIds();
+        const newPageNode = pageNodes.and(this.page.locator(`[data-node-id="${addedId}"]`));
         await expect(newPageNode).toBeVisible();
         return newPageNode;
     }
@@ -234,16 +339,35 @@ export class EditorHelper {
 
         await expect(targetLocator).toBeVisible();
 
-        const newComponentNode = targetLocator.locator(`> .node[data-node-type="${componentName}"]`).first();
+        const componentNodes = targetLocator.locator(`> .node[data-node-type="${componentName}"]`);
+        const existingIds = await componentNodes.evaluateAll(nodes => nodes.map(node => node.getAttribute('data-node-id')));
+        const getAddedIds = () => componentNodes.evaluateAll((nodes, previousIds) =>
+            nodes.map(node => node.getAttribute('data-node-id'))
+                .filter((id): id is string => id !== null && !previousIds.includes(id)), existingIds);
 
-        // 負荷が高い状況下でのドラッグ＆ドロップ（dragTo）の空振りを防ぐため、toPassによる自動リトライを持たせます
-        await expect(async () => {
-            if (!await newComponentNode.isVisible()) {
-                await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, { targetPosition: { x: 10, y: 10 }, timeout: 3000 });
+        // Native drag is performed once. Retrying an input after a slow postcondition
+        // can create duplicates, and toPass can outlive its outer deadline.
+        await expect(this.page.locator('app-container-loading-overlay')).toBeHidden({ timeout: 10000 });
+        await this.page.mouse.up();
+        let dragSucceeded = false;
+        try {
+            await this.page.locator('tool-box-item', { hasText: componentName }).dragTo(targetLocator, {
+                targetPosition: { x: 10, y: 10 }, timeout: 15000
+            });
+            dragSucceeded = true;
+        } finally {
+            try {
+                await this.page.mouse.up();
+            } catch (cleanupError) {
+                if (dragSucceeded) throw cleanupError;
+                console.error('[EditorSync:addComponent] mouse release failed:', cleanupError);
             }
-            await expect(newComponentNode).toBeVisible({ timeout: 3000 });
-        }).toPass({ timeout: 15000, intervals: [1000] });
+        }
+        await expect.poll(getAddedIds, { timeout: 10000 }).toHaveLength(1);
 
+        const [addedId] = await getAddedIds();
+        const newComponentNode = componentNodes.and(this.page.locator(`[data-node-id="${addedId}"]`));
+        await expect(newComponentNode).toBeVisible();
         return newComponentNode;
     }
 
@@ -297,7 +421,7 @@ export class EditorHelper {
         await this.openMoveingHandle('left');
 
         await nodeLocator.click({ position: { x: 0, y: 10 } });
-        await expect(nodeLocator).toHaveClass(/node-select/);
+        await expect(nodeLocator).toHaveClass(/(?:^|\s)node-select(?:\s|$)/);
     }
 
     /**
@@ -526,48 +650,7 @@ export class EditorHelper {
     async openMoveingHandle(handleType: 'right' | 'left'): Promise<void> {
         if (!this.isMobile) return;
 
-        const leftHandle = this.page.locator(`#leftMovingHandle`);
-        const rightHandle = this.page.locator(`#rightMovingHandle`);
-        await expect(leftHandle).toBeVisible();
-        await expect(rightHandle).toBeVisible();
-
-        const handle = this.page.locator(`#${handleType}MovingHandle`);
-        const targetContainer = (handleType === 'right')
-            ? this.page.locator('script-container')
-            : this.page.locator('template-container');
-
-        if (!await targetContainer.isVisible()) {
-            let attempt = 0;
-            await expect(async () => {
-                attempt++;
-                if (!await targetContainer.isVisible()) {
-                    if (attempt % 3 === 1) {
-                        // 物理またはJSによるダブルクリックを試す
-                        await handle.dblclick({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.evaluate(el => {
-                                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-                            }).catch(() => { });
-                        });
-
-                    } else if (attempt % 3 === 2) {
-                        // 3連続タップ（ダブルタップ擬似シミュレーション）を試す
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                    } else {
-                        // シングルクリック/シングルタップを試す（最も一般的なトグル仕様への対応）
-                        await handle.click({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.tap({ timeout: 500 }).catch(() => { });
-                        });
-
-                    }
-                }
-                // アニメーション完了を待機
-                await expect(targetContainer).toBeVisible({ timeout: 1500 });
-            }).toPass({
-                timeout: 10000,
-                intervals: [1000] // チャタリングを防ぐため、再試行の間隔を十分に確保する
-            });
-        }
+        await this.setMovingHandleState(handleType, true);
     }
 
     /**
@@ -575,67 +658,140 @@ export class EditorHelper {
      */
     async closeMoveingHandle(): Promise<void> {
         if (!this.isMobile) return;
-
-        const templateContainer = this.page.locator('template-container');
-        const scriptContainer = this.page.locator('script-container');
-
-        if (await scriptContainer.isVisible()) {
-            const handle = this.page.locator(`#rightMovingHandle`);
-            let attempt = 0;
-            await expect(async () => {
-                attempt++;
-                if (await scriptContainer.isVisible()) {
-                    if (attempt % 3 === 1) {
-                        await handle.dblclick({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.evaluate(el => {
-                                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-                            }).catch(() => { });
-                        });
-                    } else if (attempt % 3 === 2) {
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                    } else {
-                        await handle.click({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.tap({ timeout: 500 }).catch(() => { });
-                        });
-                    }
-                }
-                await expect(scriptContainer).toBeHidden({ timeout: 1500 });
-            }).toPass({
-                timeout: 10000,
-                intervals: [1000]
-            });
-        }
-
-        if (await templateContainer.isVisible()) {
-            const handle = this.page.locator(`#leftMovingHandle`);
-            let attempt = 0;
-            await expect(async () => {
-                attempt++;
-                if (await templateContainer.isVisible()) {
-                    if (attempt % 3 === 1) {
-                        await handle.click({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.tap({ timeout: 500 }).catch(() => { });
-                        });
-                    } else if (attempt % 3 === 2) {
-                        await handle.dblclick({ force: true, timeout: 500 }).catch(async () => {
-                            await handle.evaluate(el => {
-                                el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-                            }).catch(() => { });
-                        });
-                    } else {
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                        await handle.tap({ noWaitAfter: true, timeout: 500 }).catch(() => { });
-                    }
-                }
-                await expect(templateContainer).toBeHidden({ timeout: 1500 });
-            }).toPass({
-                timeout: 10000,
-                intervals: [1000]
-            });
-        }
+        await this.setMovingHandleState('right', false);
+        await this.setMovingHandleState('left', false);
     }
 
+    private async setMovingHandleState(handleType: 'right' | 'left', open: boolean): Promise<void> {
+        const handle = this.page.locator(`#${handleType}MovingHandle`);
+        const readState = (requireStable = false) => handle.evaluate(async (element, { side, requireStable }) => {
+            const snapshot = () => {
+                const root = element.getRootNode() as ShadowRoot;
+                const style = getComputedStyle(element);
+                let enabled = true;
+                for (let ancestor: Element | null = element; ancestor;) {
+                    if (ancestor.matches(':disabled') || ancestor.hasAttribute('inert') ||
+                        (ancestor.getAttribute('aria-disabled') || '').toLowerCase() === 'true') enabled = false;
+                    const ancestorRoot = ancestor.getRootNode();
+                    ancestor = ancestor.parentElement ||
+                        (ancestorRoot instanceof ShadowRoot ? ancestorRoot.host : null);
+                }
+                const rect = element.getBoundingClientRect();
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                // Full mobile toggles put the handle at a viewport edge. A partial
+                // drag layout is not a closed panel and must never trigger a guess.
+                const atLeft = rect.left >= 0 && rect.left <= 1;
+                const atRight = Math.abs(rect.right - width) <= 1;
+                const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+                // Check the composed hit target at the observed center.
+                // A visible handle covered by another surface is not actionable.
+                let hit: Element | null = document.elementFromPoint(x, y);
+                for (let depth = 0; depth < 8 && hit?.shadowRoot; depth++) {
+                    const inner = hit.shadowRoot.elementFromPoint(x, y);
+                    if (!inner || inner === hit) break;
+                    hit = inner;
+                }
+                let hitTarget = false;
+                for (let depth = 0; depth < 8 && hit; depth++) {
+                    if (hit === element || element.contains(hit)) { hitTarget = true; break; }
+                    const hitRoot = hit.getRootNode();
+                    hit = hitRoot instanceof ShadowRoot ? hitRoot.host : null;
+                }
+                const visible = (selector: string) => {
+                    const node = root.querySelector(selector);
+                    if (!node) return false;
+                    const box = node.getBoundingClientRect();
+                    const style = getComputedStyle(node);
+                    return box.width > 0 && box.height > 0 &&
+                        style.visibility !== 'hidden' && style.visibility !== 'collapse';
+                };
+                return {
+                    supported: width > 0 && width < 1024 && height > 0 && rect.width > 0 && rect.height > 0 &&
+                        rect.left >= 0 && rect.right <= width && rect.top >= 0 && rect.bottom <= height && (atLeft || atRight),
+                    open: side === 'left' ? atRight : atLeft,
+                    x, y, viewportWidth: width, viewportHeight: height, hitTarget,
+                    handleLeft: rect.left, handleTop: rect.top, handleWidth: rect.width, handleHeight: rect.height,
+                    connected: element.isConnected,
+                    visible: rect.width > 0 && rect.height > 0 &&
+                        style.visibility !== 'hidden' && style.visibility !== 'collapse',
+                    enabled,
+                    template: visible('template-container'),
+                    toolbox: visible('tool-box'),
+                    property: visible('property-container'),
+                    script: visible('script-container')
+                };
+            };
+            if (!requireStable) return { ...snapshot(), stable: false };
+            // Two consecutive animation-frame snapshots are read-only. Playwright
+            // 1.60 trial clicks still dispatch mouse input and install interception;
+            // they are not a safe observational readiness fence here.
+            await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+            const before = snapshot();
+            await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+            const after = snapshot();
+            const actionable = (state: typeof before) =>
+                state.connected && state.visible && state.enabled && state.hitTarget && state.supported;
+            const stable = actionable(before) && actionable(after) &&
+                before.handleLeft === after.handleLeft && before.handleTop === after.handleTop &&
+                before.handleWidth === after.handleWidth && before.handleHeight === after.handleHeight &&
+                before.viewportWidth === after.viewportWidth && before.viewportHeight === after.viewportHeight;
+            return { ...after, stable };
+        }, { side: handleType, requireStable });
+        const logPhase = (phase: 'ready' | 'action' | 'observe', state: Awaited<ReturnType<typeof readState>>) => {
+            const bounded = (value: number) => Number.isFinite(value)
+                ? Math.max(0, Math.min(10000, Math.round(value))) : null;
+            // Fixed scalar-only diagnostics: never serialize DOM, URLs or errors.
+            console.log('[EditorSync:movingHandle] ' + JSON.stringify({
+                side: handleType, open, phase, supported: state.supported, hitTarget: state.hitTarget,
+                connected: state.connected, visible: state.visible, enabled: state.enabled, stable: state.stable,
+                x: bounded(state.x), y: bounded(state.y),
+                viewportWidth: bounded(state.viewportWidth), viewportHeight: bounded(state.viewportHeight)
+            }));
+        };
+        const initial = await readState();
+        expect(initial.supported, 'moving handle must have a complete mobile edge layout').toBe(true);
+        expect(!open || (handleType === 'left' ? initial.y >= 30 : initial.y <= initial.viewportHeight - 30),
+            'requested panel is vertically collapsed; a horizontal toggle cannot open it').toBe(true);
+        if (initial.open !== open) {
+            logPhase('ready', initial);
+            await this.page.mouse.up();
+            // Retry observations only. No input dispatch, locator trial or
+            // interception can outlive this bounded readiness assertion.
+            let ready = initial;
+            await expect.poll(async () => {
+                ready = await readState(true);
+                return ready.stable;
+            }, { timeout: 5000, message: 'moving handle must be connected, visible, enabled, unobscured and stable' }).toBe(true);
+            expect(!open || (handleType === 'left' ? ready.y >= 30 : ready.y <= ready.viewportHeight - 30),
+                'requested panel became vertically collapsed during readiness').toBe(true);
+            if (ready.open !== open) {
+                expect(ready.hitTarget, 'moving handle center must still receive input').toBe(true);
+                logPhase('action', ready);
+                // Await one native action to completion under the existing test
+                // deadline. A helper-owned timeout must not start a second toggle
+                // while the first browser input can still be in flight.
+                await this.page.mouse.dblclick(ready.x, ready.y);
+            }
+        }
+        // This phase marker retains the initial geometry; completion is judged
+        // only by the fresh atomic observations below.
+        logPhase('observe', initial);
+        // Right-panel layout crosses asynchronous import boundaries. Observe all
+        // affected containers together, never replay input on a delayed read.
+        await expect.poll(async () => {
+            const state = await readState();
+            const own = handleType === 'left'
+                ? [state.template, state.toolbox] : [state.property, state.script];
+            const opposite = handleType === 'left'
+                ? [state.property, state.script] : [state.template, state.toolbox];
+            return state.supported && state.open === open &&
+                (!open || (handleType === 'left' ? state.template : state.script)) &&
+                own[0] === (open && state.y >= 30) &&
+                own[1] === (open && state.y <= state.viewportHeight - 30) &&
+                (!open || opposite.every(visible => !visible));
+        }, { message: 'moving handle and paired panels must reach the requested state' }).toBe(true);
+    }
     /**
      * 指定されたコンテナ内のタブを切り替えます。
      * メインタブの重複を避けるため、ID指定での切り替えを優先します。
@@ -656,18 +812,27 @@ export class EditorHelper {
         const selector = tabIdMap[tabName] || `.tab:text-is("${tabName}")`;
         const tabLocator = containerLocator.locator(selector).first();
 
+        let attempt = 0;
         await expect(async () => {
-            const alert = this.page.locator('alert-component');
-            if (await alert.isVisible().catch(() => false)) {
-                await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
-            }
-            // Monacoエディタのサジェストなどが被っているケースを考慮しEscapeを送信
-            await this.page.keyboard.press('Escape');
-            // アニメーションや重なりを無視してクリック
-            await tabLocator.click({ force: true, timeout: 3000 });
+            const attemptStarted = Date.now();
+            console.log(`[EditorSync:switchTab] tab=${tabName} attempt=${++attempt} start`);
+            try {
+                const alert = this.page.locator('alert-component');
+                if (await alert.isVisible().catch(() => false)) {
+                    await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
+                }
+                // Monacoエディタのサジェストなどが被っているケースを考慮しEscapeを送信
+                await this.page.keyboard.press('Escape');
+                // 選択済みタブへのクリックも、サブウィンドウを閉じる外部クリックとして必要。
+                await expect(tabLocator).toBeVisible({ timeout: 5000 });
+                await tabLocator.click({ force: true, timeout: 5000 });
 
-            // 切り替わったことを確認（activeクラスが付与されるのを待つ）
-            await expect(tabLocator).toHaveClass(/active/, { timeout: 3000 });
+                // 切り替わったことを確認（activeクラスが付与されるのを待つ）
+                await expect(tabLocator).toHaveClass(/active/, { timeout: 3000 });
+            } catch (error) {
+                console.error(`[EditorSync:switchTab] attempt=${attempt} elapsedMs=${Date.now() - attemptStarted}: ${error instanceof Error ? error.message : String(error)}`);
+                throw error;
+            }
         }).toPass({ timeout: 15000, intervals: [1000] });
     }
 
@@ -731,23 +896,28 @@ export class EditorHelper {
         const platformSwitcher = this.page.locator('platform-switcher');
         const menu = platformSwitcher.locator('#platformEditMenu');
 
-        // メニュー展開時のチャタリング（開閉の繰り返し）防止ガード
+        const menuToggle = platformSwitcher.locator('.screen-rotete-container');
         await expect(async () => {
             if (!await menu.isVisible()) {
-                await platformSwitcher.locator('.screen-rotete-container').click({ force: true });
+                await this.page.mouse.up();
+                await menuToggle.click({ timeout: 5000 });
             }
-            await expect(menu).toBeVisible({ timeout: 2000 });
-        }).toPass({ timeout: 10000, intervals: [1000] });
+            await expect(menu).toBeVisible({ timeout: 5000 });
+        }).toPass({ timeout: 15000, intervals: [1000] });
 
-        await menu.getByText('動作').click({ force: true });
+        await menu.getByText('動作', { exact: true }).click({ timeout: 5000 });
 
-        // メニュー閉鎖時のチャタリング防止ガード
-        await expect(async () => {
+        // 動作モードの再描画による自動閉鎖を先に待ち、閉鎖途中にトグルを押して再展開しない。
+        try {
+            await expect(menu).toBeHidden({ timeout: 5000 });
+        } catch {
+            console.log('[RunMode] メニューが閉じないため、表示状態を再確認して閉じます。');
             if (await menu.isVisible()) {
-                await platformSwitcher.locator('.screen-rotete-container').click({ force: true });
+                await this.page.mouse.up();
+                await menuToggle.click({ timeout: 5000 });
             }
-            await expect(menu).toBeHidden({ timeout: 2000 });
-        }).toPass({ timeout: 10000, intervals: [1000] });
+            await expect(menu).toBeHidden({ timeout: 5000 });
+        }
 
         if (options.expectedAlertText) {
             const previewFrame = this.getPreviewFrame();
@@ -773,25 +943,30 @@ export class EditorHelper {
         await menuButton.click();
         await expect(platformBottomMenu).toBeVisible();
 
-        // 保存ボタンを押す前に、保存通信(API)の完了を監視する準備をする
-        const saveResponsePromise = this.page.waitForResponse(
-            response => response.request().method() === 'PUT' && response.url().includes('editor'),
-            { timeout: 30000 }
-        ).catch(() => null);
+        // 保存対象のリクエストをクリック前に登録し、HTTP応答とアプリの結果を必須確認する。
+        // URLの部分一致やタイムアウトの握りつぶしで、保存失敗を見逃さない。
+        const appKey = new URL(this.page.url()).searchParams.get('appKey');
+        expect(appKey, '保存対象のappKeyが必要です').toBeTruthy();
+        const [saveResponse] = await Promise.all([
+            this.page.waitForResponse(response => {
+                const request = response.request();
+                if (request.method() !== 'PUT') return false;
+                try {
+                    const payload = request.postDataJSON();
+                    return payload?.appKey === appKey && payload?.editorJson !== undefined;
+                } catch {
+                    return false;
+                }
+            }, { timeout: 30000 }),
+            platformBottomMenu.getByText('保存', { exact: true }).click()
+        ]);
+        expect(saveResponse.ok(), `保存API HTTP ${saveResponse.status()}`).toBeTruthy();
+        const saveResult = await saveResponse.json();
+        expect(saveResult.code, '保存APIの成功コード').toBe(200);
 
-        // 保存をクリック
-        await platformBottomMenu.getByText('保存', { exact: true }).click();
-
-        // 「処理中」が一瞬表示されるのを待ってから、消えるのを待つ
+        // 保存応答後の再読込・再描画が完了するまで待つ。固定の5秒待機は不要。
         const loadingOverlay = this.page.locator('app-container-loading-overlay');
-        await loadingOverlay.getByText('処理中').waitFor({ state: 'visible', timeout: 2000 }).catch(() => { });
-        await loadingOverlay.getByText('処理中').waitFor({ state: 'hidden', timeout: 30000 });
-
-        // ネットワークレベルで保存APIの通信が完了するのを確実に待つ
-        await saveResponsePromise;
-
-        // サーバー側のファイル書き込みラグを吸収するための待機
-        await this.page.waitForTimeout(5000);
+        await expect(loadingOverlay).toBeHidden({ timeout: 30000 });
 
         // アラートにエラー文字が含まれていればテストを強制終了させる
         if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -806,11 +981,13 @@ export class EditorHelper {
         // 保存後にメニューが閉じていたら再度開く
         await expect(async () => {
             if (!await platformBottomMenu.isVisible()) {
-                await menuButton.click({ force: true, timeout: 2000 }).catch(() => { });
-                await expect(platformBottomMenu).toBeVisible({ timeout: 2000 });
+                await expect(this.page.locator('app-container-loading-overlay')).toBeHidden();
+                await this.page.mouse.up();
+                await menuButton.click({ timeout: 5000 });
             }
+            await expect(platformBottomMenu).toBeVisible({ timeout: 5000 });
         }).toPass({
-            timeout: 10000,
+            timeout: 15000,
             intervals: [1000]
         });
 
@@ -871,8 +1048,8 @@ export class EditorHelper {
 
         await targetToplistItem.click();
         await expect(topTemplateListContainer).toBeHidden();
-        // 切り替え後の再描画待ち
-        await this.page.waitForTimeout(500);
+        // メニューが閉じただけでは旧ツリーが残るため、選択先の再描画を待つ。
+        await expect(this.page.locator(`#dom-tree > .node[data-node-id="${templateId}"]`)).toBeVisible();
     }
 
     /**
@@ -968,8 +1145,14 @@ export class EditorHelper {
 
         // 保存完了の判定
         const alert = this.page.locator('alert-component');
-        // 保存に成功、またはエラーでアラートが出たら判定する
-        if (await alert.isVisible({ timeout: 8000 }).catch(() => false)) {
+        // isVisible({ timeout }) は待機しないため、保存結果が出るまで明示的に待つ。
+        await expect.poll(async () => {
+            if (await alert.isVisible()) return true;
+            const className = await saveIcon.getAttribute('class');
+            return !className?.split(/\s+/).includes('shake-save-button');
+        }, { timeout: 20000, message: 'スクリプトの保存完了またはエラー表示を待機' }).toBe(true);
+
+        if (await alert.isVisible()) {
             const msg = await alert.evaluate((el: any) => el.alertMessage || el.innerText || '');
 
             if (msg?.includes('エラー') || msg?.includes('修正')) {
@@ -985,6 +1168,8 @@ export class EditorHelper {
         // 2. 【追加】新仕様対応：戻るボタン（#fab-close）をクリックしてエディタを閉じ、一覧に戻る
         const closeButton = scriptContainer.locator('#fab-close');
         await closeButton.click();
+        // 閉じる操作はイベントタブへの復帰を保証しないため、編集画面の終了を確認する。
+        await expect(monacoEditor).toBeHidden();
     }
 
     /**
@@ -1045,23 +1230,14 @@ export class EditorHelper {
 
         // クリックと非表示確認をセットにしてリトライ（toPass）させる
         await expect(async () => {
-            const isVisible = await alertDialog.isVisible().catch(() => false);
+            const isVisible = await alertDialog.isVisible();
             if (isVisible) {
                 // force: trueのクリックがインターセプトされる環境への対策として
                 // dispatchEvent を使い、ブラウザ本来のイベントフローを自然に発火させる
-                await alertButton.dispatchEvent('click').catch(() => { });
+                await alertButton.dispatchEvent('click');
             }
 
-            try {
-                // アラートが非表示（またはDOMから消滅）になることを期待
-                await expect(alertDialog).toBeHidden({ timeout: 1000 });
-            } catch (e: any) {
-                // ページがクローズ/切断された場合は非表示と同等のため、例外を安全に無視して終了
-                if (e.message.includes('closed') || e.message.includes('Target page')) {
-                    return;
-                }
-                throw e;
-            }
+            await expect(alertDialog).toBeHidden({ timeout: 1000 });
         }).toPass({
             timeout: 15000,
             intervals: [1000] // 1秒おきに再試行
@@ -1146,11 +1322,25 @@ export class EditorHelper {
             await this.page.keyboard.press('Escape');
         }
 
-        // 1. 【修正】保存ボタンをクリック
-        await scriptContainer.locator('#fab-save').click();
-
-        // 2. 【追加】新仕様対応：戻るボタン（#fab-close）をクリックしてエディタを閉じ、一覧に戻る
+        // 保存中に戻る操作を始めない。イベント用エディタと同じ完了状態を確認する。
+        const saveButton = scriptContainer.locator('#fab-save');
+        const saveIcon = saveButton.locator('i');
+        await expect(saveIcon).toHaveClass(/shake-save-button/);
+        await saveButton.click();
+        const alert = this.page.locator('alert-component');
+        await expect.poll(async () => {
+            if (await alert.isVisible()) return true;
+            return !(await saveIcon.getAttribute('class'))?.split(/\s+/).includes('shake-save-button');
+        }, { timeout: 20000, message: 'スクリプトの保存完了またはエラー表示を待機' }).toBe(true);
+        if (await alert.isVisible()) {
+            const message = await alert.evaluate((el: any) => el.alertMessage || el.innerText || '');
+            if (/エラー|失敗|修正/.test(message)) throw new Error(`スクリプト保存エラー: ${message}`);
+            await alert.getByRole('button', { name: '閉じる' }).click();
+            await expect(alert).toBeHidden();
+        }
+        await expect(saveIcon).not.toHaveClass(/shake-save-button/);
         await scriptContainer.locator('#fab-close').click();
+        await expect(monacoEditor).toBeHidden();
     }
 
     /**
@@ -1493,14 +1683,13 @@ export class EditorHelper {
 
         const menu = this.page.locator('#platformBottomMenu');
 
-        // メニューが表示されるまで、1秒ごとにメニューボタンのクリックを繰り返す
+        // 既に開いたメニューを再クリックで閉じない。描画完了も待ってから次へ進む。
         await expect(async () => {
-            await this.page.locator('#fab-bottom-menu-box').click();
-            await expect(menu).toBeVisible({ timeout: 500 });
-        }).toPass({
-            intervals: [1000], // 1秒ごとにリトライ
-            timeout: 5000      // 最大5秒間試行（環境に合わせて調整してください）
-        });
+            if (!await menu.isVisible()) {
+                await this.page.locator('#fab-bottom-menu-box').click({ timeout: 5000 });
+            }
+            await expect(menu).toBeVisible({ timeout: 5000 });
+        }).toPass({ intervals: [1000], timeout: 15000 });
 
         // 「ファイル管理」をクリック
         await menu.getByText('ファイル管理').click();
@@ -1583,28 +1772,66 @@ export class EditorHelper {
     async enterDirectory(name: string): Promise<void> {
         const explorer = this.page.locator('file-explorer');
 
-        // 1. ドラッグの干渉等による空振りを防ぐため、リトライ込みで実行する
-        await expect(async () => {
-            const dir = explorer.locator('.directory').filter({ hasText: name });
-            await expect(dir).toBeVisible();
-
-            // 現在のパンくずの数を取得
-            const links = explorer.locator('.path-link');
-            const beforeCount = await links.count();
-
-            // ダブルクリック
-            await dir.dblclick({ delay: 50, force: true });
-
-            // ロード完了を待つ
-            await this.waitForFileExplorerLoading();
-
-            // パンくずの数が変わっている（中に入った）ことを確認
-            const afterCount = await links.count();
-            expect(afterCount).toBeGreaterThan(beforeCount);
-        }).toPass({
-            timeout: 15000,
-            intervals: [1000]
+        await this.waitForFileExplorerLoading();
+        const links = explorer.locator('.path-link');
+        const beforeCount = await links.count();
+        // 操作を変えずに、実際に届いたクリックの間隔と対象だけを失敗時に記録する。
+        await explorer.evaluate((element: any) => {
+            const samples: any[] = [];
+            const listener = (event: Event) => {
+                const target = event.composedPath()[0] as HTMLElement;
+                if (!target?.closest?.('.directory')) return;
+                samples.push({
+                    type: event.type,
+                    elapsedMs: performance.now(),
+                    tag: target.tagName,
+                    className: target.className,
+                    detail: (event as MouseEvent).detail,
+                    trusted: event.isTrusted
+                });
+            };
+            element.__e2eDirectoryProbe = { samples, listener };
+            element.shadowRoot.addEventListener('click', listener, true);
+            element.shadowRoot.addEventListener('dblclick', listener, true);
         });
+        let navigationSucceeded = false;
+        let firstAttempt = true;
+        try {
+            // リトライ前の階層を固定し、遷移済みなら再度ダブルクリックしない。
+            await expect(async () => {
+                // The initial loading barrier already completed before reading beforeCount.
+                // Only observation/probe setup follows it; retries must wait again.
+                if (!firstAttempt) await this.waitForFileExplorerLoading();
+                firstAttempt = false;
+                if (await links.count() === beforeCount) {
+                    const dir = explorer.locator('.directory').filter({ hasText: name });
+                    // 行内の選択チェックボックスを避け、操作可能なフォルダーアイコンを開く。
+                    const folderIcon = dir.locator('.icon-directory');
+                    await expect(folderIcon).toBeVisible();
+                    await this.page.mouse.up();
+                    // 追加の押下遅延で独自ダブルクリック判定の200msを超えないようにする。
+                    await folderIcon.dblclick({ timeout: 5000 });
+                }
+                await this.waitForFileExplorerLoading();
+                await expect.poll(() => links.count(), { timeout: 5000 }).toBeGreaterThan(beforeCount);
+                await expect(links.last()).toHaveText(`/${name}`, { timeout: 5000 });
+            }).toPass({
+                timeout: 15000,
+                intervals: [1000]
+            });
+            navigationSucceeded = true;
+        } finally {
+            if (this.page.isClosed()) throw new Error('Page closed during directory navigation');
+            const samples = await explorer.evaluate((element: any) => {
+                const probe = element.__e2eDirectoryProbe;
+                if (!probe) return [];
+                element.shadowRoot.removeEventListener('click', probe.listener, true);
+                element.shadowRoot.removeEventListener('dblclick', probe.listener, true);
+                delete element.__e2eDirectoryProbe;
+                return probe.samples;
+            });
+            if (!navigationSucceeded) console.log('[DirectoryNavigation] delivered pointer events:', JSON.stringify(samples));
+        }
     }
 
     /**
@@ -1649,7 +1876,7 @@ export class EditorHelper {
      * 操作メニューからアクションを実行します。
      * @param action 'コピー' | '切り取り' | '貼り付け' | '削除' | '名前変更' | 'パスをコピー' | '新規ディレクトリ'
      */
-    async performFileOperation(action: string): Promise<void> {
+    async performFileOperation(action: string, expectedToast?: string | RegExp): Promise<void> {
         const explorer = this.page.locator('file-explorer');
 
         await expect(async () => {
@@ -1657,9 +1884,12 @@ export class EditorHelper {
             if (await alert.isVisible().catch(() => false)) {
                 await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
             }
-            await explorer.locator('#menu-operation').click({ timeout: 2000, force: true });
             const popupList = explorer.locator('file-explorer-popup-menu ul');
-            await expect(popupList).toBeVisible({ timeout: 2000 });
+            if (!await popupList.isVisible()) {
+                await this.waitForFileExplorerLoading();
+                await explorer.locator('#menu-operation').click({ timeout: 5000 });
+            }
+            await expect(popupList).toBeVisible({ timeout: 5000 });
         }).toPass({ timeout: 15000, intervals: [1000] });
 
         const popupList = explorer.locator('file-explorer-popup-menu ul');
@@ -1672,7 +1902,15 @@ export class EditorHelper {
         }
 
         await expect(targetItem).toBeVisible();
-        await targetItem.click({ force: true });
+        if (expectedToast !== undefined) {
+            // Observe transient feedback before click completion and menu teardown.
+            await Promise.all([
+                this.expectToastMessage(expectedToast),
+                targetItem.click({ force: true }),
+            ]);
+        } else {
+            await targetItem.click({ force: true });
+        }
 
         await expect(popupList).toBeHidden();
 
@@ -1892,14 +2130,10 @@ export class EditorHelper {
  */
 export async function verifyScriptInTestPage(testPage: Page, expectedContents: string | string[]): Promise<void> {
     await expect(async () => {
-        // 1. キャッシュバイパスのために常にユニークなパラメータを付けてページを再読み込みする
-        const currentUrl = new URL(testPage.url());
-        if (currentUrl.protocol === 'http:' || currentUrl.protocol === 'https:') {
-            currentUrl.searchParams.set('cb', Date.now().toString());
-            await testPage.goto(currentUrl.toString(), { waitUntil: 'domcontentloaded' });
-        }
-
-        // 2. ブラウザのコンテキスト内部で main.js をフェッチして内容を取得する
+        // The caller has already loaded the test page. Re-fetch main.js with a
+        // cache-buster below; reloading the whole app on every poll unnecessarily
+        // re-runs lifecycle handlers and rebuilds its UI.
+        // ブラウザのコンテキスト内部で main.js をフェッチして内容を取得する
         // ※ブラウザ内部からのフェッチであれば、認証Cookieが確実に送信され、サーバー(PHP)の404隠蔽を回避できる
         const mainJsContent = await testPage.evaluate(async () => {
             const scriptElement = document.querySelector<HTMLScriptElement>('script[src*="main.js"]');
@@ -1952,3 +2186,4 @@ export async function verifyScriptInTestPage(testPage: Page, expectedContents: s
 export const normalizeWhitespace = (str: string): string => {
     return str.replace(/\s+/g, ' ').trim();
 };
+

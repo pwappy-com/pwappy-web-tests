@@ -267,7 +267,14 @@ test.describe('エディタ内機能のテスト (後半)', () => {
             await expect(styleEditor).toBeVisible();
 
             const brokenStyle = 'element.style {\n    width: 300px\n}';
-            await editorHelper.setMonacoValue(styleEditor, brokenStyle);
+            const brokenStyleUpdate = await editorHelper.setMonacoValue(styleEditor, brokenStyle);
+            expect(brokenStyleUpdate.success).toBe(true);
+            expect(brokenStyleUpdate.actual).toBe(brokenStyle);
+
+            // Monaco commits asynchronously. Finish this edit before switching to
+            // the attribute editor so its pending write cannot overwrite the next edit.
+            const previewBeforeSizing = editorHelper.getPreviewElement(previewSelector);
+            await expect(previewBeforeSizing).toHaveAttribute('style', /^\s*width:\s*300px\s*;?\s*$/);
 
             await editorHelper.switchTabInContainer(propertyContainer, '属性');
             const targetInputPanel = editorHelper.getPropertyInput('style-sizing');
@@ -392,128 +399,131 @@ test.describe('エディタ内機能のテスト (後半)', () => {
         });
     });
 
-    test('属性(style-shadow)での不透明度ドラッグバッジによる微調整とShift加速の検証', async ({ editorPage, editorHelper, isMobile }) => {
-        // モバイル環境（MouseEventが動作しない環境）ではスキップ
-        test.skip(isMobile, 'マウスドラッグ操作はデスクトップ環境専用のためスキップします。');
-        const previewSelector = 'ons-button';
+    test.describe(() => {
+        // Apply the existing platform restriction before editorPage setup.
+        test.skip(({ isMobile }) => isMobile, 'マウスドラッグ操作はデスクトップ環境専用のためスキップします。');
+        test('属性(style-shadow)での不透明度ドラッグバッジによる微調整とShift加速の検証', async ({ editorPage, editorHelper, isMobile }) => {
+            // モバイル環境（MouseEventが動作しない環境）ではスキップ
+            const previewSelector = 'ons-button';
 
-        await test.step('1. セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
-            const { buttonNode } = await editorHelper.setupPageWithButton();
-            await editorHelper.selectNodeInDomTree(buttonNode);
-            await editorHelper.openMoveingHandle('right');
-            const propertyContainer = editorPage.locator('property-container');
-            await editorHelper.switchTabInContainer(propertyContainer, '属性');
-        });
-
-        const targetInputPanel = editorHelper.getPropertyInput('style-shadow');
-        const dragBadge = targetInputPanel.locator('.drag-badge').first();
-
-        await test.step('2. ボックスシャドウを展開し、初期値を設定する', async () => {
-            await expect(targetInputPanel).toBeVisible();
-
-            const accordionHeader = targetInputPanel.locator('.accordion-header').first();
-            await accordionHeader.click();
-            await expect(targetInputPanel.locator('.accordion-content').first()).toHaveClass(/expanded/);
-
-            await targetInputPanel.evaluate((el) => {
-                el.dispatchEvent(new CustomEvent('change', {
-                    detail: {
-                        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.5)',
-                        textShadow: ''
-                    }
-                }));
-            });
-        });
-
-        await test.step('3. バッジの初期表示とツールチップの検証', async () => {
-            await expect(dragBadge).toBeVisible();
-            await expect(dragBadge).toHaveAttribute('title', '左右スワイプで微調整できます');
-
-            await expect(dragBadge).toHaveText(/50%/, { timeout: 5000 });
-        });
-
-        await test.step('4. マウスの上方向ドラッグで不透明度が増加すること', async ({ }) => {
-            await dragBadge.evaluate((badgeEl) => {
-                const rect = badgeEl.getBoundingClientRect();
-                const startX = rect.left + rect.width / 2;
-                const startY = rect.top + rect.height / 2;
-
-                badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
-                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX + 60, clientY: startY }));
-                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX + 60, clientY: startY }));
+            await test.step('1. セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+                const { buttonNode } = await editorHelper.setupPageWithButton();
+                await editorHelper.selectNodeInDomTree(buttonNode);
+                await editorHelper.openMoveingHandle('right');
+                const propertyContainer = editorPage.locator('property-container');
+                await editorHelper.switchTabInContainer(propertyContainer, '属性');
             });
 
-            await expect(async () => {
-                const text = await dragBadge.innerText();
-                const val = parseInt(text.replace('%', ''), 10);
+            const targetInputPanel = editorHelper.getPropertyInput('style-shadow');
+            const dragBadge = targetInputPanel.locator('.drag-badge').first();
 
-                expect(val).toBeGreaterThan(50);
-                expect(val).toBeLessThan(100);
-            }).toPass({ timeout: 5000, intervals: [100, 200] });
+            await test.step('2. ボックスシャドウを展開し、初期値を設定する', async () => {
+                await expect(targetInputPanel).toBeVisible();
 
-            await expect(dragBadge).not.toHaveClass(/dragging/);
+                const accordionHeader = targetInputPanel.locator('.accordion-header').first();
+                await accordionHeader.click();
+                await expect(targetInputPanel.locator('.accordion-content').first()).toHaveClass(/expanded/);
 
-            const styleAttr = await editorHelper.getPreviewElement(previewSelector).getAttribute('style') || '';
-            expect(styleAttr).toMatch(/box-shadow:.*rgba?\(0,\s*0,\s*0,\s*0\.[6-9]\d*\)/);
-
-            await targetInputPanel.evaluate((el) => {
-                el.dispatchEvent(new CustomEvent('change', {
-                    detail: {
-                        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.5)',
-                        textShadow: ''
-                    }
-                }));
-            });
-            await expect(dragBadge).toHaveText(/50%/, { timeout: 5000 });
-        });
-
-        await test.step('5. Shiftキー併用時の加速効果の検証', async () => {
-            await dragBadge.evaluate((badgeEl) => {
-                const rect = badgeEl.getBoundingClientRect();
-                const startX = rect.left + rect.width / 2;
-                const startY = rect.top + rect.height / 2;
-
-                badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
-                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX + 30, clientY: startY, shiftKey: true }));
-                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX + 30, clientY: startY, shiftKey: true }));
+                await targetInputPanel.evaluate((el) => {
+                    el.dispatchEvent(new CustomEvent('change', {
+                        detail: {
+                            boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.5)',
+                            textShadow: ''
+                        }
+                    }));
+                });
             });
 
-            await expect(async () => {
-                const text = await dragBadge.innerText();
-                const valWithShift = parseInt(text.replace('%', ''), 10);
+            await test.step('3. バッジの初期表示とツールチップの検証', async () => {
+                await expect(dragBadge).toBeVisible();
+                await expect(dragBadge).toHaveAttribute('title', '左右スワイプで微調整できます');
 
-                expect(valWithShift).toBeGreaterThan(75);
-            }).toPass({ timeout: 5000, intervals: [100, 200] });
-        });
-
-        await test.step('6. 0%未満、100%超への境界値（クランプ）処理の検証', async () => {
-            await dragBadge.evaluate((badgeEl) => {
-                const rect = badgeEl.getBoundingClientRect();
-                const startX = rect.left + rect.width / 2;
-                const startY = rect.top + rect.height / 2;
-
-                badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
-                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX + 300, clientY: startY }));
-                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX + 300, clientY: startY }));
+                await expect(dragBadge).toHaveText(/50%/, { timeout: 5000 });
             });
-            await expect(async () => {
-                await expect(dragBadge).toHaveText(/100%/);
-            }).toPass({ timeout: 5000 });
 
-            await dragBadge.evaluate((badgeEl) => {
-                const rect = badgeEl.getBoundingClientRect();
-                const startX = rect.left + rect.width / 2;
-                const startY = rect.top + rect.height / 2;
+            await test.step('4. マウスの上方向ドラッグで不透明度が増加すること', async ({ }) => {
+                await dragBadge.evaluate((badgeEl) => {
+                    const rect = badgeEl.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
 
-                badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
-                window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX - 300, clientY: startY }));
-                window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX - 300, clientY: startY }));
+                    badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
+                    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX + 60, clientY: startY }));
+                    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX + 60, clientY: startY }));
+                });
+
+                await expect(async () => {
+                    const text = await dragBadge.innerText();
+                    const val = parseInt(text.replace('%', ''), 10);
+
+                    expect(val).toBeGreaterThan(50);
+                    expect(val).toBeLessThan(100);
+                }).toPass({ timeout: 5000, intervals: [100, 200] });
+
+                await expect(dragBadge).not.toHaveClass(/dragging/);
+
+                const styleAttr = await editorHelper.getPreviewElement(previewSelector).getAttribute('style') || '';
+                expect(styleAttr).toMatch(/box-shadow:.*rgba?\(0,\s*0,\s*0,\s*0\.[6-9]\d*\)/);
+
+                await targetInputPanel.evaluate((el) => {
+                    el.dispatchEvent(new CustomEvent('change', {
+                        detail: {
+                            boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.5)',
+                            textShadow: ''
+                        }
+                    }));
+                });
+                await expect(dragBadge).toHaveText(/50%/, { timeout: 5000 });
             });
-            await expect(async () => {
-                await expect(dragBadge).toHaveText(/0%/);
-            }).toPass({ timeout: 5000 });
 
-            await expect(dragBadge).not.toHaveClass(/dragging/);
+            await test.step('5. Shiftキー併用時の加速効果の検証', async () => {
+                await dragBadge.evaluate((badgeEl) => {
+                    const rect = badgeEl.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
+
+                    badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
+                    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX + 30, clientY: startY, shiftKey: true }));
+                    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX + 30, clientY: startY, shiftKey: true }));
+                });
+
+                await expect(async () => {
+                    const text = await dragBadge.innerText();
+                    const valWithShift = parseInt(text.replace('%', ''), 10);
+
+                    expect(valWithShift).toBeGreaterThan(75);
+                }).toPass({ timeout: 5000, intervals: [100, 200] });
+            });
+
+            await test.step('6. 0%未満、100%超への境界値（クランプ）処理の検証', async () => {
+                await dragBadge.evaluate((badgeEl) => {
+                    const rect = badgeEl.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
+
+                    badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
+                    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX + 300, clientY: startY }));
+                    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX + 300, clientY: startY }));
+                });
+                await expect(async () => {
+                    await expect(dragBadge).toHaveText(/100%/);
+                }).toPass({ timeout: 5000 });
+
+                await dragBadge.evaluate((badgeEl) => {
+                    const rect = badgeEl.getBoundingClientRect();
+                    const startX = rect.left + rect.width / 2;
+                    const startY = rect.top + rect.height / 2;
+
+                    badgeEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: startX, clientY: startY }));
+                    window.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, clientX: startX - 300, clientY: startY }));
+                    window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: startX - 300, clientY: startY }));
+                });
+                await expect(async () => {
+                    await expect(dragBadge).toHaveText(/0%/);
+                }).toPass({ timeout: 5000 });
+
+                await expect(dragBadge).not.toHaveClass(/dragging/);
+            });
         });
     });
 
@@ -690,114 +700,123 @@ test.describe('エディタ内機能のテスト (後半)', () => {
         });
     });
 
-    test('属性(style-typography)でのマウスドラッグによる数値増減とクランプ処理の検証', async ({ editorPage, editorHelper, isMobile }) => {
-        test.skip(isMobile, 'マウスドラッグ操作はデスクトップ環境専用のためスキップします。');
-        const previewSelector = 'ons-button';
+    test.describe(() => {
+        // Apply the existing platform restriction before editorPage setup.
+        test.skip(({ isMobile }) => isMobile, 'マウスドラッグ操作はデスクトップ環境専用のためスキップします。');
+        test('属性(style-typography)でのマウスドラッグによる数値増減とクランプ処理の検証', async ({ editorPage, editorHelper, isMobile }) => {
+            const previewSelector = 'ons-button';
 
-        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
-            const { buttonNode } = await editorHelper.setupPageWithButton();
-            await editorHelper.selectNodeInDomTree(buttonNode);
-            await editorHelper.openMoveingHandle('right');
-            const propertyContainer = editorPage.locator('property-container');
-            await editorHelper.switchTabInContainer(propertyContainer, '属性');
-        });
+            await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+                const { buttonNode } = await editorHelper.setupPageWithButton();
+                await editorHelper.selectNodeInDomTree(buttonNode);
+                await editorHelper.openMoveingHandle('right');
+                const propertyContainer = editorPage.locator('property-container');
+                await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            });
 
-        const targetInputPanel = editorHelper.getPropertyInput('style-typography');
-        const fontSizeInput = targetInputPanel.locator('input[name="font-size"], input[name="fontSize"], input#font-size').first();
+            const targetInputPanel = editorHelper.getPropertyInput('style-typography');
+            const fontSizeInput = targetInputPanel.locator('input[name="font-size"], input[name="fontSize"], input#font-size').first();
 
-        await test.step('検証: マウスの上方向ドラッグでフォントサイズが増加すること', async () => {
-            await fontSizeInput.fill('16px');
-            await fontSizeInput.blur();
+            await test.step('検証: マウスの上方向ドラッグでフォントサイズが増加すること', async () => {
+                await fontSizeInput.fill('16px');
+                await fontSizeInput.blur();
 
-            await dragInput(editorPage, fontSizeInput, 0, -50);
+                await dragInput(editorPage, fontSizeInput, 0, -50);
 
-            const val = parseInt(await fontSizeInput.inputValue());
-            expect(val).toBeGreaterThan(16);
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'font-size', value: `${val}px` });
-        });
+                const val = parseInt(await fontSizeInput.inputValue());
+                expect(val).toBeGreaterThan(16);
+                await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'font-size', value: `${val}px` });
+            });
 
-        await test.step('検証: マウスの下方向ドラッグによる減少と、0未満へのクランプ処理', async () => {
-            await dragInput(editorPage, fontSizeInput, 0, 150);
+            await test.step('検証: マウスの下方向ドラッグによる減少と、0未満へのクランプ処理', async () => {
+                await dragInput(editorPage, fontSizeInput, 0, 150);
 
-            await expect(fontSizeInput).toHaveValue('0px');
-            await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'font-size', value: '0px' });
-        });
-    });
-
-    test('属性(style-typography)での小数ステップ（行高）と負の値許容（文字間隔）のドラッグ検証', async ({ editorPage, editorHelper, isMobile }) => {
-        test.skip(isMobile, 'マウスドラッグ操作はデスクトップ環境専用のためスキップします。');
-        const previewSelector = 'ons-button';
-
-        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
-            const { buttonNode } = await editorHelper.setupPageWithButton();
-            await editorHelper.selectNodeInDomTree(buttonNode);
-            await editorHelper.openMoveingHandle('right');
-            const propertyContainer = editorPage.locator('property-container');
-            await editorHelper.switchTabInContainer(propertyContainer, '属性');
-        });
-
-        const targetInputPanel = editorHelper.getPropertyInput('style-typography');
-        const lineHeightInput = targetInputPanel.locator('input#line-height').first();
-        const letterSpacingInput = targetInputPanel.locator('input#letter-spacing').first();
-
-        await test.step('検証: 行高（line-height）の小数ステップの増減', async () => {
-            await lineHeightInput.fill('1.5');
-            await lineHeightInput.blur();
-
-            await dragInput(editorPage, lineHeightInput, 0, -30);
-            const val = parseFloat(await lineHeightInput.inputValue());
-
-            expect(val).toBeGreaterThan(1.5);
-            expect(val % 1).not.toBe(0);
-        });
-
-        await test.step('検証: 文字間隔（letter-spacing）の負の値の許容', async () => {
-            await letterSpacingInput.fill('0px');
-            await letterSpacingInput.blur();
-
-            await dragInput(editorPage, letterSpacingInput, 0, 50);
-            const val = parseFloat(await letterSpacingInput.inputValue());
-
-            expect(val).toBeLessThan(0);
+                await expect(fontSizeInput).toHaveValue('0px');
+                await editorHelper.expectPreviewElementCss({ selector: previewSelector, property: 'font-size', value: '0px' });
+            });
         });
     });
 
-    test('属性(style-typography)でのShiftキー併用加速とデッドゾーン誤検知防止の検証', async ({ editorPage, editorHelper, isMobile }) => {
-        test.skip(isMobile, 'マウスドラッグ操作・Shiftキー操作はデスクトップ環境専用のためスキップします。');
-        await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
-            const { buttonNode } = await editorHelper.setupPageWithButton();
-            await editorHelper.selectNodeInDomTree(buttonNode);
-            await editorHelper.openMoveingHandle('right');
-            const propertyContainer = editorPage.locator('property-container');
-            await editorHelper.switchTabInContainer(propertyContainer, '属性');
+    test.describe(() => {
+        // Apply the existing platform restriction before editorPage setup.
+        test.skip(({ isMobile }) => isMobile, 'マウスドラッグ操作はデスクトップ環境専用のためスキップします。');
+        test('属性(style-typography)での小数ステップ（行高）と負の値許容（文字間隔）のドラッグ検証', async ({ editorPage, editorHelper, isMobile }) => {
+            const previewSelector = 'ons-button';
+
+            await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+                const { buttonNode } = await editorHelper.setupPageWithButton();
+                await editorHelper.selectNodeInDomTree(buttonNode);
+                await editorHelper.openMoveingHandle('right');
+                const propertyContainer = editorPage.locator('property-container');
+                await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            });
+
+            const targetInputPanel = editorHelper.getPropertyInput('style-typography');
+            const lineHeightInput = targetInputPanel.locator('input#line-height').first();
+            const letterSpacingInput = targetInputPanel.locator('input#letter-spacing').first();
+
+            await test.step('検証: 行高（line-height）の小数ステップの増減', async () => {
+                await lineHeightInput.fill('1.5');
+                await lineHeightInput.blur();
+
+                await dragInput(editorPage, lineHeightInput, 0, -30);
+                const val = parseFloat(await lineHeightInput.inputValue());
+
+                expect(val).toBeGreaterThan(1.5);
+                expect(val % 1).not.toBe(0);
+            });
+
+            await test.step('検証: 文字間隔（letter-spacing）の負の値の許容', async () => {
+                await letterSpacingInput.fill('0px');
+                await letterSpacingInput.blur();
+
+                await dragInput(editorPage, letterSpacingInput, 0, 50);
+                const val = parseFloat(await letterSpacingInput.inputValue());
+
+                expect(val).toBeLessThan(0);
+            });
         });
+    });
 
-        const targetInputPanel = editorHelper.getPropertyInput('style-typography');
-        const fontSizeInput = targetInputPanel.locator('input[name="font-size"], input[name="fontSize"], input#font-size').first();
+    test.describe(() => {
+        // Apply the existing platform restriction before editorPage setup.
+        test.skip(({ isMobile }) => isMobile, 'マウスドラッグ操作・Shiftキー操作はデスクトップ環境専用のためスキップします。');
+        test('属性(style-typography)でのShiftキー併用加速とデッドゾーン誤検知防止の検証', async ({ editorPage, editorHelper, isMobile }) => {
+            await test.step('セットアップ: ページとボタンを追加し、属性パネルを開く', async () => {
+                const { buttonNode } = await editorHelper.setupPageWithButton();
+                await editorHelper.selectNodeInDomTree(buttonNode);
+                await editorHelper.openMoveingHandle('right');
+                const propertyContainer = editorPage.locator('property-container');
+                await editorHelper.switchTabInContainer(propertyContainer, '属性');
+            });
 
-        await test.step('検証: Shiftキー押下時の変化量の加速効果', async () => {
-            await fontSizeInput.fill('10px');
-            await fontSizeInput.blur();
+            const targetInputPanel = editorHelper.getPropertyInput('style-typography');
+            const fontSizeInput = targetInputPanel.locator('input[name="font-size"], input[name="fontSize"], input#font-size').first();
 
-            await dragInput(editorPage, fontSizeInput, 0, -20, false);
-            const normalDiff = parseInt(await fontSizeInput.inputValue()) - 10;
+            await test.step('検証: Shiftキー押下時の変化量の加速効果', async () => {
+                await fontSizeInput.fill('10px');
+                await fontSizeInput.blur();
 
-            await fontSizeInput.fill('10px');
-            await fontSizeInput.blur();
+                await dragInput(editorPage, fontSizeInput, 0, -20, false);
+                const normalDiff = parseInt(await fontSizeInput.inputValue()) - 10;
 
-            await dragInput(editorPage, fontSizeInput, 0, -20, true);
-            const shiftDiff = parseInt(await fontSizeInput.inputValue()) - 10;
+                await fontSizeInput.fill('10px');
+                await fontSizeInput.blur();
 
-            expect(shiftDiff).toBeGreaterThan(normalDiff * 5);
-        });
+                await dragInput(editorPage, fontSizeInput, 0, -20, true);
+                const shiftDiff = parseInt(await fontSizeInput.inputValue()) - 10;
 
-        await test.step('検証: 横ブレや微小な動き（デッドゾーン）による誤検知防止', async () => {
-            await fontSizeInput.fill('15px');
-            await fontSizeInput.blur();
+                expect(shiftDiff).toBeGreaterThan(normalDiff * 5);
+            });
 
-            await dragInput(editorPage, fontSizeInput, 5, 0, false);
+            await test.step('検証: 横ブレや微小な動き（デッドゾーン）による誤検知防止', async () => {
+                await fontSizeInput.fill('15px');
+                await fontSizeInput.blur();
 
-            await expect(fontSizeInput).toHaveValue('15px');
+                await dragInput(editorPage, fontSizeInput, 5, 0, false);
+
+                await expect(fontSizeInput).toHaveValue('15px');
+            });
         });
     });
 

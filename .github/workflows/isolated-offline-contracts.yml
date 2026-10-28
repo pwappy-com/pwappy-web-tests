@@ -1,0 +1,44 @@
+name: Isolated offline regression contracts
+
+on:
+  push:
+    branches:
+      - fix/verified-native-shortcuts-safe-artifacts
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Run synthetic offline contracts
+        run: node --test offline-tests/*.test.mjs tests/tools/*.test.mjs
+      - name: Install unchanged locked test dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Prove platform skip fixture order with real Playwright
+        run: npx --no-install playwright test --config=offline-tests/playwright-synthetic.config.ts
+
+  initial-navigation-webkit:
+    runs-on: macos-26-intel
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Install unchanged locked test dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Install the locked Playwright WebKit binary
+        run: npx --no-install playwright install webkit
+      - name: Prove fail-closed native navigation and single initialization on WebKit
+        run: npx --no-install playwright test --config=offline-tests/initial-navigation-webkit.config.ts

@@ -12,6 +12,23 @@ import { getStorageStatePath } from './tests/constants';
 
 // CI環境（GitHub Actionsなど）かどうかを判定
 const isCI = !!process.env.CI;
+// Diagnostic A/B only: missing/empty input keeps the existing snapshot-enabled behavior.
+// workflow_dispatch's event.inputs carries boolean inputs as literal strings.
+const traceSnapshotsInput = process.env.PWAPPY_TRACE_SNAPSHOTS;
+if (traceSnapshotsInput !== undefined && traceSnapshotsInput !== '' &&
+    traceSnapshotsInput !== 'true' && traceSnapshotsInput !== 'false') {
+  throw new Error('PWAPPY_TRACE_SNAPSHOTS must be true or false (or unset)');
+}
+const traceSnapshots = traceSnapshotsInput !== 'false';
+// Capture the requested cleanup account in the runner before Playwright overwrites
+// TEST_WORKER_INDEX in child processes. The dedicated value is inherited unchanged.
+const isCleanup = process.env.PWAPPY_TEST_POINTS_PHASE === 'cleanup';
+if (isCleanup && process.env.PWAPPY_TEST_ACCOUNT_INDEX === undefined) {
+  if (!/^[0-9]{1,3}$/.test(process.env.TEST_WORKER_INDEX || '')) {
+    throw new Error('Cleanup requires an explicit test account');
+  }
+  process.env.PWAPPY_TEST_ACCOUNT_INDEX = process.env.TEST_WORKER_INDEX;
+}
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -26,9 +43,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
 
   /* Retry on CI only */
-  retries: process.env.CI ? 5 : 0,
+  retries: isCleanup ? 0 : (process.env.CI ? 5 : 0),
   /* Opt out of parallel tests on CI. */
-  workers: process.env.CI ? undefined : undefined,
+  workers: isCleanup ? 1 : undefined,
   /** タイムアウト設定
    * CIでは伸ばす
    */
@@ -48,13 +65,16 @@ export default defineConfig({
     // baseURL: 'http://localhost:3000',
 
     /* テスト失敗時にトレース情報を保存（操作手順、ネットワーク、コンソールログなどをタイムラインで確認可能） */
-    trace: 'retain-on-failure',
+    // Disabling snapshots reduces DOM/network trace evidence, not app network calls.
+    // Other trace options retain Playwright's defaults (screenshots/sources/attachments).
+    trace: { mode: 'retain-on-failure', snapshots: traceSnapshots },
 
     /* テスト失敗時に最終画面のスクリーンショットを保存 */
     screenshot: 'only-on-failure',
 
-    /* テスト失敗時に操作動画を保存 */
-    video: 'retain-on-failure',
+    /* macOS CIでは7GiB/3CPU環境で大量のswapを確認したため録画負荷を除く。
+     * traceと失敗時スクリーンショットは維持し、workers/retriesや検証内容は変えない。 */
+    video: isCI && process.platform === 'darwin' ? 'off' : 'retain-on-failure',
 
     launchOptions: {
       args: [
