@@ -105,13 +105,17 @@ document.querySelector('#close').onclick = () => {
 window.releaseOverlay = () => document.querySelector('dashboard-loading-overlay').remove();
 </script>`;
 
-test('native archive path confirms once, closes success, and waits for overlay before navigation', async ({ page }) => {
+test('native archive navigation waits beyond 2s for overlay readiness without its own action cap', async ({ page }) => {
     await page.setContent(archiveNavigationFixture());
     await archivePublishedAppOnce(page);
     await expect(page.locator('dashboard-loading-overlay')).toBeVisible();
-    // Controlled fixture delay tests actionability; the production helper contains no sleep.
-    await page.evaluate(() => setTimeout(() => (window as any).releaseOverlay(), 250));
-    await openArchiveView(page);
+    // Start native input while blocked, then release after more than the removed 2s cap.
+    // Only this synthetic fixture schedules a delay; the helper inherits the test budget.
+    const started = performance.now();
+    const navigation = openArchiveView(page).then(() => null, error => error);
+    await page.evaluate(() => setTimeout(() => (window as any).releaseOverlay(), 2500));
+    expect(await navigation).toBeNull();
+    expect(performance.now() - started).toBeGreaterThanOrEqual(2000);
     const card = page.locator('.app-card', { has: page.locator('.app-key', { hasText: 'sample-key' }) });
     await expect(card).toBeVisible();
     await expect(card.locator('dashboard-app-menu-group')).toBeVisible();
@@ -133,6 +137,8 @@ test('forced navigation under the same overlay misses the target deterministical
 test('permanently blocked native navigation fails closed with safe state diagnostics', async ({ page }) => {
     await page.setContent(archiveNavigationFixture());
     await archivePublishedAppOnce(page);
+    // The caller may explicitly bound an intentionally never-ready fixture.
+    page.setDefaultTimeout(2000);
     let failure: unknown;
     try { await openArchiveView(page); } catch (error) { failure = error; }
     expect((failure as Error)?.name).toBe('TimeoutError');

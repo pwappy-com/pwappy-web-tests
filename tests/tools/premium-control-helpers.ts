@@ -36,7 +36,7 @@ export async function archivePublishedAppOnce(page: Page): Promise<void> {
 // A remounted workbench may start loading after a previous hidden-overlay observation.
 // Native hit-target checks must settle before the one navigation click is delivered.
 export async function openArchiveView(page: Page): Promise<void> {
-    await page.getByRole('button', { name: ' アーカイブ', exact: true }).click({ timeout: 2000 });
+    await page.getByRole('button', { name: ' アーカイブ', exact: true }).click();
     const archive = page.locator('dashboard-archive-content');
     await expect(archive).toBeVisible({ timeout: 5000 });
     await expect(archive.getByRole('heading', { name: 'アーカイブ一覧', exact: true })).toBeVisible({ timeout: 5000 });

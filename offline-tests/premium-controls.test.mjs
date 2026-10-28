@@ -139,8 +139,24 @@ test('published archive uses one mutation and verified persistent success within
 test('archive navigation keeps native actionability and confirms a genuinely mounted scoped view', () => {
     const helper = read('../tests/tools/premium-control-helpers.ts').split('export async function openArchiveView')[1].split('export async function logArchiveViewState')[0];
     assert.equal((helper.match(/\.click\(/g) || []).length, 1);
-    assert.match(helper, /click\(\{ timeout: 2000 \}\)/);
+    assert.match(helper, /await page\.getByRole\('button', \{ name: ' アーカイブ', exact: true \}\)\.click\(\);/);
+    assert.doesNotMatch(helper, /setDefaultTimeout|setDefaultNavigationTimeout|actionTimeout|setTimeout|test\.setTimeout|test\.slow/);
     assert.match(helper, /page\.locator\('dashboard-archive-content'\)/);
     assert.match(helper, /archive\.getByRole\('heading', \{ name: 'アーカイブ一覧', exact: true \}\)/);
     assert.doesNotMatch(helper, /force|toPass|waitForTimeout|\.evaluate|catch|while|for\s*\(/);
+});
+
+test('navigation cap removal leaves all other Premium helper budgets unchanged', () => {
+    const source = read('../tests/tools/premium-control-helpers.ts');
+    const current = "    await page.getByRole('button', { name: ' アーカイブ', exact: true }).click();";
+    const previous = "    await page.getByRole('button', { name: ' アーカイブ', exact: true }).click({ timeout: 2000 });";
+    const assertPriorHelper = candidate => {
+        assert.equal(candidate.split(current).length - 1, 1);
+        const restored = candidate.replace(current, previous);
+        const hash = createHash('sha1').update('blob ' + Buffer.byteLength(restored) + '\0').update(restored).digest('hex');
+        assert.equal(hash, 'aaffe668a881850366e8878d55015d25bb3f7cab');
+    };
+    assertPriorHelper(source);
+    assert.throws(() => assertPriorHelper(source.replace(current, previous)));
+    assert.throws(() => assertPriorHelper(source.replace('performance.now() + 20000', 'performance.now() + 20001')));
 });
