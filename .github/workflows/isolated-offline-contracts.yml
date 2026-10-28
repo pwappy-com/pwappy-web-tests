@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/verified-native-shortcuts-safe-artifacts
+      - fix/premium-e2e-readiness
 
 permissions:
   contents: read
@@ -42,3 +43,5 @@ jobs:
         run: npx --no-install playwright install webkit
       - name: Prove fail-closed native navigation and single initialization on WebKit
         run: npx --no-install playwright test --config=offline-tests/initial-navigation-webkit.config.ts
+      - name: Prove native Premium control semantics without staging
+        run: npx --no-install playwright test --config=offline-tests/premium-native-controls.config.ts

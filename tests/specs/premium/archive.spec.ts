@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import 'dotenv/config';
+import { confirmArchiveRestore } from '../../tools/premium-control-helpers';
 import {
     createApp,
     deleteApp,
@@ -128,22 +129,12 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         await test.step('テスト: アーカイブから復元する', async () => {
             const archiveRow = page.locator('.app-card', { hasText: appName });
 
-            await expect(async () => {
-                const alert = page.locator('alert-component');
-                if (await alert.isVisible().catch(() => false)) {
-                    await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
-                }
-
-                await archiveRow.getByRole('button', { name: /復元/ }).click({ force: true, timeout: 2000 });
-
-                const confirmDialog = page.locator('message-box#restore-confirm');
-                await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-
-                // console.log(`[ArchiveTest:Action] 復元実行ボタンをクリックします`);
-                await confirmDialog.locator('.confirm-restore-button, .confirm-ok-button').click({ force: true, timeout: 2000 });
-
-                await expect(confirmDialog).toBeHidden({ timeout: 5000 });
-            }).toPass({ timeout: 20000, intervals: [1000] });
+            const priorAlert = page.locator('alert-component');
+            if (await priorAlert.isVisible()) {
+                await priorAlert.getByRole('button', { name: '閉じる' }).click();
+                await expect(priorAlert).toBeHidden();
+            }
+            await confirmArchiveRestore(page, archiveRow);
 
             await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
 
@@ -227,27 +218,18 @@ test.describe('アーカイブ E2Eシナリオ', () => {
         await test.step('クリーンアップ: アプリを復元し、非公開にして削除する', async () => {
             const archiveRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) });
 
-            await expect(async () => {
-                const alert = page.locator('alert-component');
-                if (await alert.isVisible().catch(() => false)) {
-                    await alert.getByRole('button', { name: '閉じる' }).click().catch(() => { });
-                }
-
-                await archiveRow.getByRole('button', { name: /復元/ }).click({ force: true, timeout: 2000 });
-
-                const confirmDialog = page.locator('message-box#restore-confirm');
-                await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-
-                // console.log(`[ArchiveTest:Action] 復元実行ボタンをクリックします`);
-                await confirmDialog.locator('.confirm-restore-button, .confirm-ok-button').click({ force: true, timeout: 2000 });
-
-                await expect(confirmDialog).toBeHidden({ timeout: 5000 });
-            }).toPass({ timeout: 20000, intervals: [1000] });
+            const priorAlert = page.locator('alert-component');
+            if (await priorAlert.isVisible()) {
+                await priorAlert.getByRole('button', { name: '閉じる' }).click();
+                await expect(priorAlert).toBeHidden();
+            }
+            await confirmArchiveRestore(page, archiveRow);
 
             await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 150000 });
 
             const alertDialog = page.locator('alert-component');
             await expect(alertDialog).toBeVisible();
+            await expect(alertDialog).toContainText(`復元しました`);
             await alertDialog.getByRole('button', { name: '閉じる' }).click();
             await expect(alertDialog).toBeHidden();
 

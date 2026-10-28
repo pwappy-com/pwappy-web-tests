@@ -88,7 +88,9 @@ test('normal operational defaults preserve Premium, legacy points fallback, clea
   assert.match(normal, /TEST_WORKERS: \$\{\{ github.event.inputs.workers \}\}/);
   assert.doesNotMatch(workerBlock,/\$\{\{/);
   assert.match(premium,/npx playwright test tests\/specs\/premium .* --workers=1/);
-  assert.doesNotMatch(premium,/--retries|TEST_RETRIES|TEST_WORKERS/);
+  assert.match(premium,/--retries="\$RETRIES"/);
+  assert.match(premium,/TEST_RETRIES: \$\{\{ inputs.retries \|\| '0' \}\}/);
+  assert.doesNotMatch(premium,/TEST_WORKERS/);
   assert.match(config,/retries: isCleanup \? 0 : \(process.env.CI \? 5 : 0\)/);
   assert.match(premium,/max-parallel: 1/);
   assert.match(normal,/TEST_SCOPE: \$\{\{ inputs.test_scope \|\| 'all' \}\}/);

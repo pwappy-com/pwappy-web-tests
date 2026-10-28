@@ -101,7 +101,7 @@ on:
           - "2"
           - "5"
       retries:
-        description: "通常テストの再試行回数（既定0で初回失敗を検出）"
+        description: "Normal/Premiumテストの再試行回数（既定0で初回失敗を検出）"
         required: true
         default: "0"
         type: string
@@ -697,9 +697,15 @@ jobs:
         shell: bash
         # 最も安定した直列実行(1ワーカー)で実行。
         run: |
-          npx playwright test tests/specs/premium --project=${{ matrix.browser }} --reporter=line --workers=1
+          RETRIES="${TEST_RETRIES:-0}"
+          if ! [[ "$RETRIES" =~ ^[0-5]$ ]]; then
+            echo "retries must be between 0 and 5"
+            exit 1
+          fi
+          npx playwright test tests/specs/premium --project=${{ matrix.browser }} --reporter=line --workers=1 --retries="$RETRIES"
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
+          TEST_RETRIES: ${{ inputs.retries || '0' }}
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
