@@ -1,4 +1,3 @@
-import { startStylePhase } from '../../tools/style-phase-profile.mjs';
 import { test as base, expect, Locator, Page } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
@@ -20,25 +19,17 @@ const test = base.extend<EditorFixtures>({
     // Keep dashboard/editor startup separate from the scenario budget.
     // A slow startup must still fail within the existing CI/local test limit.
     editorPage: [async ({ page, context }, use) => {
-        const dashboardDone = startStylePhase('fixture-dashboard');
         await gotoDashboard(page);
         await page.locator('app-container-loading-overlay').getByText('処理中').waitFor({ state: 'hidden' });
-        dashboardDone();
 
-        const cardDone = startStylePhase('fixture-card');
         const appRow = page.locator('.app-card', { has: page.locator('.app-key', { hasText: appKey }) }).first();
         await expect(appRow).toBeVisible({ timeout: 15000 });
         await appRow.click();
         await expect(page.locator('.detail-tab.active')).toBeVisible({ timeout: 10000 });
-        cardDone();
 
         const editorPage = await openEditor(page, context, appName);
-        const useDone = startStylePhase('fixture-use');
         await use(editorPage);
-        useDone();
-        const closeDone = startStylePhase('fixture-close');
         await editorPage.close();
-        closeDone();
     }, { timeout: process.env.CI ? 120000 : 60000 }],
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
@@ -47,7 +38,6 @@ const test = base.extend<EditorFixtures>({
 });
 
 test.beforeAll(async ({ browser }) => {
-    const suiteSetupDone = startStylePhase('suite-setup');
     const reversedTimestamp = Date.now().toString().split('').reverse().join('');
     const workerIndex = test.info().workerIndex;
     // constants.ts normalizes to TEST_PARALLEL_INDEX (or explicit account override),
@@ -63,11 +53,9 @@ test.beforeAll(async ({ browser }) => {
     await gotoDashboard(page);
     await createApp(page, appName, appKey);
     await context.close();
-    suiteSetupDone();
 });
 
 test.afterAll(async ({ browser }) => {
-    const suiteCleanupDone = startStylePhase('suite-cleanup');
     if (appKey) {
         const workerIndex = test.info().workerIndex;
         const storageStatePath = getStorageStatePath(workerIndex);
@@ -77,7 +65,6 @@ test.afterAll(async ({ browser }) => {
         await deleteApp(page, appKey);
         await context.close();
     }
-    suiteCleanupDone();
 });
 
 // Boundary probes below use real Monaco and actual UI handlers, never a mocked
@@ -86,20 +73,16 @@ test.afterAll(async ({ browser }) => {
 const css = (declarations: string) => `element.style {\n    ${declarations}\n}`;
 
 async function nativeTab(container: Locator, tab: 'style' | 'attributes') {
-    const propertyTabDone = startStylePhase('property-tab');
     const button = container.locator(`#tab-${tab}`);
     await button.click();
     await expect(button).toHaveClass(/active/);
-    propertyTabDone();
 }
 
 async function writeStyle(helper: EditorHelper, container: Locator, declarations: string) {
     const value = css(declarations);
-    const monacoWriteDone = startStylePhase('monaco-write');
     const result = await helper.setMonacoValue(container.locator('#style-container > .monaco-editor'), value);
     expect(result.success, JSON.stringify(result.trace)).toBe(true);
     expect(result.actual).toBe(value);
-    monacoWriteDone();
 }
 
 async function modelText(container: Locator) {
@@ -107,7 +90,6 @@ async function modelText(container: Locator) {
 }
 
 async function setupPair(page: Page, helper: EditorHelper) {
-    const pairSetupDone = startStylePhase('pair-setup');
     const { buttonNode: a } = await helper.setupPageWithButton();
     const b = await helper.addComponent('ons-button', '#dom-tree div[data-node-explain="コンテンツ"]');
     const aDomId = await a.getAttribute('data-node-dom-id');
@@ -123,10 +105,7 @@ async function setupPair(page: Page, helper: EditorHelper) {
     await helper.openMoveingHandle('right');
     const container = page.locator('property-container');
     await nativeTab(container, 'style');
-    const monacoVisibleDone = startStylePhase('monaco-visible');
     await expect(container.locator('#style-container > .monaco-editor')).toBeVisible();
-    monacoVisibleDone();
-    pairSetupDone();
     return { a, b, previewA, previewB, container };
 }
 
@@ -327,10 +306,8 @@ test('native Monaco typing keeps cursor and editor Undo after its deferred commi
     await writeStyle(editorHelper, container, 'width: 151px;');
     await expect(preview).toHaveCSS('width', '151px');
     const editor = container.locator('#style-container > .monaco-editor');
-    const nativeMonacoFocusDone = startStylePhase('native-monaco-focus');
     await editor.click({ position: { x: 80, y: 20 } });
     await expect.poll(() => container.evaluate((host: any) => host.styleEditor.hasTextFocus())).toBe(true);
-    nativeMonacoFocusDone();
     // Playwright's ControlOrMeta follows the runner OS, but emulated WebKit's
     // browser platform can differ. Read the actual editor bindings once; never
     // guess from the project name or retry a different key after a failed action.
