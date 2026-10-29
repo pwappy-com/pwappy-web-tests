@@ -1,3 +1,4 @@
+import { startStylePhase } from './style-phase-profile.mjs';
 import { expect, Page, BrowserContext } from '@playwright/test';
 
 /**
@@ -16,6 +17,7 @@ export async function clickAndOpenNewTabSafely(page: Page, context: BrowserConte
     let newPage: Page | undefined;
 
     if (browserName === 'webkit') {
+        const popupTargetDone = startStylePhase('webkit-popup-target');
         // =========================================================================
         // 【ワークアラウンド】WebKit環境の window.open クラッシュバグ回避
         // =========================================================================
@@ -47,12 +49,17 @@ export async function clickAndOpenNewTabSafely(page: Page, context: BrowserConte
                 await targetUrlHandle.dispose();
             }
         }).toPass({ timeout: 30000, intervals: [2000] });
+        popupTargetDone();
 
         // URL取得後はタブを一度だけ作る。遷移の失敗でタブを増殖させない。
+        const pageCreateDone = startStylePhase('webkit-page-create');
         const spawnedPage = await context.newPage();
+        pageCreateDone();
         try {
             const absoluteUrl = new URL(urlString!, page.url()).toString();
+            const pageNavigateDone = startStylePhase('webkit-page-navigate');
             await spawnedPage.goto(absoluteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            pageNavigateDone();
             newPage = spawnedPage;
         } catch (error) {
             await spawnedPage.close().catch(() => { });
@@ -60,6 +67,7 @@ export async function clickAndOpenNewTabSafely(page: Page, context: BrowserConte
         }
 
     } else {
+        const nativePopupDone = startStylePhase('native-popup');
         // =========================================================================
         // 【本道の処理】 (Chromium 等の正常なブラウザ向け)
         // =========================================================================
@@ -70,6 +78,7 @@ export async function clickAndOpenNewTabSafely(page: Page, context: BrowserConte
             if (!spawnedPage) throw new Error('新しいタブが開かれませんでした。');
             newPage = spawnedPage;
         }).toPass({ timeout: 30000, intervals: [2000] });
+        nativePopupDone();
     }
 
     if (!newPage) throw new Error('新規タブのオープンに失敗しました。');

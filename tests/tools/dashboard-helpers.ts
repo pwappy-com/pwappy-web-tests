@@ -1,3 +1,4 @@
+import { startStylePhase } from './style-phase-profile.mjs';
 import { gotoInitialDashboard } from './initial-dashboard-navigation';
 import { observeHttpFailures, observePageHttpFailures } from './http-failure-diagnostics';
 import { expect, type Page, type BrowserContext } from '@playwright/test';
@@ -173,6 +174,7 @@ export async function openEditor(
     version: string = '1.0.0',
     options: { skipStarterModal?: boolean } = { skipStarterModal: true }
 ): Promise<Page> {
+    const launchReadyDone = startStylePhase('editor-launch-ready');
     observeHttpFailures(context);
     const versionRow = page.locator('.version-card', { hasText: version }).first();
     await expect(versionRow).toBeVisible({ timeout: 10000 });
@@ -183,6 +185,7 @@ export async function openEditor(
     // アプリ作成直後など、背後でローディング中であれば消えるのを待つ
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 15000 }).catch(() => { });
 
+    launchReadyDone();
     // 共通関数を使ってタブを開く
     const editorPage = await clickAndOpenNewTabSafely(page, context, async () => {
         await editorBtn.click({ force: true }).catch(async () => {
@@ -195,7 +198,9 @@ export async function openEditor(
     };
     editorPage.on('dialog', tempDialogHandler);
 
+    const editorDomDone = startStylePhase('editor-domcontentloaded');
     await editorPage.waitForLoadState('domcontentloaded');
+    editorDomDone();
 
     // 開発用オーバーレイによるポインタ遮断を防ぐスタイルを注入
     await editorPage.evaluate(() => {
@@ -217,17 +222,23 @@ export async function openEditor(
     const tempHelper = new EditorHelper(editorPage, false);
 
     // スナップショット復元ダイアログのスキップ
+    const snapshotCheckDone = startStylePhase('editor-snapshot-check');
     await tempHelper.handleSnapshotRestoreDialog();
+    snapshotCheckDone();
 
     // スターターテンプレートモーダルの処理（デフォルトでスキップ）
     if (options.skipStarterModal) {
+        const starterCheckDone = startStylePhase('editor-starter-check');
         await tempHelper.handleStarterTemplateModal();
+        starterCheckDone();
     }
 
     editorPage.off('dialog', tempDialogHandler);
 
+    const editorReadyDone = startStylePhase('editor-final-ready');
     await expect(editorPage.locator('ios-component')).toBeVisible();
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
+    editorReadyDone();
     return editorPage;
 }
 

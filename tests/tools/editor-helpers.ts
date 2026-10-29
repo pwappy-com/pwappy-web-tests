@@ -1,3 +1,4 @@
+import { startStylePhase } from './style-phase-profile.mjs';
 import { observePageHttpFailures } from './http-failure-diagnostics';
 import { test, expect, type Page, type Locator, FrameLocator } from '@playwright/test';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
@@ -250,7 +251,9 @@ export class EditorHelper {
             await test.step('スナップショット復元ダイアログのチェックとクリーンアップ', async () => {
                 // ローディングオーバーレイが完全に消えるのを待つ
                 const loadingOverlay = this.page.locator('app-container-loading-overlay');
+                const loadingHiddenDone = startStylePhase('editor-loading-hidden');
                 await expect(loadingOverlay).toBeHidden({ timeout: 30000 });
+                loadingHiddenDone();
 
                 const snapshotConfirmDialog = this.page.locator('message-box', {
                     hasText: '前回正常に終了されなかった可能性'
@@ -301,7 +304,9 @@ export class EditorHelper {
                 .filter((id): id is string => id !== null && !ids.includes(id)), previousIds);
         const humburgerButton = this.page.locator('template-container #hamburger');
         await expect(humburgerButton).toBeVisible();
+        const pageMenuClickDone = startStylePhase('page-menu-click');
         await humburgerButton.click();
+        pageMenuClickDone();
         const contextMenu = this.page.locator('#contextMenu');
         await expect(contextMenu).toBeVisible();
         await contextMenu.getByText('ページ追加').click();
