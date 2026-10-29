@@ -299,7 +299,7 @@ test('quoted CSS whitespace persists and same-ID Undo/load invalidates an older 
 // BEGIN CSS READABILITY E2E
 // These are real staging UI tests. The layout oracle never formats the model.
 // Desktop selection leaves Style continuously visible. Mobile uses the normal
-// close-preview-select-reopen flow; it does not claim simultaneous panel visibility.
+// open-tree-select-reopen flow; it does not claim simultaneous panel visibility.
 type ReadabilityFixture = { width: string; paddingLeft: string; quoted: string };
 const readableA: ReadabilityFixture = { width: '137px', paddingLeft: '11px', quoted: '"alpha  beta; gamma"' };
 const readableB: ReadabilityFixture = { width: '223px', paddingLeft: '17px', quoted: '"delta  epsilon; zeta"' };
@@ -328,14 +328,13 @@ async function seedReadabilityPair(page: Page, helper: EditorHelper) {
     return pair;
 }
 
-async function selectPreviewWithStyleActive(helper: EditorHelper, container: Locator,
-    preview: Locator, node: Locator, isMobile: boolean) {
+async function selectNodeWithStyleActive(helper: EditorHelper, container: Locator,
+    node: Locator, isMobile: boolean) {
     const styleTab = container.locator('#tab-style');
     const editor = container.locator('#style-container > .monaco-editor');
     await expect(styleTab).toHaveClass(/active/);
     await expect(editor).toBeVisible();
-    if (isMobile) await helper.closeMoveingHandle();
-    await preview.click();
+    await helper.selectNodeInDomTree(node);
     if (isMobile) await helper.openMoveingHandle('right');
     // Do not click the Style tab again: this is selection while the same tab stays active.
     await expect(styleTab).toHaveClass(/active/);
@@ -375,10 +374,10 @@ async function typeVisibleStyleNatively(page: Page, container: Locator, fixture:
 
 test('selected element CSS stays readable on reselection (desktop visible Style; mobile return flow)', async ({ editorPage, editorHelper, isMobile }) => {
     const { a, b, previewA, previewB, container } = await seedReadabilityPair(editorPage, editorHelper);
-    await test.step(isMobile ? 'mobile preview selection returns to the already active Style tab' :
-        'desktop preview selection keeps the Style editor visible', async () => {
+    await test.step(isMobile ? 'mobile DOM-tree selection returns to the already active Style tab' :
+        'desktop DOM-tree selection keeps the Style editor visible', async () => {
         for (const [preview, node, fixture] of [[previewA, a, readableA], [previewB, b, readableB], [previewA, a, readableA]] as const) {
-            await selectPreviewWithStyleActive(editorHelper, container, preview, node, isMobile);
+            await selectNodeWithStyleActive(editorHelper, container, node, isMobile);
             await expectReadableSelectedStyle(container, preview, fixture);
         }
     });
@@ -392,18 +391,18 @@ test('consecutive native selections and immediate typing preserve both CSS owner
     const typedB = { ...readableB, width: '251px', quoted: '"typed  delta; stable"' };
     // Consecutive real input, without an artificial pause or formatter barrier.
     // This is not a deterministic claim that an asynchronous formatter is pending.
-    await selectPreviewWithStyleActive(editorHelper, container, previewA, a, isMobile);
-    await selectPreviewWithStyleActive(editorHelper, container, previewB, b, isMobile);
+    await selectNodeWithStyleActive(editorHelper, container, a, isMobile);
+    await selectNodeWithStyleActive(editorHelper, container, b, isMobile);
     await typeVisibleStyleNatively(editorPage, container, typedB);
-    await selectPreviewWithStyleActive(editorHelper, container, previewA, a, isMobile);
+    await selectNodeWithStyleActive(editorHelper, container, a, isMobile);
     await typeVisibleStyleNatively(editorPage, container, typedA);
-    await selectPreviewWithStyleActive(editorHelper, container, previewB, b, isMobile);
+    await selectNodeWithStyleActive(editorHelper, container, b, isMobile);
     await expectReadabilitySemantics(previewA, typedA);
     await expectReadabilitySemantics(previewB, typedB);
     await expect.poll(() => modelText(container)).toMatch(/(?:^|[;{])\s*width\s*:\s*251px\s*;/);
     await expect.poll(() => modelText(container)).toMatch(/(?:^|[;{])\s*padding-left\s*:\s*17px\s*;/);
     await expect.poll(() => modelText(container)).toContain(typedB.quoted);
-    await selectPreviewWithStyleActive(editorHelper, container, previewA, a, isMobile);
+    await selectNodeWithStyleActive(editorHelper, container, a, isMobile);
     await expect.poll(() => modelText(container)).toMatch(/(?:^|[;{])\s*width\s*:\s*179px\s*;/);
     await expect.poll(() => modelText(container)).toMatch(/(?:^|[;{])\s*padding-left\s*:\s*11px\s*;/);
     await expect.poll(() => modelText(container)).toContain(typedA.quoted);

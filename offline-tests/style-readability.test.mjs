@@ -61,7 +61,7 @@ function addedBlock(source) {
 }
 function assertApprovedSpec(source) {
     const added = addedBlock(source);
-    assert.equal(blob(added), '9305788518a26c83b79f523d1bc54d136d3f52ce');
+    assert.equal(blob(added), '029568b13c1b74a6bc9e46e8b5a65e1a418de321');
     assert.equal(source.split(importLine).length, 2);
     const restored = source.replace(importLine, '').replace(added, '');
     assert.equal(blob(restored), '5ca4cf1953c9b9f4aa5b196f4a9ec80a8c6942f2');
@@ -76,15 +76,14 @@ test('independent real-UI cases preserve native selection, actual typing and bot
     const added = addedBlock(spec);
     assert.equal((added.match(/^test\('/gm) || []).length, 2);
     assert.doesNotMatch(added, /test\.(?:fail|skip|fixme|only|describe)|expect\.soft|waitForTimeout|setTimeout\(|formatDocument|\.run\(|\.trigger\(|force\s*:|setViewportSize|\.dispatch\(|\.setAttribute\(|\.setValue\(/);
-    assert.match(added, /await preview\.click\(\)/);
-    assert.match(added, /if \(isMobile\) await helper\.closeMoveingHandle\(\)/);
+    assert.match(added, /await helper\.selectNodeInDomTree\(node\)/);
     assert.match(added, /if \(isMobile\) await helper\.openMoveingHandle\('right'\)/);
-    const select = added.slice(added.indexOf('async function selectPreviewWithStyleActive'), added.indexOf('async function expectReadableSelectedStyle'));
+    const select = added.slice(added.indexOf('async function selectNodeWithStyleActive'), added.indexOf('async function expectReadableSelectedStyle'));
     assert.equal((select.match(/await expect\(editor\)\.toBeVisible\(\)/g) || []).length, 2);
-    assert.doesNotMatch(select, /nativeTab|#tab-style.*\.click/);
+    assert.doesNotMatch(select, /nativeTab|#tab-style.*\.click|closeMoveingHandle|preview\.click/);
     assert.match(added, /inspectStyleDeclarationLines\(await modelText\(container\), fixture\)/);
     assert.match(added, /getPropertyValue\('--readability-label'\)\.trim\(\)/);
-    const seed = added.slice(added.indexOf('async function seedReadabilityPair'), added.indexOf('async function selectPreviewWithStyleActive'));
+    const seed = added.slice(added.indexOf('async function seedReadabilityPair'), added.indexOf('async function selectNodeWithStyleActive'));
     const committed = seed.indexOf('expectReadabilitySemantics(pair.previewA, readableA)');
     const leaveOwner = seed.indexOf('selectNodeInDomTree(pair.b)');
     assert.ok(committed >= 0 && leaveOwner > committed);
