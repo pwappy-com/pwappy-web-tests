@@ -51,8 +51,8 @@ const original = {
         "after": "import { startStylePhase } from './style-phase-profile.mjs';\nimport { gotoInitialDashboard } from './initial-dashboard-navigation';\n"
       },
       {
-        "before": "): Promise<Page> {\n    observeHttpFailures(context);",
-        "after": "): Promise<Page> {\n    const launchReadyDone = startStylePhase('editor-launch-ready');\n    observeHttpFailures(context);"
+        "before": "): Promise<Page> {\n    observeHttpFailures(context);\n    const versionRow = page.locator('.version-card', { hasText: version }).first();",
+        "after": "): Promise<Page> {\n    observeHttpFailures(context);\n    const versionRow = page.locator('.version-card', { hasText: version }).first();\n    const launchReadyDone = startStylePhase('editor-launch-ready');"
       },
       {
         "before": "    // 共通関数を使ってタブを開く\n",

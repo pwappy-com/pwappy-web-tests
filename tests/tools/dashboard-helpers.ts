@@ -174,9 +174,9 @@ export async function openEditor(
     version: string = '1.0.0',
     options: { skipStarterModal?: boolean } = { skipStarterModal: true }
 ): Promise<Page> {
-    const launchReadyDone = startStylePhase('editor-launch-ready');
     observeHttpFailures(context);
     const versionRow = page.locator('.version-card', { hasText: version }).first();
+    const launchReadyDone = startStylePhase('editor-launch-ready');
     await expect(versionRow).toBeVisible({ timeout: 10000 });
 
     const editorBtn = versionRow.getByRole('button', { name: /エディタ/ });
