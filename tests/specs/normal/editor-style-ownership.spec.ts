@@ -1,3 +1,4 @@
+import { inspectStyleDeclarationLines } from '../../tools/style-readability-oracle.mjs';
 import { test as base, expect, Locator, Page } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor } from '../../tools/dashboard-helpers';
@@ -294,6 +295,122 @@ test('quoted CSS whitespace persists and same-ID Undo/load invalidates an older 
     await expect.poll(() => modelText(container)).toContain('--quoted: "a b";');
     expect(await modelText(container)).not.toContain('stale');
 });
+
+// BEGIN CSS READABILITY E2E
+// These are real staging UI tests. The layout oracle never formats the model.
+// Desktop selection leaves Style continuously visible. Mobile uses the normal
+// close-preview-select-reopen flow; it does not claim simultaneous panel visibility.
+type ReadabilityFixture = { width: string; paddingLeft: string; quoted: string };
+const readableA: ReadabilityFixture = { width: '137px', paddingLeft: '11px', quoted: '"alpha  beta; gamma"' };
+const readableB: ReadabilityFixture = { width: '223px', paddingLeft: '17px', quoted: '"delta  epsilon; zeta"' };
+const readabilityDeclarations = (fixture: ReadabilityFixture) =>
+    `width:${fixture.width};padding-left:${fixture.paddingLeft};--readability-label:${fixture.quoted};`;
+
+async function expectReadabilitySemantics(preview: Locator, fixture: ReadabilityFixture) {
+    await expect(preview).toHaveCSS('width', fixture.width);
+    await expect(preview).toHaveCSS('padding-left', fixture.paddingLeft);
+    await expect.poll(() => preview.evaluate(element =>
+        (element as HTMLElement).style.getPropertyValue('--readability-label').trim())).toBe(fixture.quoted);
+}
+
+async function seedReadabilityPair(page: Page, helper: EditorHelper) {
+    const pair = await setupPair(page, helper);
+    // Fixture seeding only: the existing helper writes the real Monaco model.
+    // Each stored style deliberately has multiple declarations on one line.
+    await writeStyle(helper, pair.container, readabilityDeclarations(readableA));
+    await expectReadabilitySemantics(pair.previewA, readableA);
+    await helper.selectNodeInDomTree(pair.b);
+    await helper.openMoveingHandle('right');
+    await nativeTab(pair.container, 'style');
+    await writeStyle(helper, pair.container, readabilityDeclarations(readableB));
+    await expectReadabilitySemantics(pair.previewB, readableB);
+    await expectReadabilitySemantics(pair.previewA, readableA);
+    return pair;
+}
+
+async function selectPreviewWithStyleActive(helper: EditorHelper, container: Locator,
+    preview: Locator, node: Locator, isMobile: boolean) {
+    const styleTab = container.locator('#tab-style');
+    const editor = container.locator('#style-container > .monaco-editor');
+    await expect(styleTab).toHaveClass(/active/);
+    await expect(editor).toBeVisible();
+    if (isMobile) await helper.closeMoveingHandle();
+    await preview.click();
+    if (isMobile) await helper.openMoveingHandle('right');
+    // Do not click the Style tab again: this is selection while the same tab stays active.
+    await expect(styleTab).toHaveClass(/active/);
+    await expect(editor).toBeVisible();
+    await expect(node).toHaveClass(/(?:^|\s)node-select(?:\s|$)/);
+}
+
+async function expectReadableSelectedStyle(container: Locator, preview: Locator, fixture: ReadabilityFixture) {
+    await expect(container.locator('#tab-style')).toHaveClass(/active/);
+    await expect(container.locator('#style-container > .monaco-editor')).toBeVisible();
+    await expectReadabilitySemantics(preview, fixture);
+    await expect.poll(async () => inspectStyleDeclarationLines(await modelText(container), fixture),
+        { message: 'Selected element CSS must show one complete declaration per model line without changing quoted whitespace' }
+    ).toEqual({ wrapper: true, width: true, paddingLeft: true, quoted: true, distinct: true });
+}
+
+async function typeVisibleStyleNatively(page: Page, container: Locator, fixture: ReadabilityFixture) {
+    const editor = container.locator('#style-container > .monaco-editor');
+    await expect(editor).toBeVisible();
+    await editor.click({ position: { x: 80, y: 20 } });
+    await expect.poll(() => container.evaluate((host: any) => host.styleEditor.hasTextFocus())).toBe(true);
+    const chords = await container.evaluate((host: any) =>
+        host.styleEditor._standaloneKeybindingService.lookupKeybinding('editor.action.selectAll')?.getChords().map((chord: any) => ({
+            ctrlKey: chord.ctrlKey, shiftKey: chord.shiftKey, altKey: chord.altKey,
+            metaKey: chord.metaKey, keyLabel: chord.keyLabel
+        })) ?? null);
+    await page.keyboard.press(nativeMonacoShortcut(chords, 'a'));
+    expect(await container.evaluate((host: any) => {
+        const model = host.styleEditor.getModel();
+        return host.styleEditor.hasTextFocus() && model.getValue().length > 0 &&
+            model.getValueInRange(host.styleEditor.getSelection()) === model.getValue();
+    })).toBe(true);
+    // Native text input, not model.setValue/executeEdits. Do not wait for a
+    // formatter or preview commit before the next selection.
+    await page.keyboard.insertText('element.style {' + readabilityDeclarations(fixture) + '}');
+}
+
+test('selected element CSS stays readable on reselection (desktop visible Style; mobile return flow)', async ({ editorPage, editorHelper, isMobile }) => {
+    const { a, b, previewA, previewB, container } = await seedReadabilityPair(editorPage, editorHelper);
+    await test.step(isMobile ? 'mobile preview selection returns to the already active Style tab' :
+        'desktop preview selection keeps the Style editor visible', async () => {
+        for (const [preview, node, fixture] of [[previewA, a, readableA], [previewB, b, readableB], [previewA, a, readableA]] as const) {
+            await selectPreviewWithStyleActive(editorHelper, container, preview, node, isMobile);
+            await expectReadableSelectedStyle(container, preview, fixture);
+        }
+    });
+    await expectReadabilitySemantics(previewA, readableA);
+    await expectReadabilitySemantics(previewB, readableB);
+});
+
+test('consecutive native selections and immediate typing preserve both CSS owners', async ({ editorPage, editorHelper, isMobile }) => {
+    const { a, b, previewA, previewB, container } = await seedReadabilityPair(editorPage, editorHelper);
+    const typedA = { ...readableA, width: '179px', quoted: '"typed  alpha; stable"' };
+    const typedB = { ...readableB, width: '251px', quoted: '"typed  delta; stable"' };
+    // Consecutive real input, without an artificial pause or formatter barrier.
+    // This is not a deterministic claim that an asynchronous formatter is pending.
+    await selectPreviewWithStyleActive(editorHelper, container, previewA, a, isMobile);
+    await selectPreviewWithStyleActive(editorHelper, container, previewB, b, isMobile);
+    await typeVisibleStyleNatively(editorPage, container, typedB);
+    await selectPreviewWithStyleActive(editorHelper, container, previewA, a, isMobile);
+    await typeVisibleStyleNatively(editorPage, container, typedA);
+    await selectPreviewWithStyleActive(editorHelper, container, previewB, b, isMobile);
+    await expectReadabilitySemantics(previewA, typedA);
+    await expectReadabilitySemantics(previewB, typedB);
+    await expect.poll(() => modelText(container)).toMatch(/(?:^|[;{])\s*width\s*:\s*251px\s*;/);
+    await expect.poll(() => modelText(container)).toMatch(/(?:^|[;{])\s*padding-left\s*:\s*17px\s*;/);
+    await expect.poll(() => modelText(container)).toContain(typedB.quoted);
+    await selectPreviewWithStyleActive(editorHelper, container, previewA, a, isMobile);
+    await expect.poll(() => modelText(container)).toMatch(/(?:^|[;{])\s*width\s*:\s*179px\s*;/);
+    await expect.poll(() => modelText(container)).toMatch(/(?:^|[;{])\s*padding-left\s*:\s*11px\s*;/);
+    await expect.poll(() => modelText(container)).toContain(typedA.quoted);
+    await expectReadabilitySemantics(previewA, typedA);
+    await expectReadabilitySemantics(previewB, typedB);
+});
+// END CSS READABILITY E2E
 
 test('native Monaco typing keeps cursor and editor Undo after its deferred commit', async ({ editorPage, editorHelper }) => {
     const { buttonNode } = await editorHelper.setupPageWithButton();

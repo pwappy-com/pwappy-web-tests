@@ -61,8 +61,8 @@ test('a missing schedule fails instead of treating undefined as cancellation', a
     }
 });
 
-test('four added normal scenarios, without skips, timer mocks or new wait budgets', () => {
-    assert.equal((source.match(/^test\('/gm) || []).length, 4);
+test('six normal scenarios, without skips, timer mocks or new wait budgets', () => {
+    assert.equal((source.match(/^test\('/gm) || []).length, 6);
     assert.doesNotMatch(source, /test\.(?:skip|fixme|only)|waitForTimeout|page\.clock|setTimeout\(|clearTimeout\(/);
     assert.doesNotMatch(source, /\.dispatch\(|\.setAttribute\(|\.value\s*=/);
     assert.equal((source.match(/await awaitCapturedStyleTimer\(container, (?:timer|tabTimer)\)/g) || []).length, 4);

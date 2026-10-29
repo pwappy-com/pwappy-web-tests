@@ -5,6 +5,7 @@ on:
     branches:
       - fix/verified-native-shortcuts-safe-artifacts
       - fix/premium-e2e-readiness
+      - fix/css-style-readability-e2e
 
 permissions:
   contents: read

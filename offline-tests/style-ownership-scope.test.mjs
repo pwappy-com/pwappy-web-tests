@@ -20,10 +20,10 @@ function select(scope) {
   return { status: result.status, output: result.stdout,
     args: result.status === 0 ? result.stdout.split('\0').filter(Boolean) : [] };
 }
-test('style ownership selects the whole four-scenario file without narrowing', () => {
+test('style ownership selects the whole six-scenario file without narrowing', () => {
   assert.deepEqual(select('style-ownership-regression'), { status: 0, output: path + '\0', args: [path] });
   assert.ok(existsSync(new URL('../' + path, import.meta.url)));
-  assert.equal((readFileSync(new URL('../' + path, import.meta.url), 'utf8').match(/^test\('/gm) || []).length, 4);
+  assert.equal((readFileSync(new URL('../' + path, import.meta.url), 'utf8').match(/^test\('/gm) || []).length, 6);
   assert.doesNotMatch(block.split('style-ownership-regression)')[1].split(';;')[0], /--grep|--invert|--shard/);
 });
 for (const scope of ['style-ownership', 'STYLE-OWNERSHIP-REGRESSION', ' style-ownership-regression', 'style-ownership-regression\nall', 'style-ownership-regression; echo injected']) {
