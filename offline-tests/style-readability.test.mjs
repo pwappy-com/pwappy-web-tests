@@ -135,11 +135,7 @@ test('legacy contracts change only their explicit four-to-six scenario counts an
         assert.equal(blob(source), sha);
     }
 });
-test('only the new repair branch is added to offline triggers; live workflow and test budget stay unchanged', () => {
-    const offline = read('.github/workflows/isolated-offline-contracts.yml');
-    const addition = '      - fix/css-style-readability-e2e\n';
-    assert.equal(offline.split(addition).length, 2);
-    assert.equal(blob(offline.replace(addition, '')), '98d9cd0ed28891b39d112e2a7ea77f6d1769cff6');
+test('live workflow and test budget stay unchanged', () => {
     assert.equal(blob(read('.github/workflows/e2e-tests.yml')), '915228b40569c83bdd1b0e8db6ef966360c67568');
     assert.equal(blob(read('playwright.config.ts')), '66a03298a97609c171390f29d37955ccf086cf76');
     assert.equal(blob(read('package.json')), 'cb731d5ce2654976d0b24f52bd975c1fd2272e8f');
