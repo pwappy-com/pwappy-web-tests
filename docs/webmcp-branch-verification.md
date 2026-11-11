@@ -193,3 +193,21 @@ The web source contains a separate actual-component regression for pending CSS
 commits during native mouse down/up. Source-side browser evidence and the staged
 full-suite result must be reported separately; local reproduction does not prove
 that every historical CI failure had the same cause.
+
+## Safari gap tracking after the 43031800998 run
+
+The normal WebKit and mobile-Safari runs reached the same sibling-marker
+assertion with the pointer outside the scrollport, while the current target gap
+was inside. The test now re-reads target and panel bounds after each native pointer
+move and only stops tracking when the pointer still matches the selected sibling
+gap. The unchecked final move using another stale rectangle was removed. Direct
+child order, total count, and selected-sibling assertions remain unchanged.
+
+Local checks: all 756 offline contracts passed (Node 26.5.0). The exact reorder
+flow passed in isolated WebKit and mobile-Safari with the real editor bundle and
+synthetic persistence. External Onsen preview assets were replaced by empty
+responses because the CDN could not resolve locally; this checks editor tree
+interaction, not rendered preview or full staging behavior. CI must independently
+verify the repaired flow against the pinned staging deployment. The previous
+run's four Linux jobs failed before test startup on Ubuntu package mirror DNS
+resolution and provide no application-test evidence.

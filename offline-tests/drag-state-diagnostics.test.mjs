@@ -61,3 +61,15 @@ test('negative drag state remains false for missing target, wrong source and cli
   assert.equal(result.targetExists, true); assert.equal(result.targetInScrollport, false);
   assert.equal(result.pointerInScrollport, false); assert.notEqual(result.hit, 'target-gap');
 });
+test('reorder tracks the moving gap and never makes an unchecked final drop move', () => {
+  const source = readFileSync(new URL('../tests/specs/normal/editor-ui-basic.spec.ts', import.meta.url), 'utf8');
+  const start = source.indexOf("await test.step('2. ドラッグ操作による順序反転");
+  const flow = source.slice(start, source.indexOf('// Merged from: tests/specs/normal/editor-html-tag-dialog', start));
+  assert.match(flow, /const settledBox = await btnBottom.boundingBox\(\)/);
+  assert.match(flow, /const settledPanel = await layoutPanel.boundingBox\(\)/);
+  assert.match(flow, /pointStillAtGap && await targetInsertPoint.evaluate/);
+  assert.doesNotMatch(flow, /finalDestY|pointerAction\.up\(finalBox/);
+  assert.match(flow, /await pointerAction.up\(currentX, currentY\)/);
+  assert.match(flow, /await expect\(targetInsertPoint\).toHaveClass/);
+  assert.match(flow, /await expect\(finalNodes.nth\(0\)\).toHaveAttribute\('data-node-dom-id', 'ons-button1'\)/);
+});

@@ -613,7 +613,17 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                     await pointerAction.move(currentX, currentY, destX, destY, 15);
                     currentX = destX;
                     currentY = destY;
-                    break;
+                    // Native preview updates and smooth scrolling can move the
+                    // target while the pointer travels. Re-read instead of dropping
+                    // at a stale rectangle (observed on both Safari projects).
+                    const settledBox = await btnBottom.boundingBox();
+                    const settledPanel = await layoutPanel.boundingBox();
+                    const pointStillAtGap = settledBox && settledPanel
+                        && Math.abs(currentY - (settledBox.y + settledBox.height + 5)) < 2
+                        && currentX > settledPanel.x && currentX < settledPanel.x + settledPanel.width
+                        && currentY > settledPanel.y && currentY < settledPanel.y + settledPanel.height;
+                    if (pointStillAtGap && await targetInsertPoint.evaluate(el =>
+                        el.classList.contains('node-add-point-selected'))) break;
                 } else {
                     const hoverY = destY >= pBox.y + pBox.height - 30 ? pBox.y + pBox.height - 15 : pBox.y + 15;
                     await pointerAction.move(currentX, currentY, destX, hoverY, 10);
@@ -623,13 +633,8 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 }
             }
 
-            const finalBox = await btnBottom.boundingBox();
-            if (finalBox) {
-                const finalDestY = finalBox.y + finalBox.height + 5;
-                await pointerAction.move(currentX, currentY, finalBox.x + finalBox.width / 2, finalDestY, 5);
-                currentX = finalBox.x + finalBox.width / 2;
-                currentY = finalDestY;
-            }
+            // Do not perform an unchecked final move: the loop must leave the
+            // pointer on the selected sibling gap, not outside the scrollport.
             // A child insertion inside btnBottom can produce the same flattened
             // order while silently nesting buttons. Require the sibling marker.
             const reportDragState = async (phase: 'before-assert' | 'assertion-failed') => {
@@ -645,7 +650,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 await reportDragState('assertion-failed');
                 throw error;
             }
-            await pointerAction.up(finalBox?.x, finalBox?.y);
+            await pointerAction.up(currentX, currentY);
             await editorPage.waitForTimeout(500);
 
             const contentArea = editorPage.locator('template-container .node[data-node-explain="コンテンツ"]');
