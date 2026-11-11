@@ -274,10 +274,16 @@ test.describe('AIエージェント機能：UI・連携・コマンド反映テ�
         });
     });
 
-    test('手動実行モード：プロンプトのコピーと応答の貼り付けUI', async ({ editorPage }) => {
+    test('手動実行モード：プロンプトのコピーと応答の貼り付けUI', async ({ editorPage, context, browserName }) => {
 
         // CI環境（GitHub Actionsなど）の場合のみスキップ
         test.skip(!!process.env.CI && process.env.PWAPPY_FULL_BRANCH_VERIFICATION !== 'true', 'CI環境ではクリップボード権限の制限によりテストが失敗するためスキップします。ローカルでは実行されます。');
+
+        // Chromium headless requires write permission even for an activated, focused click.
+        // Scope it to this disposable test context and the editor origin; no clipboard read access.
+        if (browserName === 'chromium') {
+            await context.grantPermissions(['clipboard-write'], { origin: new URL(editorPage.url()).origin });
+        }
 
         await test.step('1. 手動モードで指示を開始', async () => {
             await editorPage.locator('#fab-bottom-menu-box').click();
@@ -305,7 +311,7 @@ test.describe('AIエージェント機能：UI・連携・コマンド反映テ�
             const copyBtn = manualUI.locator('#copy-combined-btn');
             await expect(copyBtn).toBeVisible();
 
-            // コピー実行（クリップボード操作の権限許可が必要な場合があるためクリックのみ検証）
+            // 実際の書き込み成功後にだけ表示される完了状態を厳密に検証
             await copyBtn.click();
             await expect(copyBtn).toContainText('コピー完了');
 

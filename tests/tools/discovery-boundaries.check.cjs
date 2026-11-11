@@ -141,3 +141,15 @@ test('actual Firefox UI regression has a separate two-case inventory', () => {
   assert.equal(list('playwright.webmcp.config.ts').length, 88);
   assert.equal(list('playwright.config.ts').length, 830);
 });
+
+test('manual clipboard harness stays offline and the original Premium case remains in all five projects', () => {
+  const entries = list('playwright.config.ts');
+  assert.equal(entries.length, 830);
+  assert.ok(entries.every(item => !item.file.includes('manual-copy')));
+  for (const project of projects) {
+    // Do not rename, duplicate, or remove the existing manual-copy test while fixing permissions.
+    const scoped = entries.filter(item => item.project === project && item.file === 'specs/premium/agent-flow.spec.ts');
+    assert.equal(scoped.length, 7);
+    assert.equal(scoped.filter(item => item.title === '手動実行モード：プロンプトのコピーと応答の貼り付けUI').length, 1);
+  }
+});
