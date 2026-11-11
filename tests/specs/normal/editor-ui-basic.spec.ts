@@ -626,8 +626,12 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                         el.classList.contains('node-add-point-selected'))) break;
                 } else {
                     const hoverY = destY >= pBox.y + pBox.height - 30 ? pBox.y + pBox.height - 15 : pBox.y + 15;
-                    await pointerAction.move(currentX, currentY, destX, hoverY, 10);
-                    currentX = destX;
+                    // When the source is already at the scroll edge, moving only
+                    // to its centre can stay within the 10px drag threshold.
+                    // Enter the edge diagonally so native auto-scroll starts.
+                    const hoverX = Math.max(pBox.x + 10, Math.min(pBox.x + pBox.width - 10, tBox.x + 20));
+                    await pointerAction.move(currentX, currentY, hoverX, hoverY, 10);
+                    currentX = hoverX;
                     currentY = hoverY;
                     await editorPage.waitForTimeout(200);
                 }

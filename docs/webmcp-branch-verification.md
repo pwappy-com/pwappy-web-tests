@@ -211,3 +211,15 @@ interaction, not rendered preview or full staging behavior. CI must independentl
 verify the repaired flow against the pinned staging deployment. The previous
 run's four Linux jobs failed before test startup on Ubuntu package mirror DNS
 resolution and provide no application-test evidence.
+
+## Small-viewport native drag threshold
+
+Run 43109491592 still failed normal macOS WebKit (128 passed, 1 failed,
+4 skipped). A 500px-high isolated viewport reproduced the failure in both
+WebKit and mobile Safari: the vertical motion from the source to the panel edge
+was below the editor's 10px drag threshold, so scrollTop never changed. The
+test now enters the edge diagonally before waiting for native auto-scroll.
+With the identical small viewport, both tests passed and scrollTop increased;
+exact sibling selection, order and button-count assertions remain intact.
+The same external preview-asset limitation above applies. This local result
+is not a substitute for the complete staging CI run.
