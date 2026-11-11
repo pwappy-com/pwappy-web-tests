@@ -78,3 +78,66 @@ function validateCleanup(value) {
   return value;
 }
 module.exports.validateCleanup = validateCleanup;
+
+// Public evidence contains only fixed classifications and bounded counts. Never retain
+// request URLs, bodies, headers, app keys, titles, or error text in this structure.
+const REQUEST_PHASES = ['unknown', 'not-started', 'guard', 'native-preflight', 'authentication', 'create-app',
+  'editor-startup', 'native-discovery', 'native-edit', 'asset-upload-read', 'save', 'fresh-context-readback',
+  'cleanup', 'cleanup-close-clients', 'cleanup-close-contexts', 'cleanup-guard', 'cleanup-delete',
+  'cleanup-verify-absence', 'cleanup-assertions', 'complete'];
+const BLOCK_ENUMS = {
+  phase: REQUEST_PHASES,
+  context: ['original', 'fresh', 'unknown'],
+  method: ['POST', 'PUT', 'DELETE', 'PATCH', 'other'],
+  endpoint: ['application', 'daily-report', 'editor-json', 'file-upload', 'file-download', 'admax-remaining-count', 'other'],
+  reason: ['outside-origin', 'outside-rest-api', 'query-present', 'endpoint-method', 'payload-mismatch', 'parse-failed'],
+};
+const ENDPOINT_LABELS = new Map([
+  ['application', 'application'], ['application/daily-report', 'daily-report'], ['editor-json', 'editor-json'],
+  ['file-upload', 'file-upload'], ['file-download', 'file-download'], ['admax-view-status/remaining-count', 'admax-remaining-count'],
+]);
+const WRITE_PAIRS = new Set(['POST application', 'DELETE application', 'POST application/daily-report',
+  'PUT editor-json', 'POST file-upload', 'POST file-download']);
+function classifyBlockedRequest(url, method, phase, context, parseFailed = false) {
+  let endpoint = 'other', reason = 'outside-origin';
+  try {
+    const parsed = new URL(url), prefix = '/pwappy-api/rest/v1/';
+    if (parsed.origin === ORIGIN) {
+      reason = 'outside-rest-api';
+      if (parsed.pathname.startsWith(prefix)) {
+        const name = parsed.pathname.slice(prefix.length);
+        endpoint = ENDPOINT_LABELS.get(name) || 'other';
+        reason = parsed.search ? 'query-present' : !WRITE_PAIRS.has(`${method} ${name}`) ? 'endpoint-method'
+          : parseFailed ? 'parse-failed' : 'payload-mismatch';
+      }
+    }
+  } catch {}
+  return { phase: REQUEST_PHASES.includes(phase) ? phase : 'unknown',
+    context: BLOCK_ENUMS.context.includes(context) ? context : 'unknown',
+    method: BLOCK_ENUMS.method.includes(method) ? method : 'other', endpoint, reason };
+}
+function emptyBlockedDiagnostic() { return { schemaVersion: 1, total: 0, overflow: 0, entries: [] }; }
+function recordBlockedRequest(value, entry) {
+  // Input must already be classified. Fail closed rather than publish free text.
+  if (!validBlockEntry({ ...entry, count: 1 })) throw Error('Invalid request classification');
+  if (value.total === 1000000) throw Error('Request diagnostic count exceeded');
+  value.total++;
+  const existing = value.entries.find(item => Object.keys(BLOCK_ENUMS).every(key => item[key] === entry[key]));
+  if (existing) existing.count++;
+  else if (value.entries.length < 64) value.entries.push({ ...entry, count: 1 });
+  else value.overflow++;
+}
+function validBlockEntry(value) {
+  return value && isDeepStrictEqual(Object.keys(value).sort(), [...Object.keys(BLOCK_ENUMS), 'count'].sort())
+    && count(value.count) && value.count > 0 && Object.entries(BLOCK_ENUMS).every(([key, choices]) => choices.includes(value[key]));
+}
+function validateBlockedDiagnostic(value) {
+  if (!value || !isDeepStrictEqual(Object.keys(value).sort(), ['entries', 'overflow', 'schemaVersion', 'total'])
+    || value.schemaVersion !== 1 || !count(value.total) || !count(value.overflow)
+    || !Array.isArray(value.entries) || value.entries.length > 64 || !value.entries.every(validBlockEntry)) return null;
+  if (value.entries.reduce((sum, entry) => sum + entry.count, value.overflow) !== value.total) return null;
+  const signatures = value.entries.map(entry => JSON.stringify(Object.keys(BLOCK_ENUMS).map(key => entry[key])));
+  if (new Set(signatures).size !== signatures.length || (value.overflow > 0 && value.entries.length !== 64)) return null;
+  return value;
+}
+Object.assign(module.exports, { REQUEST_PHASES, BLOCK_ENUMS, classifyBlockedRequest, emptyBlockedDiagnostic, recordBlockedRequest, validateBlockedDiagnostic });

@@ -9,7 +9,7 @@ import { createApp, deleteApp, gotoDashboard, openEditor } from '../tests/tools/
 import { ensureAuthenticated, generateIdentKey } from '../tests/constants';
 const { ORIGIN, VERSION, ASSET, SCRIPT, DESCRIPTION, fixedPayloads, validateTarget } = require('../scripts/staging-native-contract.cjs');
 
-const { emptyDiagnostic, ownEditorRequest, responseEvidence, sanitizeSnapshot, ERRORS } = require('../scripts/staging-startup-diagnostic.cjs');
+const { emptyDiagnostic, ownEditorRequest, responseEvidence, sanitizeSnapshot, ERRORS, classifyBlockedRequest, emptyBlockedDiagnostic, recordBlockedRequest } = require('../scripts/staging-startup-diagnostic.cjs');
 
 type Pending = { resolve: (result: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout };
 function client(url: string, appKey: string) {
@@ -63,9 +63,12 @@ test('native staging edits and asset bytes persist after fresh-context reload', 
   let fresh: BrowserContext | undefined, editor: Page | undefined, cleanupNeeded = false;
   let external: ReturnType<typeof client>;
   const apiCounts = { create: 0, save: 0, upload: 0, assetRead: 0, deleted: 0, blocked: 0 };
-  const restrictWrites = async (targetContext: BrowserContext) => {
+  const blockedDiagnostic = emptyBlockedDiagnostic();
+  const restrictWrites = async (targetContext: BrowserContext, contextKind: 'original' | 'fresh') => {
     await targetContext.route('**/*', async route => {
       const request = route.request(), url = new URL(request.url()), method = request.method();
+      const requestPhase = lastPhase;
+      let parseFailed = false;
       if (['GET', 'HEAD', 'OPTIONS'].includes(method)) return route.continue();
       // No synthetic responses: every permitted request goes to the real staged backend.
       let allowed = false;
@@ -94,10 +97,14 @@ test('native staging edits and asset bytes persist after fresh-context reload', 
               if (allowed) apiCounts.assetRead++;
             }
           }
-        } catch { allowed = false; }
+        } catch { allowed = false; parseFailed = true; }
       }
       if (allowed) return route.continue();
-      apiCounts.blocked++; return route.abort('blockedbyclient');
+      apiCounts.blocked++;
+      recordBlockedRequest(blockedDiagnostic, classifyBlockedRequest(request.url(), method, requestPhase, contextKind, parseFailed));
+      // Persist on each block as well as at completion, including interrupted cleanup.
+      try { writeFileSync(process.env.PWAPPY_STAGING_NATIVE_BLOCKED_PATH!, JSON.stringify(blockedDiagnostic), { mode: 0o600 }); } catch {}
+      return route.abort('blockedbyclient');
     });
     await targetContext.addInitScript(() => localStorage.setItem('pwappy_tour_completed', 'true'));
   };
@@ -201,7 +208,7 @@ test('native staging edits and asset bytes persist after fresh-context reload', 
     const storageStatePath = await ensureAuthenticated('0', 'c');
     const state = JSON.parse(readFileSync(storageStatePath, 'utf8'));
     await context.addCookies(state.cookies);
-    await restrictWrites(context);
+    await restrictWrites(context, 'original');
     await gotoDashboard(page);
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden();
     await expect(page.locator('.app-card .app-key').filter({ hasText: appKey })).toHaveCount(0);
@@ -244,7 +251,7 @@ test('native staging edits and asset bytes persist after fresh-context reload', 
     await external.close(); await editor.close(); editor = undefined;
     phase('fresh-context-readback');
     fresh = await browser.newContext({ storageState: { cookies: (await context.storageState()).cookies, origins: [] }, viewport: { width: 1280, height: 900 } });
-    await restrictWrites(fresh);
+    await restrictWrites(fresh, 'fresh');
     const reloaded = await fresh.newPage();
     await reloaded.goto(url, { waitUntil: 'domcontentloaded' });
     await expect(reloaded.locator('app-container-loading-overlay')).toBeHidden();
@@ -264,28 +271,34 @@ test('native staging edits and asset bytes persist after fresh-context reload', 
     if (failurePhase === 'editor-startup') { try { await captureStartup(); } catch {} }
   }
   finally {
+    phase('cleanup-close-clients');
     for (const connection of clients) await connection.close();
+    phase('cleanup-close-contexts');
     await fresh?.close(); await editor?.close();
     if (cleanupNeeded) {
       cleanupOutcome.outcome = 'unknown';
       try {
-        phase('cleanup');
+        phase('cleanup-guard');
         await guard('normal'); // A changed deployment cannot be mutated by stale cleanup.
+        phase('cleanup-delete');
         await deleteApp(page, appKey);
+        phase('cleanup-verify-absence');
         await gotoDashboard(page);
         await expect(page.locator('.app-card .app-key').filter({ hasText: appKey })).toHaveCount(0);
         cleanupOutcome.absenceVerified = true;
+        phase('cleanup-assertions');
         if (apiCounts.create === 1 && !primaryFailure) expect(apiCounts.deleted).toBe(1);
         expect(apiCounts.blocked).toBe(0);
         cleanupOutcome.outcome = apiCounts.deleted > 0 ? 'succeeded' : 'unknown';
       } catch (error) {
         cleanupOutcome.outcome = 'failed';
-        if (!primaryFailure) { primaryFailure = error; failurePhase = 'cleanup'; }
+        if (!primaryFailure) { primaryFailure = error; failurePhase = lastPhase; }
       }
       cleanupOutcome.deleteRequested = apiCounts.deleted > 0;
       cleanupOutcome.blockedWrites = apiCounts.blocked > 0;
     }
   }
+  try { writeFileSync(process.env.PWAPPY_STAGING_NATIVE_BLOCKED_PATH!, JSON.stringify(blockedDiagnostic), { mode: 0o600 }); } catch {}
   // Persist separately after cleanup so a secondary failure cannot hide behind startup.
   try { writeFileSync(process.env.PWAPPY_STAGING_NATIVE_CLEANUP_PATH!, JSON.stringify(cleanupOutcome), { mode: 0o600 }); } catch {}
   if (primaryFailure) { phase(failurePhase!); throw primaryFailure; }

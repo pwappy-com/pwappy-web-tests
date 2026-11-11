@@ -10,9 +10,8 @@ import { pathToFileURL } from 'node:url';
 import { guard } from './branch-verification-guard.mjs';
 import { invocation, readCounts } from './run-branch-verification.mjs';
 const require = createRequire(import.meta.url);
-const { validateDiagnostic, validateCleanup } = require('./staging-startup-diagnostic.cjs');
-export const PHASES = ['not-started', 'guard', 'native-preflight', 'authentication', 'create-app',
-  'editor-startup', 'native-discovery', 'native-edit', 'asset-upload-read', 'save', 'fresh-context-readback', 'cleanup', 'complete'];
+const { validateDiagnostic, validateCleanup, validateBlockedDiagnostic, REQUEST_PHASES } = require('./staging-startup-diagnostic.cjs');
+export const PHASES = REQUEST_PHASES.filter(phase => phase !== 'unknown');
 async function unusedPort() {
   const server = createServer();
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -32,6 +31,7 @@ export function nativeInvocation(env, root, port, token) {
   // Reuse normal/Linux/Chromium identity and PP-preparation receipt, never a new account.
   Object.assign(childEnv, { PWAPPY_STAGING_NATIVE_GUARDED: 'true', PWAPPY_STAGING_NATIVE_PORT: String(port),
     PWAPPY_STAGING_NATIVE_CLEANUP_PATH: join(root, 'cleanup-outcome.json'),
+    PWAPPY_STAGING_NATIVE_BLOCKED_PATH: join(root, 'blocked-diagnostic.json'),
     PWAPPY_STAGING_NATIVE_DIAGNOSTIC_PATH: join(root, 'startup-diagnostic.json'),
     PWAPPY_STAGING_NATIVE_TOKEN: token, PWAPPY_STAGING_NATIVE_PHASE_PATH: join(root, 'phase.json') });
   return { childEnv, args: [require.resolve('@playwright/test/cli'), 'test', '--config=playwright.staging-native.config.ts', '--workers=1', '--retries=0'] };
@@ -54,6 +54,12 @@ export async function run(env = process.env, dependencies = {}) {
     if (raw.length <= 1024) cleanup = validateCleanup(JSON.parse(raw));
   } catch {}
   console.log(`Native cleanup: ${cleanup ? JSON.stringify(cleanup) : 'unknown'}`);
+  let blocked = null;
+  try {
+    const raw = readFileSync(childEnv.PWAPPY_STAGING_NATIVE_BLOCKED_PATH, 'utf8');
+    if (raw.length <= 16384) blocked = validateBlockedDiagnostic(JSON.parse(raw));
+  } catch {}
+  console.log(`Native blocked requests: ${blocked ? JSON.stringify(blocked) : 'unavailable'}`);
   if (phase === 'editor-startup') {
     let diagnostic = null;
     try {

@@ -188,3 +188,75 @@ test('cleanup evidence rejects secrets and unproven success', () => {
   }
   assert.equal(validateCleanup({ ...good, outcome: 'failed' }).outcome, 'failed');
 });
+
+const { BLOCK_ENUMS, classifyBlockedRequest, emptyBlockedDiagnostic, recordBlockedRequest, validateBlockedDiagnostic } = require('../scripts/staging-startup-diagnostic.cjs');
+const blockedEntry = () => classifyBlockedRequest(`${ORIGIN}/pwappy-api/rest/v1/admax-view-status/remaining-count`, 'PUT', 'cleanup-delete', 'original');
+test('blocked request classifier emits fixed labels only, without retaining URL data', () => {
+  assert.deepEqual(blockedEntry(), { phase: 'cleanup-delete', context: 'original', method: 'PUT', endpoint: 'admax-remaining-count', reason: 'endpoint-method' });
+  const prefix = `${ORIGIN}/pwappy-api/rest/v1/`;
+  for (const [url, method, parseFailed, reason] of [
+    ['https://external.invalid/private?token=PRIVATE_CANARY', 'POST', false, 'outside-origin'],
+    [ORIGIN + '/PRIVATE_CANARY', 'PUT', false, 'outside-rest-api'],
+    [prefix + 'application?token=PRIVATE_CANARY', 'POST', false, 'query-present'],
+    [prefix + 'application', 'PATCH', false, 'endpoint-method'],
+    [prefix + 'application', 'POST', false, 'payload-mismatch'],
+    [prefix + 'application', 'POST', true, 'parse-failed'],
+    [prefix + 'PRIVATE_CANARY', 'POST', true, 'endpoint-method'],
+    ['PRIVATE_CANARY', 'PRIVATE_CANARY', true, 'outside-origin'],
+  ]) {
+    const entry = classifyBlockedRequest(url, method, 'PRIVATE_CANARY', 'PRIVATE_CANARY', parseFailed);
+    assert.equal(entry.reason, reason);
+    assert.equal(entry.phase, 'unknown'); assert.equal(entry.context, 'unknown');
+    assert.doesNotMatch(JSON.stringify(entry), /PRIVATE_CANARY/);
+  }
+});
+test('blocked evidence strictly validates enums, keys, counts, totals and duplicate rows', () => {
+  const base = emptyBlockedDiagnostic(); recordBlockedRequest(base, blockedEntry()); recordBlockedRequest(base, blockedEntry());
+  assert.equal(base.total, 2); assert.equal(base.entries.length, 1); assert.equal(base.entries[0].count, 2);
+  assert.deepEqual(validateBlockedDiagnostic(base), base);
+  const bad = [null, [], { ...base, secret: 'PRIVATE_CANARY' }, { ...base, schemaVersion: 2 },
+    { ...base, total: 1 }, { ...base, total: -1 }, { ...base, overflow: 1 },
+    { ...base, entries: [...base.entries, ...base.entries], total: 4 }, { ...base, entries: null }];
+  for (const key of Object.keys(BLOCK_ENUMS)) bad.push({ ...base, entries: [{ ...base.entries[0], [key]: 'PRIVATE_CANARY' }] });
+  for (const count of [-1, 0, 1.5, 1000001, Infinity, NaN, 'PRIVATE_CANARY', true]) bad.push({ ...base, entries: [{ ...base.entries[0], count }] });
+  bad.push({ ...base, entries: [{ ...base.entries[0], url: 'PRIVATE_CANARY' }] });
+  for (const value of bad) assert.equal(validateBlockedDiagnostic(value), null);
+  assert.throws(() => recordBlockedRequest(base, { ...blockedEntry(), phase: 'PRIVATE_CANARY' }));
+});
+test('blocked evidence caps row cardinality with explicit overflow without relaxing rejection', () => {
+  const value = emptyBlockedDiagnostic();
+  for (const phase of BLOCK_ENUMS.phase) for (const method of BLOCK_ENUMS.method) recordBlockedRequest(value, { ...blockedEntry(), phase, method });
+  assert.equal(value.entries.length, 64);
+  assert.equal(value.overflow, value.total - 64);
+  assert.deepEqual(validateBlockedDiagnostic(value), value);
+  assert.equal(validateBlockedDiagnostic({ ...value, entries: [...value.entries, value.entries[0]] }), null);
+});
+for (const variant of ['valid', 'unknown-key', 'unknown-enum', 'oversized', 'malformed']) test(`wrapper rejects unsafe blocked diagnostics (${variant})`, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'native-blocked-offline-'));
+  const output = join(root, 'github-output'); writeFileSync(output, '');
+  const messages = [], oldLog = console.log;
+  console.log = (...items) => messages.push(items.join(' '));
+  try {
+    const exit = await run({ ...ENV, GITHUB_OUTPUT: output, RUNNER_TEMP: root }, { guard: async () => {}, unusedPort: async () => 19232,
+      spawn: (_command, _args, { env }) => {
+        writeFileSync(env.PWAPPY_BRANCH_COUNTS_PATH, JSON.stringify({ passed: 0, failed: 1, skipped: 0, timedOut: 0, interrupted: 0 }));
+        writeFileSync(env.PWAPPY_STAGING_NATIVE_PHASE_PATH, JSON.stringify('cleanup-assertions'));
+        const evidence = emptyBlockedDiagnostic(); recordBlockedRequest(evidence, blockedEntry());
+        if (variant === 'unknown-key') evidence.secret = ENV.PWAPPY_TEST_LOGIN_PASSCODE;
+        if (variant === 'unknown-enum') evidence.entries[0].endpoint = ENV.PWAPPY_TEST_LOGIN_PASSCODE;
+        const raw = variant === 'oversized' ? JSON.stringify({ secret: ENV.PWAPPY_TEST_LOGIN_PASSCODE.repeat(1024) })
+          : variant === 'malformed' ? ENV.PWAPPY_TEST_LOGIN_PASSCODE : JSON.stringify(evidence);
+        writeFileSync(env.PWAPPY_STAGING_NATIVE_BLOCKED_PATH, raw);
+        return { status: 1 };
+      } });
+    assert.equal(exit, 1);
+    assert.doesNotMatch(messages.join('\n'), new RegExp(ENV.PWAPPY_TEST_LOGIN_PASSCODE));
+    assert.match(messages.join('\n'), variant === 'valid' ? /Native blocked requests: .*admax-remaining-count/ : /Native blocked requests: unavailable/);
+  } finally { console.log = oldLog; rmSync(root, { recursive: true, force: true }); }
+});
+test('blocked diagnostics preserve abort and zero-block assertion at both checkpoints', () => {
+  const spec = readFileSync(new URL('../staging-tests/native-persistence.spec.ts', import.meta.url), 'utf8');
+  assert.equal((spec.match(/expect\(apiCounts.blocked\)\.toBe\(0\)/g) || []).length, 2);
+  assert.match(spec, /recordBlockedRequest[\s\S]*return route\.abort\('blockedbyclient'\)/);
+  for (const phase of ['cleanup-close-clients', 'cleanup-close-contexts', 'cleanup-guard', 'cleanup-delete', 'cleanup-verify-absence', 'cleanup-assertions']) assert.ok(PHASES.includes(phase));
+});
