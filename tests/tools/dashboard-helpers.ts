@@ -1,5 +1,6 @@
 import { expect, type Page, type BrowserContext } from '@playwright/test';
 import { EditorHelper } from './editor-helpers';
+import { expectApplicationZipDownload } from './success-zip';
 import { clickAndOpenNewTabSafely } from './window-helpers';
 import { ensureAuthenticated } from '../constants';
 import fs from 'fs';
@@ -321,11 +322,7 @@ export async function downloadVersion(page: Page, { appName, appKey, version }: 
 
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
 
-    const expectedVersionInFilename = version.replace(/\./g, '_');
-    const expectedBaseFilename = `${appKey.replace(/\./g, '_')}_${expectedVersionInFilename}`;
-    const suggestedFilename = download.suggestedFilename();
-    expect(suggestedFilename).toContain(expectedBaseFilename);
-    expect(suggestedFilename).toContain('.zip');
+    await expectApplicationZipDownload(download, appKey, version);
 }
 
 export async function expectVersionVisibility(page: Page, version: string, isVisible: boolean): Promise<void> {

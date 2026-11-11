@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import 'dotenv/config';
 import { gotoDashboard } from '../../tools/dashboard-helpers';
+import { applyCouponAndExpectDuplicate } from '../../tools/success-assertions';
 
 test.describe('クーポン機能 E2Eシナリオ', () => {
 
@@ -81,11 +82,8 @@ test.describe('クーポン機能 E2Eシナリオ', () => {
             await expect(input).toBeEditable();
 
             await input.fill('TEST_DAILY_COUPON');
-            await applyButton.click();
-
-            // 失敗（重複）アラートの検証
-            await expect(alert).toBeVisible();
-            await expect(alert).not.toContainText('100ポイント獲得しました');
+            // ロックアウト・通信障害・一般エラーを「重複防止成功」と混同しない。
+            await applyCouponAndExpectDuplicate(page, 'TEST_DAILY_COUPON', () => applyButton.click());
 
             await alert.getByRole('button', { name: '閉じる' }).click();
         });

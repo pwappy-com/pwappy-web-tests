@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "description": "E2E tests for pwappy-web",
   "scripts": {
-    "test": "npx playwright test"
+    "test": "npx playwright test",
+    "test:discovery": "node --test tests/tools/discovery-boundaries.check.cjs",
+    "test:webmcp": "node tests/tools/webmcp/run-isolated.cjs",
+    "test:webmcp:list": "node tests/tools/webmcp/run-isolated.cjs --list",
+    "test:webmcp:checks": "node --test tests/tools/webmcp/isolation-options.check.cjs"
   },
   "keywords": [],
   "author": "",

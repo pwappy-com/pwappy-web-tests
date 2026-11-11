@@ -1,0 +1,52 @@
+import { test, expect } from '@playwright/test';
+import { gunzipSync } from 'node:zlib';
+const { startIsolatedReadApi } = require('../../tools/webmcp/isolated-readapi.cjs');
+
+test('Actual installed PHP read API uses only isolated SQLite, files and ephemeral authentication', async ({}, info) => {
+  const backend = await startIsolatedReadApi();
+  const checks: string[] = [];
+  try {
+    const noAuth = await backend.request('/read/v1/publish-list', { authenticated: false });
+    expect(noAuth.status).toBe(401);
+    checks.push('Missing authentication: 401');
+    const invalid = await fetch(backend.baseURL + '/read/v1/publish-list', { headers: { cookie: 'pwappy_auth=invalid-test-only' } });
+    expect(invalid.status).toBe(401);
+    checks.push('Invalid authentication: 401');
+    const appsResponse = await backend.request('/read/v1/publish-list');
+    expect(appsResponse.status).toBe(200);
+    const apps = await appsResponse.json();
+    expect(apps).toMatchObject({status:'publish_list_get_success',details:{identKey:'webmcp1',applications:[{appKey:'fixture',appName:'Isolated backend fixture'}],versions:[{version:'v1',status:'draft'}]}});
+    checks.push('Actual PHP + SQLite application/version read');
+    const filesResponse = await backend.request('/read/v1/file-list?appKey=fixture&version=v1&path=');
+    expect(filesResponse.status).toBe(200);
+    const files = await filesResponse.json();
+    expect(files.status).toBe('filelist_get_success');
+    expect(JSON.stringify(files.details)).toContain('test.txt');
+    expect(JSON.stringify(files.details)).not.toContain('index.html');
+    checks.push('Actual PHP asset listing and reserved-file exclusion');
+    const jsonResponse = await backend.request('/read/v1/editor-json?appKey=fixture&version=v1');
+    expect(jsonResponse.status).toBe(200);
+    const json = await jsonResponse.json();
+    expect(json.status).toBe('editor_json_get_success');
+    expect(JSON.parse(gunzipSync(Buffer.from(json.details.appSettings, 'base64')).toString())).toMatchObject({lang:'ja',fixtureMarker:'real-php-isolated'});
+    checks.push('Actual PHP saved compressed editor JSON read');
+    const staticFile = await backend.request('/webmcp1/fixture/v1/test.txt');
+    expect(staticFile.status).toBe(200);
+    expect(await staticFile.text()).toBe('isolated readapi fixture\n');
+    const unauthFile = await backend.request('/webmcp1/fixture/v1/test.txt', {authenticated:false});
+    expect(unauthFile.status).toBe(404);
+    checks.push('Actual PHP authenticated asset download; unauthenticated resource hidden');
+    const write = await backend.request('/read/v1/editor-json?appKey=fixture&version=v1', {method:'PUT'});
+    expect(write.status).toBe(405);
+    checks.push('Isolation router rejects write methods before backend execution');
+    const downloadBody={appKey:'fixture',version:'v1',path:'',directories:[],files:['test.txt']};
+    const noAuthDownload=await fetch(backend.baseURL+'/rest/v1/file-download',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(downloadBody)});
+    expect(noAuthDownload.status).toBe(401);
+    const invalidDownload=await fetch(backend.baseURL+'/rest/v1/file-download',{method:'POST',headers:{cookie:backend.cookie,'content-type':'application/json'},body:JSON.stringify({...downloadBody,path:'../'})});
+    expect(invalidDownload.status).toBe(400);
+    checks.push('Isolated production download use case boundary rejects missing auth and non-fixture paths');
+    expect(await backend.verifySourceUnchanged()).toBe(true);
+    expect(await backend.verifyFixtureFilesUnchanged()).toBe(true);
+    await info.attach('Isolated real PHP backend evidence', { body: JSON.stringify({source:'Installed unmodified readapi.php and FileDownloadUseCase',sourceSha256:backend.sourceHash,downloadSourceSha256:backend.downloadSourceHash,sourceAndFixtureFilesUnchanged:true,checks,scope:'Synthetic SQLite/files only. Existing WordPress service, accounts, database, configuration and authentication were not used.'},null,2),contentType:'application/json' });
+  } finally { await backend.close(); }
+});

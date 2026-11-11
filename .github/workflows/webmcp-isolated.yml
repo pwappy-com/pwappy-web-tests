@@ -1,0 +1,54 @@
+name: Isolated WebMCP verification
+
+# This workflow never runs on push, PR or schedule. It does not replace the
+# existing real-service E2E workflow or its intentional cleanup job.
+on:
+  workflow_dispatch:
+    inputs:
+      app_source_root:
+        description: 'Absolute path to the reviewed pwappy-web checkout with installed dependencies on the dedicated runner'
+        required: true
+        type: string
+      plugin_source_root:
+        description: 'Installed PHP plugin source, used only with disposable SQLite/files and generated test authentication'
+        required: true
+        default: '/var/www/html/wordpress/wp-content/plugins/pwappy-plugin'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pwappy-webmcp-isolated
+  cancel-in-progress: false
+
+jobs:
+  isolated:
+    # Opt-in label: do not dispatch onto arbitrary or GitHub-hosted runners.
+    runs-on: [self-hosted, Linux, pwappy-webmcp]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install locked test dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Check isolated runner guards and discover tests
+        run: |
+          npm run test:webmcp:checks
+          npm run test:webmcp:list
+      - name: Build reviewed source and run only isolated tests
+        env:
+          APP_SOURCE_ROOT: ${{ inputs.app_source_root }}
+          PWAPPY_WEBMCP_PLUGIN_DIR: ${{ inputs.plugin_source_root }}
+        run: npm run test:webmcp -- --app-root "$APP_SOURCE_ROOT"
+      - name: Retain synthetic test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolated-webmcp-evidence
+          path: |
+            playwright-report/pwappy-webmcp-run-*/
+            test-results/pwappy-webmcp-run-*/
+          if-no-files-found: ignore
+          retention-days: 7

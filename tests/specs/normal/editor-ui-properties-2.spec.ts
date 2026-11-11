@@ -2,6 +2,7 @@ import { test as base, expect, Page, Locator, CDPSession, Dialog } from '@playwr
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor, addVersion } from '../../tools/dashboard-helpers';
 import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';
+import { expectIconOutputSuccess } from '../../tools/success-assertions';
 import { getStorageStatePath } from '../../constants';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -1782,19 +1783,10 @@ customElements.define('${tagName}', ${scriptName});
         // --- 11. トリミング適用保存と完了確認 ---
         await applyBtn.click();
 
-        // エディタ画面上にマウントされている共通アラートコンポーネントを監視
-        await expect(alertDialog).toBeVisible({ timeout: 20000 });
-
-        const alertMessage = await alertDialog.locator('.alert-text, [slot="message"], .modal-content, p').first().innerText().catch(() => '');
-
-        if (alertMessage.includes('制限されています') || alertMessage.includes('デモモード')) {
-            // ゲストまたはデモモード等で書き込み制限のあるアカウント環境で実行された場合の正常終了フォールバック
-            await alertDialog.getByRole('button', { name: '閉じる' }).click();
-        } else {
-            // 新仕様のアラートメッセージ（すべて出力しました）を検証
-            await expect(alertDialog).toContainText('すべて出力しました');
-            await alertDialog.getByRole('button', { name: '閉じる' }).click();
-        }
+        // 出力成功だけを許可する。デモ制限・権限拒否は正常終了ではない。
+        await expectIconOutputSuccess(alertDialog, await sizeItems.count());
+        await expect(applyBtn).toBeDisabled();
+        await alertDialog.getByRole('button', { name: '閉じる' }).click();
 
         await expect(alertDialog).toBeHidden();
 

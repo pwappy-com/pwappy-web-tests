@@ -1,5 +1,6 @@
 import { test, expect, type Page, type Locator, FrameLocator } from '@playwright/test';
 import { clickAndOpenNewTabSafely } from './window-helpers';
+import { expectEditorReadbackStatus, saveEditorAndExpectSuccess } from './success-assertions';
 
 /**
  * Playwrightテスト用のエディタ操作ヘルパークラス。
@@ -773,34 +774,27 @@ export class EditorHelper {
         await menuButton.click();
         await expect(platformBottomMenu).toBeVisible();
 
-        // 保存ボタンを押す前に、保存通信(API)の完了を監視する準備をする
-        const saveResponsePromise = this.page.waitForResponse(
-            response => response.request().method() === 'PUT' && response.url().includes('editor'),
-            { timeout: 30000 }
-        ).catch(() => null);
-
-        // 保存をクリック
-        await platformBottomMenu.getByText('保存', { exact: true }).click();
+        // タイムアウト・HTTPエラー・業務エラーを成功扱いしない。
+        await saveEditorAndExpectSuccess(this.page, () =>
+            platformBottomMenu.getByText('保存', { exact: true }).click());
 
         // 「処理中」が一瞬表示されるのを待ってから、消えるのを待つ
         const loadingOverlay = this.page.locator('app-container-loading-overlay');
         await loadingOverlay.getByText('処理中').waitFor({ state: 'visible', timeout: 2000 }).catch(() => { });
         await loadingOverlay.getByText('処理中').waitFor({ state: 'hidden', timeout: 30000 });
 
-        // ネットワークレベルで保存APIの通信が完了するのを確実に待つ
-        await saveResponsePromise;
-
-        // サーバー側のファイル書き込みラグを吸収するための待機
-        await this.page.waitForTimeout(5000);
-
-        // アラートにエラー文字が含まれていればテストを強制終了させる
-        if (await alert.isVisible({ timeout: 5000 }).catch(() => false)) {
+        // 正常保存はアラートを出さない。読み戻し失敗や書込み制限も
+        // 文言に「エラー」「失敗」があるかに依存せず失敗として扱う。
+        if (await alert.isVisible()) {
             const msg = await alert.evaluate((el: any) => el.alertMessage || el.innerText || el.textContent || '');
-            if (msg?.includes('エラー') || msg?.includes('失敗')) {
-                throw new Error(`[アプリ保存失敗] ${msg}`);
-            }
-            await alert.getByRole('button', { name: '閉じる' }).click();
-            await expect(alert).toBeHidden();
+            throw new Error(`[アプリ保存未確認] ${msg}`);
+        }
+
+        // PUT 200でも、保存後のGET不一致などでホストが失敗する場合がある。
+        // 古いホストでは検証済みと偽らず、API応答のみの確認をレポートする。
+        if (await expectEditorReadbackStatus(this.page) === 'unsupported') {
+            test.info().annotations.push({ type: 'save-verification',
+                description: 'Server readback status is unsupported by this editor; only the save API response was verified.' });
         }
 
         // 保存後にメニューが閉じていたら再度開く
