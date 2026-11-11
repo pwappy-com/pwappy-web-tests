@@ -120,7 +120,7 @@ jobs:
           PWAPPY_TEST_POINTS_READ_ENDPOINT: ${{ vars.PWAPPY_TEST_POINTS_READ_ENDPOINT }}
       - name: Run complete suite with raw evidence disabled
         id: run_tests
-        run: node scripts/run-branch-verification.mjs "$TEST_SUITE" "$TEST_BROWSER" "$TEST_OS" tests
+        run: node scripts/run-main-branch-verification.mjs "$TEST_SUITE" "$TEST_BROWSER" "$TEST_OS" tests
         env:
           TEST_SUITE: ${{ matrix.suite }}
           TEST_BROWSER: ${{ matrix.browser }}
@@ -131,10 +131,11 @@ jobs:
           PWAPPY_TEST_POINTS_READ_ENDPOINT: ${{ vars.PWAPPY_TEST_POINTS_READ_ENDPOINT }}
           PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA: ${{ vars.PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA }}
       - name: Clean only the stable account used by this suite
-        if: ${{ always() && steps.run_tests.outputs.started == 'true' }}
+        if: ${{ always() && steps.run_tests.outputs.started == 'true' && steps.run_tests.outputs.state_dir != '' }}
         timeout-minutes: 10
-        run: node scripts/run-branch-verification.mjs "$TEST_SUITE" "$TEST_BROWSER" "$TEST_OS" cleanup
+        run: node scripts/run-main-branch-verification.mjs "$TEST_SUITE" "$TEST_BROWSER" "$TEST_OS" cleanup
         env:
+          PWAPPY_MAIN_STATE_DIR: ${{ steps.run_tests.outputs.state_dir }}
           TEST_SUITE: ${{ matrix.suite }}
           TEST_BROWSER: ${{ matrix.browser }}
           TEST_OS: ${{ matrix.os }}

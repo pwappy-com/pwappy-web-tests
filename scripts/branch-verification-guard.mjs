@@ -20,15 +20,9 @@ const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 export function readPin() {
   return JSON.parse(readFileSync(new URL('../.github/webmcp-verification.json', import.meta.url), 'utf8'));
 }
-export function validateConfiguration(env, event, pin, suite) {
+export function validateStagingConfiguration(env, pin, suite) {
   if (!['preflight', 'normal', 'premium'].includes(suite)) fail('invalid suite');
   if (!pin || Object.keys(pin).join(',') !== 'sourceCommit' || !sha(pin.sourceCommit)) fail('invalid source pin');
-  if (env.GITHUB_EVENT_NAME !== 'push' || env.GITHUB_REF !== BRANCH || !sha(env.GITHUB_SHA)
-      || event?.ref !== BRANCH || event?.deleted === true || event?.forced === true
-      || event?.after !== env.GITHUB_SHA || event?.head_commit?.id !== env.GITHUB_SHA
-      || typeof event?.head_commit?.message !== 'string' || !event.head_commit.message.includes(MARKER)) {
-    fail('unexpected trigger or unmarked commit');
-  }
   // A second supplied SHA is optional, but must never silently override the checked-in pin.
   if (env.PWAPPY_WEBMCP_SOURCE_SHA && env.PWAPPY_WEBMCP_SOURCE_SHA !== pin.sourceCommit) fail('source pin mismatch');
   let base;
@@ -47,8 +41,20 @@ export function validateConfiguration(env, event, pin, suite) {
   }
   return { sourceCommit: pin.sourceCommit, baseURL: base.href };
 }
+export function validateConfiguration(env, event, pin, suite) {
+  if (env.GITHUB_EVENT_NAME !== 'push' || env.GITHUB_REF !== BRANCH || !sha(env.GITHUB_SHA)
+      || event?.ref !== BRANCH || event?.deleted === true || event?.forced === true
+      || event?.after !== env.GITHUB_SHA || event?.head_commit?.id !== env.GITHUB_SHA
+      || typeof event?.head_commit?.message !== 'string' || !event.head_commit.message.includes(MARKER)) {
+    fail('unexpected trigger or unmarked commit');
+  }
+  return validateStagingConfiguration(env, pin, suite);
+}
 export async function verifyStage(env, event, pin, suite, fetchImpl = fetch) {
   const result = validateConfiguration(env, event, pin, suite);
+  return verifyPinnedDeployment(env, result, fetchImpl);
+}
+export async function verifyPinnedDeployment(env, result, fetchImpl = fetch) {
   // Fixed origin/root marker: do not append to a secret base URL ending in /editor.
   const marker = new URL('/staging-deployment.json', STAGING_ORIGIN);
   marker.searchParams.set('verify', `${env.GITHUB_SHA}-${Date.now()}`);

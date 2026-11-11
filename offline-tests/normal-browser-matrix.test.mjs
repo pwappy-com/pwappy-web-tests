@@ -1,4 +1,5 @@
 // Offline only: execute extracted workflow scripts with synthetic inputs, never jobs.
+import { restoreApprovedMainSafeExecution } from './main-safe-execution-contract.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -109,7 +110,7 @@ test('safe wiring, ten inputs, no service operations, separate premium matrix', 
 test('undoing browser selector and later focused-scope additions reproduces exact verified remote baseline', () => {
   // The later quick-property and style-ownership scopes have executable selector contracts.
   // Restore precisely that reviewed addition before checking the older immutable baseline.
-  const focused = workflow.match(/^          case "\$\{TEST_SCOPE:-all\}" in\n[\s\S]*?^          esac$/m)?.[0];
+  const focused = restoreApprovedMainSafeExecution(workflow).match(/^          case "\$\{TEST_SCOPE:-all\}" in\n[\s\S]*?^          esac$/m)?.[0];
   const approvedFocused = `          case "\${TEST_SCOPE:-all}" in
             all) TEST_ARGS=(tests/specs/normal) ;;
             editor-regression)

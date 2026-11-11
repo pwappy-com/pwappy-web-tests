@@ -33,9 +33,19 @@ export function dedicatedAccount(browser, os) {
   return `pw${osCode}${entry.code}000`;
 }
 export function assertFreshPremiumAuthCache(browser, os, root = process.cwd()) {
-  const account = dedicatedAccount(browser, os);
+  return assertFreshTestAccountAuthCache(browser, os, '0', root);
+}
+// Main CI can use multiple parallel slots. The branch entry points remain index-zero only.
+export function mainAccount(browser, os, index) {
+  if (!/^(0|[1-9][0-9]{0,2})$/.test(String(index)) || Number(index) > 996) {
+    throw new PremiumKeyPreflightError('configuration');
+  }
+  return dedicatedAccount(browser, os).slice(0, 4) + String(index).padStart(3, '0');
+}
+export function assertFreshTestAccountAuthCache(browser, os, index, root = process.cwd()) {
+  const account = mainAccount(browser, os, index);
   const directory = join(root, '.auth');
-  const file = join(directory, `user-${account[2]}-${account[3]}-0.json`);
+  const file = join(directory, `user-${account[2]}-${account[3]}-${Number(index)}.json`);
   try {
     const directoryStat = lstatSync(directory, { throwIfNoEntry: false });
     if (directoryStat && (!directoryStat.isDirectory() || directoryStat.isSymbolicLink())) {
@@ -64,8 +74,17 @@ export function assertSessionIdentity(state, identkey, now = Date.now() / 1000) 
   }
 }
 export async function assertNoRegisteredGeminiKey(browser, os, env, requestAPI) {
-  const identkey = dedicatedAccount(browser, os);
-  if (env.PWAPPY_TEST_LOGIN_ENDPOINT !== LOGIN_ENDPOINT || env.PWAPPY_TEST_ACCOUNT_INDEX !== '0'
+  if (env.PWAPPY_TEST_ACCOUNT_INDEX !== '0') throw new PremiumKeyPreflightError('configuration');
+  return assertNoRegisteredTestAccountKey(browser, os, '0', env, requestAPI);
+}
+export async function assertNoRegisteredTestAccountKey(browser, os, index, env, requestAPI) {
+  return assertAccountHasNoRegisteredKey(mainAccount(browser, os, index), env, requestAPI);
+}
+export async function assertNoRegisteredSmokeAccountKey(browser, os, env, requestAPI) {
+  return assertAccountHasNoRegisteredKey(dedicatedAccount(browser, os).slice(0, 4) + '998', env, requestAPI);
+}
+async function assertAccountHasNoRegisteredKey(identkey, env, requestAPI) {
+  if (env.PWAPPY_TEST_LOGIN_ENDPOINT !== LOGIN_ENDPOINT
       || typeof env.PWAPPY_TEST_LOGIN_PASSCODE !== 'string' || env.PWAPPY_TEST_LOGIN_PASSCODE.length === 0) {
     throw new PremiumKeyPreflightError('configuration');
   }

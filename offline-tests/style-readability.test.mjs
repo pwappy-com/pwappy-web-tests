@@ -116,6 +116,8 @@ const legacyChanges = {
   "offline-tests/style-ownership-scope.test.mjs": {
     "sha": "a1a267c7338ea77a809fe55babaa9248abd411fd",
     "edits": [
+      {"before": "", "after": "// Historical shell/hash contracts are replayed through an exact migration adapter.\n// Actual main execution and preserved options/telemetry are covered by main-safe-execution.test.mjs.\nimport { restoreApprovedMainSafeExecution } from './main-safe-execution-contract.mjs';\n"},
+      {"before": "readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8')", "after": "restoreApprovedMainSafeExecution(readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8'))"},
       {
         "before": "test('style ownership selects the whole four-scenario file without narrowing'",
         "after": "test('style ownership selects the whole six-scenario file without narrowing'"

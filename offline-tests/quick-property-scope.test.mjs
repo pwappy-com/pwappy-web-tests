@@ -1,10 +1,13 @@
+// Historical shell/hash contracts are replayed through an exact migration adapter.
+// Actual main execution and preserved options/telemetry are covered by main-safe-execution.test.mjs.
+import { restoreApprovedMainSafeExecution } from './main-safe-execution-contract.mjs';
 // Offline workflow argument selection; no browser, account, or network access.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
-const workflow = readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8');
+const workflow = restoreApprovedMainSafeExecution(readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8'));
 const normal = workflow.split('  e2e-normal:\n')[1].split('  e2e-premium:\n')[0];
 const block = normal.match(/^          case "\$\{TEST_SCOPE:-all\}" in\n[\s\S]*?^          esac$/m)?.[0];
 assert.ok(block, 'normal test argument selector exists');

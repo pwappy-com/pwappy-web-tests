@@ -1,3 +1,6 @@
+// Historical shell/hash contracts are replayed through an exact migration adapter.
+// Actual main execution and preserved options/telemetry are covered by main-safe-execution.test.mjs.
+import { restoreApprovedMainSafeExecution } from './main-safe-execution-contract.mjs';
 // Offline workflow contracts: local Bash and Node only, no accounts or service calls.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,7 +11,7 @@ import { spawnSync } from 'node:child_process';
 import { restoreApprovedPremiumPointPreparation } from './premium-repairs-contract.mjs';
 // Reverse only the approved Premium points delta for these historical assertions.
 // Current RAW Premium defaults are tested in premium-points-defaults.test.mjs.
-const workflow = restoreApprovedPremiumPointPreparation(readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8'));
+const workflow = restoreApprovedPremiumPointPreparation(restoreApprovedMainSafeExecution(readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8')));
 const config = readFileSync(new URL('../playwright.config.ts', import.meta.url), 'utf8');
 const normal = workflow.split('  e2e-normal:\n')[1].split('  e2e-premium:\n')[0];
 const premium = workflow.split('  e2e-premium:\n')[1];

@@ -1,3 +1,6 @@
+// Historical shell/hash contracts are replayed through an exact migration adapter.
+// Actual main execution and preserved options/telemetry are covered by main-safe-execution.test.mjs.
+import { restoreApprovedMainSafeExecution } from './main-safe-execution-contract.mjs';
 // Offline contract tests only: fabricated request contexts, temporary cache and workflow predicates.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,7 +14,7 @@ import { IDENTITY_COOKIE_NAME, USER_SETTING_ENDPOINT } from '../scripts/premium-
 import { LOGIN_ENDPOINT } from '../scripts/branch-verification-guard.mjs';
 import { mainCredentialProtectionEdits, restoreApprovedMainCredentialProtection } from './main-credential-protection-contract.mjs';
 
-const workflow = readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8');
+const workflow = restoreApprovedMainSafeExecution(readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8'));
 const premium = workflow.split('  e2e-premium:\n')[1];
 const normal = workflow.split('  e2e-normal:\n')[1].split('  e2e-premium:\n')[0];
 const step = (source, name) => source.split(`      - name: ${name}\n`)[1].split(/^      - name: /m)[0];

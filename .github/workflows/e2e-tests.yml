@@ -405,154 +405,39 @@ jobs:
           else echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV; fi
 
       # プロジェクト名を指定してテスト実行
-      - name: Resolve points read endpoint
-        if: env.PWAPPY_TEST_POINTS_ENABLED == 'true' || inputs.test_scope == 'points-smoke'
-        env:
-          LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
-        shell: bash
-        run: |
-          node - <<'JS'
-          const fs = require('fs');
-          const url = new URL(process.env.LOGIN_ENDPOINT);
-          if (url.protocol !== 'https:' || !url.pathname.endsWith('/rest/v1/test-login')) throw new Error('Unexpected login endpoint');
-          url.pathname = url.pathname.replace('/rest/', '/read/').replace('test-login', 'pwappy-points');
-          fs.appendFileSync(process.env.GITHUB_ENV, 'PWAPPY_TEST_POINTS_READ_ENDPOINT=' + (process.env.PWAPPY_TEST_POINTS_READ_ENDPOINT || url.href) + '\n');
-          JS
-
-      - name: Check point preparation client
-        run: node --test tests/tools/test-point-preparation.test.mjs
-
       - name: Run Normal E2E Tests
         id: run_tests
         shell: bash
-        run: |
-          # Schedule and omitted manual inputs use the same bounded normal defaults.
-          WORKERS=1
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            WORKERS="${TEST_WORKERS:-1}"
-          fi
-
-          if [ "${{ inputs.test_scope }}" = "points-smoke" ]; then
-            case "${{ matrix.browser }}" in
-              chromium) BC=c ;; mobile-chrome) BC=a ;; webkit) BC=s ;; mobile-safari) BC=i ;;
-              *) echo "Unsupported smoke browser"; exit 1 ;;
-            esac
-            case "${{ matrix.os }}" in
-              ubuntu-latest) OC=u ;; windows-latest) OC=w ;; macos-latest) OC=m ;;
-              *) echo "Unsupported smoke OS"; exit 1 ;;
-            esac
-            export PWAPPY_SMOKE_IDENT="pw${OC}${BC}998"
-            node tests/tools/points-smoke.mjs
-            exit $?
-          fi
-
-          echo "Running tests on $OS_NAME with workers: $WORKERS"
-          RETRIES="${TEST_RETRIES:-0}"
-          if ! [[ "$RETRIES" =~ ^[0-5]$ ]]; then
-            echo "retries must be between 0 and 5"
-            exit 1
-          fi
-          case "${TEST_SCOPE:-all}" in
-            all) TEST_ARGS=(tests/specs/normal) ;;
-            editor-regression)
-              TEST_ARGS=(tests/specs/normal/editor-events-build.spec.ts tests/specs/normal/editor-property-parsing-build.spec.ts
-                --grep 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires') ;;
-            quick-property-regression)
-              TEST_ARGS=(tests/specs/normal/editor-quick-property-editor.spec.ts) ;;
-            style-ownership-regression)
-              TEST_ARGS=(tests/specs/normal/editor-style-ownership.spec.ts) ;;
-            *) echo "::error::Unsupported normal test scope"; exit 1 ;;
-          esac
-          # Safariで入力処理自体が停止するため、ホスト負荷を記録する（テスト条件は維持）。
-          if [ "$(uname -s)" = "Darwin" ]; then
-            sysctl hw.memsize hw.ncpu
-            E2E_RESOURCE_LOG="$RUNNER_TEMP/e2e-resources.log"
-            (
-              while true; do
-                date -u '+%Y-%m-%dT%H:%M:%SZ'
-                uptime
-                vm_stat || true
-                # commは実行ファイル名のみ。引数や環境変数は出力しない。
-                ps -axo pid,ppid,%cpu,rss,comm | sort -k3 -nr | sed -n '1,12p' || true
-                sleep 30
-              done
-            ) > "$E2E_RESOURCE_LOG" 2>&1 &
-            E2E_MONITOR_PID=$!
-            # Credential-free static GET timings only; no test/retry decisions.
-            E2E_TRANSPORT_LOG="$RUNNER_TEMP/e2e-transport.log"
-            node scripts/transport-sampler.mjs > "$E2E_TRANSPORT_LOG" 2>/dev/null &
-            E2E_TRANSPORT_PID=$!
-            finish_e2e_diagnostics() {
-              e2e_status=$?
-              trap - EXIT
-              kill "$E2E_MONITOR_PID" 2>/dev/null || true
-              if jobs -pr | grep -Fxq -- "$E2E_TRANSPORT_PID"; then
-                kill "$E2E_TRANSPORT_PID" 2>/dev/null || true
-              fi
-              wait "$E2E_MONITOR_PID" 2>/dev/null || true
-              wait "$E2E_TRANSPORT_PID" 2>/dev/null || true
-              echo "::group::macOS runner resource samples"
-              cat "$E2E_RESOURCE_LOG" || true
-              echo "::endgroup::"
-              echo "::group::macOS static transport samples"
-              cat "$E2E_TRANSPORT_LOG" || true
-              echo "::endgroup::"
-              exit "$e2e_status"
-            }
-            trap finish_e2e_diagnostics EXIT
-          fi
-          npx playwright test "${TEST_ARGS[@]}" --project=${{ matrix.browser }} --reporter=line --workers="$WORKERS" --retries="$RETRIES"
-          echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
+        run: node scripts/run-main-verification.mjs "$TEST_SUITE" "$TEST_BROWSER" "$TEST_OS" tests
         env:
+          TEST_SUITE: normal
+          TEST_BROWSER: ${{ matrix.browser }}
+          TEST_OS: ${{ matrix.os }}
           TEST_SCOPE: ${{ inputs.test_scope || 'all' }}
-          TEST_RETRIES: ${{ inputs.retries || '0' }}
-          EVENT_NAME: ${{ github.event_name }}
           TEST_WORKERS: ${{ github.event.inputs.workers }}
-          TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }}
+          TEST_RETRIES: ${{ inputs.retries || '0' }}
+          PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA: ${{ vars.PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
-          PWAPPY_TEST_USER_PREFIX: "pwusr"
-          PWAPPY_LOGIN: "1"
-          TEST_GEMINI_API_KEY: "AIza_TEST_ONLY_WEBMCP"
 
-      # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
         timeout-minutes: 5
-        if: always() && inputs.test_scope != 'points-smoke'
+        if: always() && steps.run_tests.outputs.started == 'true' && steps.run_tests.outputs.state_dir != ''
         shell: bash
-        run: |
-          OS_CODE_CHAR="l"
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then OS_CODE_CHAR="u"; fi
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then OS_CODE_CHAR="w"; fi
-          if [ "${{ matrix.os }}" = "macos-latest" ]; then OS_CODE_CHAR="m"; fi
-
-          BROWSER_CODE="c"
-          if [ "${{ matrix.browser }}" = "firefox" ]; then BROWSER_CODE="f"; fi
-          if [ "${{ matrix.browser }}" = "webkit" ]; then BROWSER_CODE="s"; fi
-          if [ "${{ matrix.browser }}" = "mobile-chrome" ]; then BROWSER_CODE="a"; fi
-          if [ "${{ matrix.browser }}" = "mobile-safari" ]; then BROWSER_CODE="i"; fi
-
-          # ローカルで作成された可能性のあるワーカー番号(0〜3)を走査して確実に掃除
-          for worker in 0 1 2 3; do
-            export PWAPPY_TEST_POINTS_PHASE="cleanup"
-            export TEST_WORKER_INDEX="$worker"
-            export PWAPPY_TEST_CLEANUP_BROWSER_CODE="$BROWSER_CODE"
-            export TEST_RUN_SUFFIX="${{ env.OS_SHORT_NAME }}"
-            
-            SESSION_FILE=".auth/user-${OS_CODE_CHAR}-${BROWSER_CODE}-${worker}.json"
-            
-            if [ -f "$SESSION_FILE" ] && [ "$(cat "$SESSION_FILE" | tr -d ' ')" != "{}" ]; then
-              echo "=== Cleaning up local account: OS[${{ matrix.os }}] Browser[${{ matrix.browser }}] Worker[$worker] ==="
-              npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=${{ matrix.browser }} --output=test-results-cleanup
-            fi
-          done
+        run: node scripts/run-main-verification.mjs "$TEST_SUITE" "$TEST_BROWSER" "$TEST_OS" cleanup
         env:
+          TEST_SUITE: normal
+          TEST_BROWSER: ${{ matrix.browser }}
+          TEST_OS: ${{ matrix.os }}
+          TEST_SCOPE: ${{ inputs.test_scope || 'all' }}
+          TEST_WORKERS: ${{ github.event.inputs.workers }}
+          TEST_RETRIES: ${{ inputs.retries || '0' }}
+          PWAPPY_MAIN_STATE_DIR: ${{ steps.run_tests.outputs.state_dir }}
+          PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA: ${{ vars.PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
-          PWAPPY_LOGIN: "1"
-          TEST_GEMINI_API_KEY: "AIza_TEST_ONLY_WEBMCP"
 
       # テスト失敗またはタイムアウト（キャンセル）時：このブラウザエンジン/OSに関連する「全ての古いキャッシュ」を削除する
       - name: Delete cache on failure or cancellation
@@ -662,7 +547,6 @@ jobs:
         shell: bash
 
       - name: Cache Playwright browsers
-        if: inputs.test_scope != 'points-smoke'
         id: cache-playwright-browsers
         uses: actions/cache@v5
         with:
@@ -673,7 +557,6 @@ jobs:
 
       # キャッシュから復元された不要なロックファイルを事前に強制削除してハングを防ぐ
       - name: Remove stale Playwright locks
-        if: inputs.test_scope != 'points-smoke'
         shell: bash
         run: |
           if [ -d "${{ env.PLAYWRIGHT_BROWSERS_PATH }}" ]; then
@@ -683,13 +566,13 @@ jobs:
           fi
 
       - name: Install Playwright system dependencies
-        if: inputs.test_scope != 'points-smoke' && steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install-deps ${{ matrix.binary }}
         env:
           DEBIAN_FRONTEND: noninteractive
 
       - name: Install Playwright Browsers
-        if: inputs.test_scope != 'points-smoke' && steps.cache-playwright-browsers.outputs.cache-hit != 'true'
+        if: steps.cache-playwright-browsers.outputs.cache-hit != 'true'
         run: npx playwright install ${{ matrix.binary }}
         env:
           DEBUG: pw:*
@@ -704,96 +587,39 @@ jobs:
           else echo "OS_SHORT_NAME=unknown" >> $GITHUB_ENV; fi
 
       # テスト実行
-      - name: Resolve points read endpoint
-        if: env.PWAPPY_TEST_POINTS_ENABLED == 'true' || inputs.test_scope == 'points-smoke'
-        env:
-          LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
-        shell: bash
-        run: |
-          node - <<'JS'
-          const fs = require('fs');
-          const url = new URL(process.env.LOGIN_ENDPOINT);
-          if (url.protocol !== 'https:' || !url.pathname.endsWith('/rest/v1/test-login')) throw new Error('Unexpected login endpoint');
-          url.pathname = url.pathname.replace('/rest/', '/read/').replace('test-login', 'pwappy-points');
-          fs.appendFileSync(process.env.GITHUB_ENV, 'PWAPPY_TEST_POINTS_READ_ENDPOINT=' + (process.env.PWAPPY_TEST_POINTS_READ_ENDPOINT || url.href) + '\n');
-          JS
-
-      - name: Check point preparation client
-        run: node --test tests/tools/test-point-preparation.test.mjs
-
-      - name: Protect existing Premium credentials
-        id: premium_key_preflight
-        shell: bash
-        run: node scripts/preflight-main-premium.mjs
-        env:
-          PWAPPY_PREFLIGHT_BROWSER: ${{ matrix.browser }}
-          PWAPPY_PREFLIGHT_OS: ${{ matrix.os }}
-          PWAPPY_TEST_ACCOUNT_INDEX: "0"
-          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-          PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
-          PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
-
       - name: Run Premium E2E Tests
         id: run_tests
-        if: steps.premium_key_preflight.outcome == 'success'
         shell: bash
-        # 最も安定した直列実行(1ワーカー)で実行。
-        run: |
-          RETRIES="${TEST_RETRIES:-0}"
-          if ! [[ "$RETRIES" =~ ^[0-5]$ ]]; then
-            echo "retries must be between 0 and 5"
-            exit 1
-          fi
-          npx playwright test tests/specs/premium --project=${{ matrix.browser }} --reporter=line --workers=1 --retries="$RETRIES"
-          echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
+        run: node scripts/run-main-verification.mjs "$TEST_SUITE" "$TEST_BROWSER" "$TEST_OS" tests
         env:
+          TEST_SUITE: premium
+          TEST_BROWSER: ${{ matrix.browser }}
+          TEST_OS: ${{ matrix.os }}
+          TEST_SCOPE: ${{ inputs.test_scope || 'all' }}
+          TEST_WORKERS: ${{ github.event.inputs.workers }}
           TEST_RETRIES: ${{ inputs.retries || '0' }}
-          PWAPPY_TEST_ACCOUNT_INDEX: "0"
-          TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }}
+          PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA: ${{ vars.PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
-          PWAPPY_TEST_USER_PREFIX: "pwusr"
-          PWAPPY_LOGIN: "1"
-          TEST_GEMINI_API_KEY: "AIza_TEST_ONLY_WEBMCP"
 
-      # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
         timeout-minutes: 5
-        if: always() && steps.premium_key_preflight.outcome == 'success' && steps.run_tests.outcome != 'skipped' && inputs.test_scope != 'points-smoke'
+        if: always() && steps.run_tests.outputs.started == 'true' && steps.run_tests.outputs.state_dir != ''
         shell: bash
-        run: |
-          OS_CODE_CHAR="l"
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then OS_CODE_CHAR="u"; fi
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then OS_CODE_CHAR="w"; fi
-          if [ "${{ matrix.os }}" = "macos-latest" ]; then OS_CODE_CHAR="m"; fi
-
-          BROWSER_CODE="c"
-          if [ "${{ matrix.browser }}" = "firefox" ]; then BROWSER_CODE="f"; fi
-          if [ "${{ matrix.browser }}" = "webkit" ]; then BROWSER_CODE="s"; fi
-          if [ "${{ matrix.browser }}" = "mobile-chrome" ]; then BROWSER_CODE="a"; fi
-          if [ "${{ matrix.browser }}" = "mobile-safari" ]; then BROWSER_CODE="i"; fi
-
-          # ローカルで作成された可能性のあるワーカー番号(0〜3)を走査して確実に掃除
-          for worker in 0 1 2 3; do
-            export PWAPPY_TEST_POINTS_PHASE="cleanup"
-            export TEST_WORKER_INDEX="$worker"
-            export PWAPPY_TEST_CLEANUP_BROWSER_CODE="$BROWSER_CODE"
-            export TEST_RUN_SUFFIX="${{ env.OS_SHORT_NAME }}"
-            
-            SESSION_FILE=".auth/user-${OS_CODE_CHAR}-${BROWSER_CODE}-${worker}.json"
-            
-            if [ -f "$SESSION_FILE" ] && [ "$(cat "$SESSION_FILE" | tr -d ' ')" != "{}" ]; then
-              echo "=== Cleaning up local account: OS[${{ matrix.os }}] Browser[${{ matrix.browser }}] Worker[$worker] ==="
-              npx playwright test tests/tools/a0-cleanup-all-apps.spec.ts --project=${{ matrix.browser }} --output=test-results-cleanup
-            fi
-          done
+        run: node scripts/run-main-verification.mjs "$TEST_SUITE" "$TEST_BROWSER" "$TEST_OS" cleanup
         env:
+          TEST_SUITE: premium
+          TEST_BROWSER: ${{ matrix.browser }}
+          TEST_OS: ${{ matrix.os }}
+          TEST_SCOPE: ${{ inputs.test_scope || 'all' }}
+          TEST_WORKERS: ${{ github.event.inputs.workers }}
+          TEST_RETRIES: ${{ inputs.retries || '0' }}
+          PWAPPY_MAIN_STATE_DIR: ${{ steps.run_tests.outputs.state_dir }}
+          PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA: ${{ vars.PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
-          PWAPPY_LOGIN: "1"
-          TEST_GEMINI_API_KEY: "AIza_TEST_ONLY_WEBMCP"
 
       # テスト失敗またはタイムアウト（キャンセル）時：このブラウザエンジン/OSに関連する「全ての古いキャッシュ」を削除する
       - name: Delete cache on failure or cancellation

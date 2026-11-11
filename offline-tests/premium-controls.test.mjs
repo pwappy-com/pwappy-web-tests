@@ -1,3 +1,6 @@
+// Historical shell/hash contracts are replayed through an exact migration adapter.
+// Actual main execution and preserved options/telemetry are covered by main-safe-execution.test.mjs.
+import { restoreApprovedMainSafeExecution } from './main-safe-execution-contract.mjs';
 // Source + shell contracts only: no application login, browser state, or service requests.
 import { restoreApprovedMainPushCi } from './main-push-ci-contract.mjs';
 import { test } from 'node:test';
@@ -10,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { restoreApprovedPremiumRepairs } from './premium-repairs-contract.mjs';
 
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8');
-const workflow = read('../.github/workflows/e2e-tests.yml');
+const workflow = restoreApprovedMainSafeExecution(read('../.github/workflows/e2e-tests.yml'));
 const premium = workflow.split('  e2e-premium:\n')[1];
 const runBlock = premium.split('      - name: Run Premium E2E Tests\n')[1].split('      # テスト終了直後')[0];
 const script = runBlock.split('        run: |\n')[1].split('        env:\n')[0]

@@ -1,3 +1,6 @@
+// Historical shell/hash contracts are replayed through an exact migration adapter.
+// Actual main execution and preserved options/telemetry are covered by main-safe-execution.test.mjs.
+import { restoreApprovedMainSafeExecution } from './main-safe-execution-contract.mjs';
 import { restoreApprovedMainPushCi } from './main-push-ci-contract.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -274,7 +277,7 @@ test('sampler invalid configuration prints only fixed enum and performs no reque
 });
 
 test('workflow changes only the Mac diagnostic trap; all test inputs/commands/budgets remain byte-identical', () => {
-    const workflow = readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8');
+    const workflow = restoreApprovedMainSafeExecution(readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8'));
     const oldTrap = "            trap 'e2e_status=$?; kill \"$E2E_MONITOR_PID\" 2>/dev/null || true; wait \"$E2E_MONITOR_PID\" 2>/dev/null || true; echo \"::group::macOS runner resource samples\"; cat \"$E2E_RESOURCE_LOG\"; echo \"::endgroup::\"; exit \"$e2e_status\"' EXIT";
     const newTrap = "            # Credential-free static GET timings only; no test/retry decisions.\n            E2E_TRANSPORT_LOG=\"$RUNNER_TEMP/e2e-transport.log\"\n            node scripts/transport-sampler.mjs > \"$E2E_TRANSPORT_LOG\" 2>/dev/null &\n            E2E_TRANSPORT_PID=$!\n            finish_e2e_diagnostics() {\n              e2e_status=$?\n              trap - EXIT\n              kill \"$E2E_MONITOR_PID\" 2>/dev/null || true\n              if jobs -pr | grep -Fxq -- \"$E2E_TRANSPORT_PID\"; then\n                kill \"$E2E_TRANSPORT_PID\" 2>/dev/null || true\n              fi\n              wait \"$E2E_MONITOR_PID\" 2>/dev/null || true\n              wait \"$E2E_TRANSPORT_PID\" 2>/dev/null || true\n              echo \"::group::macOS runner resource samples\"\n              cat \"$E2E_RESOURCE_LOG\" || true\n              echo \"::endgroup::\"\n              echo \"::group::macOS static transport samples\"\n              cat \"$E2E_TRANSPORT_LOG\" || true\n              echo \"::endgroup::\"\n              exit \"$e2e_status\"\n            }\n            trap finish_e2e_diagnostics EXIT";
     assert.equal(workflow.split(newTrap).length, 2);

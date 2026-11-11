@@ -1,3 +1,6 @@
+// Historical shell/hash contracts are replayed through an exact migration adapter.
+// Actual main execution and preserved options/telemetry are covered by main-safe-execution.test.mjs.
+import { restoreApprovedMainSafeExecution } from './main-safe-execution-contract.mjs';
 // Offline only: extracted Bash/Node scripts use synthetic inputs and a stubbed npx.
 // Never dispatch Actions, import dotenv, load authentication, or contact a service.
 import { test } from 'node:test';
@@ -9,7 +12,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { mainPushCiEdits, restoreApprovedMainPushCi } from './main-push-ci-contract.mjs';
 
-const workflow = readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8');
+const workflow = restoreApprovedMainSafeExecution(readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8'));
 const matrix = [
   { os: 'ubuntu-latest', browser: 'chromium', binary: 'chromium' },
   { os: 'ubuntu-latest', browser: 'mobile-chrome', binary: 'chromium' },

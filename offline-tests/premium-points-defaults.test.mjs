@@ -1,3 +1,6 @@
+// Historical shell/hash contracts are replayed through an exact migration adapter.
+// Actual main execution and preserved options/telemetry are covered by main-safe-execution.test.mjs.
+import { restoreApprovedMainSafeExecution } from './main-safe-execution-contract.mjs';
 // RAW workflow contracts: synthetic Bash only, no accounts, credentials, or service calls.
 import { restoreApprovedMainCredentialProtection } from './main-credential-protection-contract.mjs';
 import { restoreApprovedMainPushCi } from './main-push-ci-contract.mjs';
@@ -10,7 +13,7 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { restoreApprovedPremiumPointPreparation, premiumPointPreparationEdits } from './premium-repairs-contract.mjs';
 
-const workflow = readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8');
+const workflow = restoreApprovedMainSafeExecution(readFileSync(new URL('../.github/workflows/e2e-tests.yml', import.meta.url), 'utf8'));
 const step = (source, name) => source.split('      - name: ' + name + '\n')[1].split('      - name: ')[0];
 const script = block => block.split('        run: |\n')[1].split('        env:\n')[0].replace(/^          /gm, '');
 const pointsBlock = step(workflow, 'Resolve premium point preparation');

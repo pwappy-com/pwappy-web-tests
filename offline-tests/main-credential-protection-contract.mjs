@@ -1,8 +1,10 @@
 // Exact reverse edits preserve every immutable workflow hash from before credential protection.
+import { restoreApprovedMainSafeExecution } from './main-safe-execution-contract.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 export const mainCredentialProtectionEdits = JSON.parse(readFileSync(new URL('./main-credential-protection-approved.json', import.meta.url), 'utf8'));
 export function restoreApprovedMainCredentialProtection(workflow) {
+  workflow = restoreApprovedMainSafeExecution(workflow);
   for (const { before, after, occurrences, premiumOnly } of [...mainCredentialProtectionEdits].reverse()) {
     assert.ok([1, 4].includes(occurrences));
     const parts = premiumOnly ? workflow.split('  e2e-premium:\n') : ['', workflow];
