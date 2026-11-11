@@ -1,0 +1,28 @@
+{
+  "playwright.config.ts": [
+    {
+      "before": "  testDir: './tests',\n  /* Run tests in files in parallel */\n",
+      "after": "  testDir: './tests',\n  // WebMCP fixtures require their own build/server and empty authentication.\n  // Run them with npm run test:webmcp; keep the existing live-suite/cleanup scope.\n  testIgnore: ['**/specs/webmcp/**', '**/*.test.mjs'],\n  /* Run tests in files in parallel */\n"
+    },
+    {
+      "before": "  ],\n});",
+      "after": "  ],\n});\n"
+    }
+  ],
+  "package.json": [
+    {
+      "before": "  \"scripts\": {\n    \"test\": \"npx playwright test\"\n  },\n",
+      "after": "  \"scripts\": {\n    \"test\": \"npx playwright test\",\n    \"test:discovery\": \"node --test tests/tools/discovery-boundaries.check.cjs\",\n    \"test:webmcp\": \"node tests/tools/webmcp/run-isolated.cjs\",\n    \"test:webmcp:list\": \"node tests/tools/webmcp/run-isolated.cjs --list\",\n    \"test:webmcp:checks\": \"node --test tests/tools/webmcp/isolation-options.check.cjs\",\n    \"test:webmcp:pwa\": \"node tests/tools/webmcp/test-generated-pwa.cjs\"\n  },\n"
+    }
+  ],
+  "tests/specs/normal/editor-ui-properties-2.spec.ts": [
+    {
+      "before": "import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';\nimport { getStorageStatePath } from '../../constants';\n",
+      "after": "import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';\nimport { expectIconOutputSuccess } from '../../tools/success-assertions';\nimport { getStorageStatePath } from '../../constants';\n"
+    },
+    {
+      "before": "\n        // エディタ画面上にマウントされている共通アラートコンポーネントを監視\n        await expect(alertDialog).toBeVisible({ timeout: 20000 });\n\n        const alertMessage = await alertDialog.locator('.alert-text, [slot=\"message\"], .modal-content, p').first().innerText().catch(() => '');\n\n        if (alertMessage.includes('制限されています') || alertMessage.includes('デモモード')) {\n            // ゲストまたはデモモード等で書き込み制限のあるアカウント環境で実行された場合の正常終了フォールバック\n            await alertDialog.getByRole('button', { name: '閉じる' }).click();\n        } else {\n            // 新仕様のアラートメッセージ（すべて出力しました）を検証\n            await expect(alertDialog).toContainText('すべて出力しました');\n            await alertDialog.getByRole('button', { name: '閉じる' }).click();\n        }\n\n",
+      "after": "\n        // 出力成功だけを許可する。デモ制限・権限拒否は正常終了ではない。\n        await expectIconOutputSuccess(alertDialog, await sizeItems.count());\n        await expect(applyBtn).toBeDisabled();\n        await alertDialog.getByRole('button', { name: '閉じる' }).click();\n\n"
+    }
+  ]
+}

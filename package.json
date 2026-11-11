@@ -7,7 +7,8 @@
     "test:discovery": "node --test tests/tools/discovery-boundaries.check.cjs",
     "test:webmcp": "node tests/tools/webmcp/run-isolated.cjs",
     "test:webmcp:list": "node tests/tools/webmcp/run-isolated.cjs --list",
-    "test:webmcp:checks": "node --test tests/tools/webmcp/isolation-options.check.cjs"
+    "test:webmcp:checks": "node --test tests/tools/webmcp/isolation-options.check.cjs",
+    "test:webmcp:pwa": "node tests/tools/webmcp/test-generated-pwa.cjs"
   },
   "keywords": [],
   "author": "",

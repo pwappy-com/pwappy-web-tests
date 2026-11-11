@@ -24,7 +24,7 @@ before(() => {
     recursive: true,
     filter(source) {
       const stat = fs.lstatSync(source);
-      return !stat.isSymbolicLink() && (stat.isDirectory() || /\.(?:ts|cjs)$/.test(source));
+      return !stat.isSymbolicLink() && (stat.isDirectory() || /\.(?:ts|cjs|mjs)$/.test(source));
     },
   });
   fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(root, 'node_modules'), 'dir');
@@ -83,6 +83,7 @@ test('default discovery excludes isolated WebMCP and preserves all five live pro
   const entries = list('playwright.config.ts');
   assert.deepEqual([...new Set(entries.map(item => item.project))].sort(), [...projects].sort());
   assert.ok(entries.every(item => !item.file.startsWith('specs/webmcp/')));
+  assert.ok(entries.every(item => !item.file.endsWith('.test.mjs')), 'Node-only tests must not execute during Playwright collection');
   for (const project of projects) {
     const scoped = entries.filter(item => item.project === project);
     assert.ok(scoped.some(item => item.file.startsWith('specs/normal/')));

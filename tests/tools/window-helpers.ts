@@ -31,24 +31,33 @@ export async function clickAndOpenNewTabSafely(page: Page, context: BrowserConte
             }
         });
 
+        let urlString: string | null = null;
         await expect(async () => {
             await page.evaluate(() => { (window as any)._interceptedUrl = null; });
-
-            // アクション（クリック等）を実行
             await action();
 
+            // timeoutは第3引数。第2引数はブラウザ内の関数に渡すarg。
             const targetUrlHandle = await page.waitForFunction(() => {
                 return (window as any)._interceptedUrl;
-            }, { timeout: 10000 }).catch(() => null);
-
-            const urlString = targetUrlHandle ? await targetUrlHandle.jsonValue() as string : null;
-            if (!urlString) throw new Error('window.open が検知されませんでした。');
-
-            const spawnedPage = await context.newPage();
-            const absoluteUrl = new URL(urlString, page.url()).toString();
-            await spawnedPage.goto(absoluteUrl, { waitUntil: 'domcontentloaded' });
-            newPage = spawnedPage;
+            }, undefined, { timeout: 10000 });
+            try {
+                urlString = await targetUrlHandle.jsonValue() as string;
+                expect(urlString, 'window.openの遷移先URL').toBeTruthy();
+            } finally {
+                await targetUrlHandle.dispose();
+            }
         }).toPass({ timeout: 30000, intervals: [2000] });
+
+        // URL取得後はタブを一度だけ作る。遷移の失敗でタブを増殖させない。
+        const spawnedPage = await context.newPage();
+        try {
+            const absoluteUrl = new URL(urlString!, page.url()).toString();
+            await spawnedPage.goto(absoluteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            newPage = spawnedPage;
+        } catch (error) {
+            await spawnedPage.close().catch(() => { });
+            throw error;
+        }
 
     } else {
         // =========================================================================

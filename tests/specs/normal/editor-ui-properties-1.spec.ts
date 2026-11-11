@@ -190,7 +190,7 @@ test.describe('エディタ内機能のテスト (前半)', () => {
         });
 
         await test.step('検証: 属性(text)の変更がプレビューに反映されること', async () => {
-            editorHelper.closeMoveingHandle();
+            await editorHelper.closeMoveingHandle();
             const propertyTextInput = editorPage.locator('property-container input[data-attribute-type="text"]');
             const previewButton = editorPage.locator('#ios-container #renderzone').contentFrame().locator('ons-button');
 

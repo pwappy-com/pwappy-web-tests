@@ -190,30 +190,26 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
             // 編集用ID規則に基づき #edit-app-key を指定
             const appKeyInput = modal.locator('#edit-app-key');
 
-            // アプリキーが編集可能（disabledでない）か確認して実行
-            if (await appKeyInput.isVisible() && await appKeyInput.isEnabled()) {
-                await expect(appKeyInput).toBeEditable();
-                await appKeyInput.fill(appA_Key);
-                await modal.locator('.submit-button').click({ force: true });
+            // 編集と重複エラーの検証を省略せず、表示が遅い場合も両方のUIを待つ。
+            await expect(appKeyInput).toBeEditable();
+            await appKeyInput.fill(appA_Key);
+            await modal.locator('.submit-button').click();
 
-                // エラー確認: alert-component または インラインエラー (#error-edit-app-key)
-                const alertDialog = page.locator('alert-component');
+            const duplicateAlert = page.locator('alert-component')
+                .filter({ hasText: 'アプリケーションキーが重複しています' });
+            const duplicateInline = modal.locator('#error-edit-app-key')
+                .filter({ hasText: '重複しています' });
+            await expect(duplicateAlert.or(duplicateInline).filter({ visible: true }).first()).toBeVisible();
 
-                try {
-                    // 1. アラートダイアログが出るパターンを試行
-                    await expect(alertDialog).toBeVisible({ timeout: 3000 });
-                    await expect(alertDialog).toContainText('アプリケーションキーが重複しています');
-                    await alertDialog.getByRole('button', { name: '閉じる' }).click();
-                } catch (e) {
-                    // 2. アラートが出ない場合は、インラインのエラーメッセージを確認
-                    // 前のテストの修正結果から推測して #error-edit-app-key を使用
-                    await expect(modal.locator('#error-edit-app-key')).toContainText('重複しています');
-                }
+            if (await duplicateAlert.isVisible()) {
+                await expect(duplicateAlert).toContainText('アプリケーションキーが重複しています');
+                await duplicateAlert.getByRole('button', { name: '閉じる' }).click();
+                await expect(duplicateAlert).toBeHidden();
             } else {
-                console.warn('アプリキーが編集不可、またはフィールドが見つからないため、このテストステップをスキップします。');
+                await expect(duplicateInline).toContainText('重複しています');
             }
 
-            await modal.locator('.cancel-button').click({ force: true });
+            await modal.locator('.cancel-button').click();
             await expect(modal).toBeHidden();
         });
 
@@ -252,7 +248,7 @@ test.describe('アプリケーション管理 E2Eシナリオ', () => {
 
             const confirmDialog = page.locator('message-box#delete-confirm-general');
             await expect(confirmDialog).toBeVisible();
-            await confirmDialog.locator('.confirm-cancel-button').click({ force: true });
+            await confirmDialog.locator('.confirm-cancel-button').click();
             await expect(confirmDialog).toBeHidden();
 
             await page.getByRole('button', { name: ' ワークベンチに戻る' }).click();

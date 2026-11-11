@@ -21,7 +21,9 @@ const test = base.extend<EditorFixtures>({
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
         await use(`app-prop-bld-${uniqueId}`.slice(0, 30));
     },
-    editorPage: async ({ page, context, appName }, use) => {
+    // Bound app creation/editor startup separately from the scenario body.
+    // Keep the existing CI/local standard limit; beforeEach stays in the test budget.
+    editorPage: [async ({ page, context, appName }, use) => {
         const workerIndex = test.info().workerIndex;
         const reversedTimestamp = Date.now().toString().split('').reverse().join('');
         const uniqueId = `${testRunSuffix}-${workerIndex}-${reversedTimestamp}`;
@@ -33,7 +35,7 @@ const test = base.extend<EditorFixtures>({
 
         await editorPage.close();
         await deleteApp(page, appKey);
-    },
+    }, { timeout: process.env.CI ? 120000 : 60000 }],
     editorHelper: async ({ editorPage, isMobile }, use) => {
         const helper = new EditorHelper(editorPage, isMobile);
         await use(helper);

@@ -789,6 +789,78 @@ test.describe('HTMLタグ選択ダイアログ機能のテスト', () => {
 // Merged from: tests/specs/normal/editor-edge-hover.spec.ts
 // =========================================================================
 
+/** Capture the transient class on the original node before native input begins.
+ * The browser-side deadline matches playwright.config.ts's existing expect budget;
+ * it bounds observation, not mouse.move (whose success/failure must be awaited).
+ */
+async function moveAndObserveEdgeHover(page: Page, trigger: Locator, x: number, y: number) {
+    const observationTimeout = process.env.CI ? 20000 : 10000;
+    const probe = await trigger.evaluateHandle((element, timeout) => {
+        if (!element.isConnected) throw new Error('Edge trigger is detached before observation');
+        if (element.classList.contains('hover')) throw new Error('Edge trigger already hovered before input');
+        const armedAt = performance.now();
+        let hoverAt: number | null = null;
+        let endedAt: number | null = null;
+        let reason = 'observing';
+        let timer: ReturnType<typeof setTimeout>;
+        let resolveResult: (value: { armedAt: number; hoverAt: number | null; endedAt: number | null; reason: string }) => void;
+        const result = new Promise<{ armedAt: number; hoverAt: number | null; endedAt: number | null; reason: string }>(resolve => { resolveResult = resolve; });
+        const finish = (why: string) => {
+            if (reason !== 'observing') return;
+            reason = why;
+            endedAt = performance.now();
+            observer.disconnect();
+            clearTimeout(timer);
+            window.removeEventListener('pagehide', onPageHide);
+            resolveResult({ armedAt, hoverAt, endedAt, reason });
+        };
+        const onPageHide = () => finish('navigation');
+        const observer = new MutationObserver(records => {
+            if (!element.isConnected) return finish('detached');
+            // oldValue preserves an add/remove pair even in one mutation batch.
+            // Only records from this original node are accepted, never a re-query.
+            for (let i = 0; i < records.length; i++) {
+                const before = records[i].oldValue || '';
+                const after = i + 1 < records.length ? records[i + 1].oldValue || '' : element.getAttribute('class') || '';
+                if (!before.split(/\s+/).includes('hover') && after.split(/\s+/).includes('hover')) {
+                    const observedAt = performance.now();
+                    if (observedAt - armedAt > timeout) return finish('deadline');
+                    hoverAt = observedAt;
+                    return finish('hover-transition');
+                }
+            }
+        });
+        observer.observe(element, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
+        window.addEventListener('pagehide', onPageHide, { once: true });
+        timer = setTimeout(() => finish('deadline'), timeout);
+        // evaluateHandle returns only after observe() has armed the browser observer.
+        return { result, cleanup: () => finish('cleanup'), connected: () => element.isConnected };
+    }, observationTimeout);
+
+    let succeeded = false;
+    try {
+        await page.mouse.move(x, y);
+        const observation = await probe.evaluate(async state => ({
+            ...await state.result, connected: state.connected(),
+        }));
+        console.log('[EdgeHover]', JSON.stringify({ x, y, ...observation }));
+        expect(observation.reason, 'Original edge trigger must enter hover after observer is armed').toBe('hover-transition');
+        expect(observation.connected, 'Original edge trigger must remain attached').toBe(true);
+        expect(observation.hoverAt).not.toBeNull();
+        succeeded = true;
+    } finally {
+        // Always release the original handle and browser resources; never mask a
+        // native input/assertion error with cleanup failure after navigation.
+        let cleanupError: unknown;
+        try { await probe.evaluate(state => state.cleanup()); } catch (error) { cleanupError = error; }
+        try { await probe.dispose(); } catch (error) { cleanupError ??= error; }
+        if (cleanupError) {
+            if (succeeded) throw cleanupError;
+            console.error('[EdgeHover] cleanup failed:', cleanupError);
+        }
+    }
+}
+
 test.describe('画面エッジホバーによるパネル自動開閉テスト（モバイル）', () => {
 
     test.beforeEach(async ({ isMobile, editorHelper, editorPage }) => {
@@ -826,11 +898,7 @@ test.describe('画面エッジホバーによるパネル自動開閉テスト�
             const targetX = viewport.width - 10;
             const targetY = viewport.height / 2;
 
-            // マウス移動により handleGlobalDragMove をトリガー
-            await editorPage.mouse.move(targetX, targetY);
-
-            // 右のトリガーが hover 状態になるか検証
-            await expect(rightEdgeTrigger).toHaveClass(/hover/);
+            await moveAndObserveEdgeHover(editorPage, rightEdgeTrigger, targetX, targetY);
         });
 
         await test.step('3. ホバーを維持すると右パネル（サブウィンドウ）が展開される', async () => {
@@ -874,10 +942,7 @@ test.describe('画面エッジホバーによるパネル自動開閉テスト�
             const targetX = 10;
             const targetY = viewport.height / 2;
 
-            await editorPage.mouse.move(targetX, targetY);
-
-            // 左のトリガーが hover 状態になるか検証
-            await expect(leftEdgeTrigger).toHaveClass(/hover/);
+            await moveAndObserveEdgeHover(editorPage, leftEdgeTrigger, targetX, targetY);
         });
 
         await test.step('3. ホバーを維持すると左パネル（レイアウトウィンドウ）が展開される', async () => {
@@ -1040,7 +1105,17 @@ test.describe('プロジェクトのバックアップ・インポート統合�
 
             const styleEditor = propertyContainer.locator('#style-container > .monaco-editor');
             await expect(styleEditor).toBeVisible();
-            await editorHelper.setMonacoValue(styleEditor, 'element.style {\n    height: 2000px;\n}');
+            const expectedStyle = 'element.style {\n    height: 2000px;\n}';
+            const styleResult = await editorHelper.setMonacoValue(styleEditor, expectedStyle);
+            expect(styleResult.success, 'The style editor must accept the scroll fixture CSS').toBe(true);
+            expect(normalizeWhitespace(styleResult.actual)).toBe(normalizeWhitespace(expectedStyle));
+            // Read the model independently; a successful write alone does not prove it stayed applied.
+            const storedStyle = await styleEditor.evaluate((element: any) => {
+                const host = element.getRootNode().host;
+                return host?.styleEditor?.getModel()?.getValue() ?? null;
+            });
+            expect(storedStyle, 'The style editor model must remain available').not.toBeNull();
+            expect(normalizeWhitespace(storedStyle!)).toBe(normalizeWhitespace(expectedStyle));
 
             const previewFrame = editorHelper.getPreviewFrame();
             const pageContent = previewFrame.locator('.page__content');

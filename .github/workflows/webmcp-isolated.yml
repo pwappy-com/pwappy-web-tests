@@ -42,13 +42,5 @@ jobs:
           APP_SOURCE_ROOT: ${{ inputs.app_source_root }}
           PWAPPY_WEBMCP_PLUGIN_DIR: ${{ inputs.plugin_source_root }}
         run: npm run test:webmcp -- --app-root "$APP_SOURCE_ROOT"
-      - name: Retain synthetic test evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: isolated-webmcp-evidence
-          path: |
-            playwright-report/pwappy-webmcp-run-*/
-            test-results/pwappy-webmcp-run-*/
-          if-no-files-found: ignore
-          retention-days: 7
+      # Raw reports/results/traces stay local. Never publish test-generated files
+      # as public Actions artifacts; see docs/public-artifact-policy.md.

@@ -2,6 +2,7 @@ import { test as base, expect, Page, Locator } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor, setAiCoding } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
+import { expectNativeRangeValue } from '../../tools/premium-control-helpers';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
@@ -138,7 +139,7 @@ test.describe('AI設定の永続化テスト', () => {
 
             // 保持されている値の検証
             await expect(settingWindow.locator('select.modern-select')).toHaveValue(targetModel);
-            await expect(settingWindow.locator('input[type="range"]')).toHaveValue(targetTemp);
+            await expectNativeRangeValue(settingWindow.locator('input[type="range"]'), Number(targetTemp));
             if (targetOnsen) {
                 await expect(settingWindow.locator('#use-onsenui-check')).toBeChecked();
             } else {

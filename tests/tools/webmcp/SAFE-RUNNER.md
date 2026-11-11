@@ -82,3 +82,23 @@ credential-free environment, and blocks Node network connections/listeners.
 It checks the default five-project inventory, the existing CI suite selectors,
 explicit cleanup discovery, and the separate WebMCP inventory. Test bodies,
 hooks, browser launches, application mutations and cleanup are not executed.
+
+## Public CI evidence and generated PWA checks
+
+The manual isolated workflow does not upload raw reports, results, traces, media,
+or generated test files. Evidence stays local; job success/exit status remains in
+Actions logs. The existing metadata-only artifact policy is not weakened.
+
+`npm run test:webmcp:pwa` is a separate localhost-only generated-PWA check, not a
+normal/premium test or part of `--list`. It uses the installed reviewed PHP plugin
+at `/var/www/html/wordpress/wp-content/plugins/pwappy-plugin`, temporary generated
+files, empty browser authentication, and a deny-only external-traffic proxy.
+Its seven checks cover module SW registration/control, five-resource precaching,
+manifest output, offline reload, a previously unopened precached page, SW/cache
+replacement after regeneration, and absence of uncaught page exceptions.
+Synthetic templates/cache policy exercise the actual private generator, not the
+public publishing/auth/DB workflow. This does not prove physical Android/iOS,
+OS-installed PWA behavior, or a default application caching policy.
+
+Node-only `*.test.mjs` checks are excluded from Playwright discovery so collecting
+the live inventory cannot execute Node tests as an import side effect.
