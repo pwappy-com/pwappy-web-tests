@@ -112,6 +112,10 @@ test('matrix retains five existing CI combinations and adds separate Linux Firef
     'ubuntu-latest/mobile-chrome', 'ubuntu-latest/firefox', 'windows-latest/chromium',
     'macos-latest/webkit', 'macos-latest/mobile-safari']);
   for (const row of MATRIX) {
+    if (row.browser === 'firefox') {
+      assert.throws(() => invocation('normal', row.browser, row.os, 'tests', '/temporary', env), /Firefox staging account authorization/);
+      continue;
+    }
     const { args, childEnv } = invocation('normal', row.browser, row.os, 'tests', '/temporary', env);
     assert.ok(args.includes('tests/specs/normal')); assert.ok(args.includes('--workers=1')); assert.ok(args.includes('--retries=0'));
     assert.ok(!args.some(arg => arg.includes('premium') || arg.includes('cleanup')));
@@ -197,8 +201,8 @@ test('workflow uses branch opt-in, guards before credentials, separate suite sel
   assert.ok(workflow.indexOf('branch-verification-guard.mjs "$TEST_SUITE"') < workflow.indexOf('PWAPPY_TEST_LOGIN_PASSCODE:'));
   assert.match(workflow, /node --test offline-tests\/\*\.test\.mjs/);
   assert.match(workflow, /npm run test:discovery/); assert.match(workflow, /npm run test:webmcp:checks/);
-  assert.match(workflow, /\['normal', 'premium'\]\.flatMap/);
-  assert.match(workflow, /runner: suite === 'premium' \? entry.os : entry.runner/);
+  assert.match(workflow, /verificationPlan\(\)/);
+  assert.match(workflow, /fail-fast: false/);
   assert.match(workflow, /steps.run_tests.outputs.started == 'true'/);
   assert.match(workflow, /steps.safe_artifact.outcome == 'success'.*steps.safe_artifact.outputs.verified == 'true'.*summary_path != ''/);
   assert.match(workflow, /path: \$\{\{ steps.safe_artifact.outputs.summary_path \}\}/);

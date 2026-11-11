@@ -27,6 +27,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      blocked_count: ${{ steps.matrix.outputs.blocked_count }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -46,16 +47,17 @@ jobs:
         run: node scripts/branch-verification-guard.mjs preflight
         env:
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
-      - name: Prepare the complete normal and Premium browser matrix
+      - name: Prepare runnable suites and report blocked Firefox coverage
         id: matrix
         run: |
           node --input-type=module - <<'JS'
           import { appendFileSync } from 'node:fs';
-          import { MATRIX } from './scripts/branch-verification-guard.mjs';
-          const matrix = ['normal', 'premium'].flatMap(suite => MATRIX.map(entry => ({
-            ...entry, suite, runner: suite === 'premium' ? entry.os : entry.runner,
-          })));
-          appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(matrix)}\n`);
+          import { verificationPlan } from './scripts/branch-verification-plan.mjs';
+          const { matrix, blocked } = verificationPlan();
+          appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(matrix)}\nblocked_count=${blocked.length}\n`);
+          const lines = blocked.map(row => `- BLOCKED (not run): ${row.suite} / ${row.os} / ${row.browser}: ${row.reason}`);
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, `Runnable suites: ${matrix.length}. Blocked suites: ${blocked.length}. Full verification remains incomplete.\n${lines.join('\n')}\n`);
+          for (const line of lines) console.log(`::warning::${line}`);
           JS
 
   verify:
@@ -63,8 +65,8 @@ jobs:
     needs: preflight
     timeout-minutes: 120
     strategy:
-      # Stop remaining combinations after a confirmed failure; never call a partial run successful.
-      fail-fast: true
+      # Collect every runnable combination; the aggregate still rejects any failure or blocked scope.
+      fail-fast: false
       # Serialize all live suites, including Premium PP/publication operations.
       max-parallel: 1
       matrix:
@@ -169,7 +171,12 @@ jobs:
         env:
           PREFLIGHT_RESULT: ${{ needs.preflight.result }}
           VERIFICATION_RESULT: ${{ needs.verify.result }}
+          BLOCKED_COUNT: ${{ needs.preflight.outputs.blocked_count }}
         run: |
+          if [ "$BLOCKED_COUNT" != 0 ]; then
+            echo '::error::Firefox normal/Premium coverage is blocked and was not run. Full branch verification is incomplete.'
+            exit 1
+          fi
           if [ "$PREFLIGHT_RESULT" != success ] || [ "$VERIFICATION_RESULT" != success ]; then
             echo '::error::Branch verification is incomplete or failed. Do not merge on this result.'
             exit 1

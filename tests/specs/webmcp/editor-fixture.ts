@@ -14,7 +14,7 @@ const fixture = {
     aiCodingEnabled:false,isUserGeminiApiKeyRegistered:false,
   }
 };
-export async function boot(page: Page, supported:boolean|'native'=true, options: { saveFailure?:boolean, corruptReadback?:boolean, duringSave?:()=>Promise<void> }={}) {
+export async function boot(page: Page, supported:boolean|'native'|'unmodified'=true, options: { saveFailure?:boolean, corruptReadback?:boolean, duringSave?:()=>Promise<void> }={}) {
   const writes: {url:string,method:string,body:string|null}[]=[];
   const saved = JSON.parse(JSON.stringify(fixture));
   await page.context().route('**/*', async route => {
@@ -41,7 +41,7 @@ export async function boot(page: Page, supported:boolean|'native'=true, options:
     document.cookie='pwappy_login=isolated-test-only; path=/';
     localStorage.setItem('pwappy_tour_completed','true');
     (window as any).__webmcpTools = {};
-    if (supported === 'native') return;
+    if (supported === 'native' || supported === 'unmodified') return;
     Object.defineProperty(document,'modelContext',{configurable:true,value:supported ? {
       registerTool(tool:any, options:any) {
         (window as any).__webmcpTools[tool.name]=tool;
@@ -53,7 +53,7 @@ export async function boot(page: Page, supported:boolean|'native'=true, options:
   },{supported});
   await page.goto('/app_editor.html?appKey=webmcp-fixture&version=1&identKey=test');
   if (supported === 'native') await page.waitForFunction(async()=> { const testing=(navigator as any).modelContextTesting; const tools=testing ? testing.listTools() : await (document as any).modelContext?.getTools(); return tools?.some((tool:any)=>tool.name==='pwappy_get_application_json'); });
-  else if (supported) await page.waitForFunction(()=>Object.keys((window as any).__webmcpTools).includes('pwappy_get_application_json'));
+  else if (supported === true) await page.waitForFunction(()=>Object.keys((window as any).__webmcpTools).includes('pwappy_get_application_json'));
   await page.locator('app-container').waitFor();
   await expect(page.locator('app-container-loading-overlay')).toBeHidden();
   return writes;

@@ -4,6 +4,26 @@ This workflow is preparation for `feat/webmcp-authoring`, not proof of a success
 live run. It does not enable, disable, dispatch, or edit the existing main workflow.
 No source is merged or deployed by this workflow.
 
+## Temporarily blocked Firefox scope
+
+The branch-only plan in `scripts/branch-verification-plan.mjs` retains the six
+requested browser/OS pairs, but records Ubuntu Firefox normal and Premium as
+**blocked, not run**. Staging account preparation rejected `pwuf000` with HTTP 403;
+the current backend authorization does not include the Firefox account family.
+This is an account authorization blocker, not evidence of a Firefox feature failure.
+Do not alias Firefox to another account or broaden backend authorization to bypass it.
+
+The preflight publishes both blocked records in its job summary and warnings,
+and schedules the ten existing normal/Premium combinations. Fail-fast is disabled
+only in this branch workflow so one failure does not cancel unrelated coverage;
+execution remains serial and source/authorization guards remain mandatory.
+The final aggregate fails while blocked coverage remains, even if all ten runnable
+suites pass. Missing blocked-count output also fails closed. Direct branch runner
+Firefox tests and cleanup reject locally before any network request or login.
+There is no input/environment override for the blocked pair or arbitrary selection.
+Removing this blocker or changing the requested scope requires a separate reviewed
+change; isolated local Firefox checks do not satisfy the missing staging suites.
+
 ## Exact source and intentional trigger
 
 1. Commit and deploy the reviewed **pwappy-web** source to staging. Check its exact

@@ -17,7 +17,7 @@ async function main() {
   const options = parseOptions(process.argv.slice(2), repoRoot);
   const env = childEnvironment();
   const cli = require.resolve('@playwright/test/cli');
-  const args = [cli, 'test', '--config', path.join(repoRoot, 'playwright.webmcp.config.ts')];
+  const args = [cli, 'test', '--config', path.join(repoRoot, options.firefoxUI ? 'playwright.webmcp-firefox.config.ts' : 'playwright.webmcp.config.ts')];
   if (options.grep) args.push('--grep', options.grep);
   if (options.list) { args.push('--list'); await run(process.execPath, args, env); return; }
   if (options.headed) args.push('--headed');

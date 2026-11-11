@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { assertRunnableSelection } from './branch-verification-plan.mjs';
 import { guard, MATRIX, POINTS_ENDPOINT } from './branch-verification-guard.mjs';
 import { assertFreshPremiumAuthCache, assertNoRegisteredGeminiKey, PremiumKeyPreflightError } from './premium-key-preflight.mjs';
 const require = createRequire(import.meta.url);
@@ -14,6 +15,7 @@ export function invocation(suite, browser, os, phase, root, env) {
   if (!entry || !['normal', 'premium'].includes(suite) || !['tests', 'cleanup'].includes(phase)) {
     throw new Error('Invalid branch test selection');
   }
+  assertRunnableSelection(browser, os);
   const childEnv = { ...env, CI: 'true', TEST_RUN_SUFFIX: entry.suffix,
     PWAPPY_TEST_ACCOUNT_INDEX: '0', PWAPPY_TEST_CLEANUP_BROWSER_CODE: entry.code,
     PWAPPY_TEST_POINTS_ENABLED: 'true', PWAPPY_TEST_POINTS_PHASE: phase,
@@ -70,6 +72,7 @@ export async function spawnWithProgress(executable, args, options, progress, dep
   } finally { (dependencies.clearInterval || clearInterval)(timer); }
 }
 export async function run(suite, browser, os, phase, env = process.env, dependencies = {}) {
+  assertRunnableSelection(browser, os);
   await (dependencies.guard || guard)(suite, env);
   if (!/^[1-9][0-9]{0,19}$/.test(env.GITHUB_RUN_ID) || !/^[1-9][0-9]{0,7}$/.test(env.GITHUB_RUN_ATTEMPT)
       || !env.PWAPPY_TEST_LOGIN_PASSCODE || !env.GITHUB_OUTPUT) throw new Error('Missing branch test configuration');

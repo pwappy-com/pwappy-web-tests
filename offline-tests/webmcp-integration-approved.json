@@ -13,6 +13,10 @@
     {
       "before": "  \"scripts\": {\n    \"test\": \"npx playwright test\"\n  },\n",
       "after": "  \"scripts\": {\n    \"test\": \"npx playwright test\",\n    \"test:discovery\": \"node --test tests/tools/discovery-boundaries.check.cjs\",\n    \"test:webmcp\": \"node tests/tools/webmcp/run-isolated.cjs\",\n    \"test:webmcp:list\": \"node tests/tools/webmcp/run-isolated.cjs --list\",\n    \"test:webmcp:checks\": \"node --test tests/tools/webmcp/isolation-options.check.cjs\",\n    \"test:webmcp:staging\": \"node scripts/run-staging-native.mjs\",\n    \"test:webmcp:pwa\": \"node tests/tools/webmcp/test-generated-pwa.cjs\",\n    \"test:webmcp:pwa-installed\": \"node tests/tools/webmcp/test-installed-pwa.cjs\"\n  },\n"
+    },
+    {
+      "before": "    \"test:webmcp:checks\": \"node --test tests/tools/webmcp/isolation-options.check.cjs\",\n",
+      "after": "    \"test:webmcp:firefox\": \"node tests/tools/webmcp/run-isolated.cjs --firefox-ui\",\n    \"test:webmcp:checks\": \"node --test tests/tools/webmcp/isolation-options.check.cjs\",\n"
     }
   ],
   "tests/specs/normal/editor-ui-properties-2.spec.ts": [

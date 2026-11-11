@@ -7,13 +7,14 @@ function parseOptions(args, repoRoot) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === '--list') options.list = true;
+    else if (arg === '--firefox-ui') options.firefoxUI = true;
     else if (arg === '--headed') options.headed = true;
     else if (arg === '--grep' || arg === '--app-root') {
       const value = args[++i];
       if (!value || value.startsWith('--')) throw new Error(`Missing value for ${arg}`);
       if (arg === '--grep') options.grep = value;
       else options.appRoot = path.resolve(value);
-    } else throw new Error(`Unsupported argument: ${arg}. Only --list, --headed, --grep and --app-root are allowed.`);
+    } else throw new Error(`Unsupported argument: ${arg}. Only --list, --headed, --firefox-ui, --grep and --app-root are allowed.`);
   }
   return options;
 }

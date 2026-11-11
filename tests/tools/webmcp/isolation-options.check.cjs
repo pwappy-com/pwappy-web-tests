@@ -5,6 +5,8 @@ const { parseOptions, childEnvironment } = require('./isolation-options.cjs');
 
 test('safe runner accepts only explicit isolated options', () => {
   assert.equal(parseOptions([], '/tmp/tests').appRoot, '/tmp/pwappy-web');
+  assert.equal(parseOptions([], '/tmp/tests').firefoxUI, undefined);
+  assert.equal(parseOptions(['--firefox-ui'], '/tmp/tests').firefoxUI, true);
   assert.deepEqual(parseOptions(['--list', '--headed', '--grep', 'native', '--app-root', '/tmp/app'], '/tmp/tests'),
     { list: true, headed: true, grep: 'native', appRoot: '/tmp/app' });
 });

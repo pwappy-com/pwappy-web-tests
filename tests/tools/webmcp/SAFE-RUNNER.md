@@ -121,3 +121,16 @@ preference is set to standalone because CDP installation defaults to browser mod
 This is not `--app` emulation. It verifies Linux Chrome in VMware, not physical
 Android/iOS, the user's normal desktop profile, or the public publishing workflow.
 The existing seven generated-PWA checks remain separate and unchanged.
+
+
+## Actual Firefox fallback UI regression
+
+`npm run test:webmcp:firefox` selects a fixed dedicated configuration through
+`--firefox-ui`; `--list` can be added for discovery only. It retains the same
+credential-stripped environment, isolated build, lock and fixed localhost:8093
+server as the default runner. No arbitrary config/project arguments are allowed.
+The two tests use unmodified Firefox APIs (no modelContext suppression or browser
+preference changes), real UI edits and saves, and the existing synthetic API
+transport. They verify fresh-context readback plus disconnected-save retention
+and retry. This is not live PHP/backend persistence or Firefox native WebMCP
+coverage. The existing fixture CDN asset allowlist remains in effect.

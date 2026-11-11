@@ -55,7 +55,7 @@ test('early workflow probe precedes live suite with no secret environment; guard
   assert.match(step, /run: node scripts\/preflight-native-chrome\.cjs/);
   assert.doesNotMatch(step, /secrets\.|\benv:/);
   assert.ok(workflow.indexOf('      - name: Verify native WebMCP against real staged persistence') < workflow.indexOf('      - name: Run complete suite'));
-  assert.match(workflow, /^      fail-fast: true$/m);
+  assert.match(workflow, /^      fail-fast: false$/m);
   const source = readFileSync(new URL('../scripts/preflight-native-chrome.cjs', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /process\.env|\.goto\(|\.evaluate\(|document\.modelContext/);
   assert.match(source, /console\.log\(`Native WebMCP Chrome preflight PASS; Chrome=\$\{version\}`\)/);

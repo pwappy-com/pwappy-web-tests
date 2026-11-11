@@ -17,7 +17,7 @@ const cleanup = 'tools/a0-cleanup-all-apps.spec.ts';
 
 before(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'pwappy-discovery-'));
-  for (const name of ['playwright.config.ts', 'playwright.webmcp.config.ts', 'playwright.staging-native.config.ts', 'package.json']) {
+  for (const name of ['playwright.config.ts', 'playwright.webmcp.config.ts', 'playwright.webmcp-firefox.config.ts', 'playwright.staging-native.config.ts', 'package.json']) {
     fs.copyFileSync(path.join(repoRoot, name), path.join(root, name));
   }
   fs.cpSync(path.join(repoRoot, 'tests'), path.join(root, 'tests'), {
@@ -27,7 +27,7 @@ before(() => {
       return !stat.isSymbolicLink() && (stat.isDirectory() || /\.(?:ts|cjs|mjs)$/.test(source));
     },
   });
-  for (const name of ['staging-tests', 'scripts']) {
+  for (const name of ['staging-tests', 'scripts', 'offline-tests']) {
     fs.cpSync(path.join(repoRoot, name), path.join(root, name), { recursive: true,
       filter(source) { const stat = fs.lstatSync(source); return !stat.isSymbolicLink() && (stat.isDirectory() || /\.(?:ts|cjs|mjs|json)$/.test(source)); } });
   }
@@ -131,4 +131,13 @@ test('live native staging discovery is separate, credential-free and never defau
   assert.equal(entries[0].file, 'native-persistence.spec.ts');
   assert.equal(entries[0].project, 'staging-native-chrome');
   assert.ok(list('playwright.config.ts').every(item => !item.file.includes('native-persistence')));
+});
+
+
+test('actual Firefox UI regression has a separate two-case inventory', () => {
+  const entries = list('playwright.webmcp-firefox.config.ts');
+  assert.equal(entries.length, 2);
+  assert.ok(entries.every(item => item.file === 'webmcp-firefox-ui.playwright.ts'));
+  assert.equal(list('playwright.webmcp.config.ts').length, 88);
+  assert.equal(list('playwright.config.ts').length, 830);
 });
