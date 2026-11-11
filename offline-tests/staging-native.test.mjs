@@ -1,0 +1,111 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { nativeInvocation, run, PHASES } from '../scripts/run-staging-native.mjs';
+const require = createRequire(import.meta.url);
+const { ORIGIN, VERSION, ASSET, ALLOWED, READS, fixedPayloads, guardToolCall, validateTarget } = require('../scripts/staging-native-contract.cjs');
+const APP = 'wmcpstage-' + 'a'.repeat(20), TOKEN = 'b'.repeat(32);
+const TARGET = `${ORIGIN}/app_editor.html?identKey=pwuc000&appKey=${APP}&version=${VERSION}`;
+const REMOTE = 'http://127.0.0.1:19232/';
+const ENV = { TEST_SUITE: 'normal', TEST_BROWSER: 'chromium', TEST_OS: 'ubuntu-latest',
+  GITHUB_RUN_ID: '1234', GITHUB_RUN_ATTEMPT: '1', GITHUB_OUTPUT: '/unused/offline-output',
+  PWAPPY_TEST_LOGIN_PASSCODE: 'SYNTHETIC_CANARY_NO_OUTPUT' };
+
+test('bridge requires exact staging URL, new synthetic app, dedicated account and loopback endpoint', () => {
+  assert.deepEqual(validateTarget(REMOTE, TARGET, TOKEN, APP), { endpoint: REMOTE, target: TARGET });
+  for (const target of [TARGET.replace(ORIGIN, 'https://dev.pwappy.com'), TARGET.replace('pwuc000', 'pwuc001'),
+    TARGET.replace(APP, 'existing-app'), TARGET + '&extra=x', TARGET + '#fragment', TARGET.replace('/app_editor.html', '/editor')]) {
+    assert.throws(() => validateTarget(REMOTE, target, TOKEN, APP));
+  }
+  for (const remote of ['http://localhost:19232', 'https://127.0.0.1:19232', 'http://10.0.0.1:19232',
+    REMOTE + 'json', REMOTE + '?token=x', 'http://user:pass@127.0.0.1:19232']) {
+    assert.throws(() => validateTarget(remote, TARGET, TOKEN, APP));
+  }
+  assert.throws(() => validateTarget(REMOTE, TARGET, '', APP));
+  assert.throws(() => validateTarget(REMOTE, TARGET, TOKEN, 'existing-app'));
+});
+
+test('only fixed synthetic editor and asset payloads can pass the mutation bridge', () => {
+  const payloads = fixedPayloads(APP);
+  for (const name of READS) { guardToolCall(name, {}, APP); assert.throws(() => guardToolCall(name, { unexpected: true }, APP)); }
+  for (const [name, payload] of Object.entries(payloads)) {
+    const needsRevision = ['pwappy_save_project', 'pwappy_read_asset_file', 'pwappy_update_global_style', 'pwappy_update_app_settings'].includes(name);
+    const args = { ...payload, ...(needsRevision ? { expectedRevision: 'verified-revision' } : {}) };
+    guardToolCall(name, args, APP);
+    assert.throws(() => guardToolCall(name, { ...args, unexpected: true }, APP));
+    if (needsRevision) assert.throws(() => guardToolCall(name, payload, APP));
+    if ('appKey' in args) assert.throws(() => guardToolCall(name, { ...args, appKey: 'existing-app' }, APP));
+  }
+  for (const name of ['pwappy_delete_app', 'pwappy_delete_version', 'pwappy_publish_version',
+    'pwappy_import_project_bundle', 'pwappy_run_tests', 'pwappy_manage_app_resource']) {
+    assert.ok(!ALLOWED.includes(name)); assert.throws(() => guardToolCall(name, {}, APP));
+  }
+  assert.throws(() => guardToolCall('pwappy_manage_script', { ...payloads.pwappy_manage_script, scriptContent: 'fetch("https://external.invalid")' }, APP));
+  assert.throws(() => guardToolCall('pwappy_upload_asset_file', { ...payloads.pwappy_upload_asset_file, base64: 'invalid' }, APP));
+  assert.throws(() => guardToolCall('pwappy_upload_asset_file', { ...payloads.pwappy_upload_asset_file, name: '../existing.json' }, APP));
+  assert.equal(Buffer.from(payloads.pwappy_upload_asset_file.base64, 'base64').toString(), ASSET.text);
+});
+
+test('wrapper selects only serial normal Ubuntu Chrome and preserves its exact index-zero identity', () => {
+  const { childEnv, args } = nativeInvocation(ENV, '/temporary/new', 19232, TOKEN);
+  assert.ok(args.includes('--config=playwright.staging-native.config.ts'));
+  assert.ok(args.includes('--workers=1')); assert.ok(args.includes('--retries=0'));
+  assert.equal(childEnv.PWAPPY_TEST_ACCOUNT_INDEX, '0'); assert.equal(childEnv.TEST_RUN_SUFFIX, 'ubuntu');
+  assert.equal(childEnv.PWAPPY_TEST_CLEANUP_BROWSER_CODE, 'c'); assert.equal(childEnv.PWAPPY_TEST_RUN_ID, '1234-1-normal');
+  assert.equal(childEnv.PWAPPY_TEST_POINTS_PHASE, 'tests'); assert.equal(childEnv.PWAPPY_STAGING_NATIVE_GUARDED, 'true');
+  assert.equal(childEnv.DOTENV_CONFIG_PATH, '/temporary/new/absent.env');
+  for (const override of [{ TEST_SUITE: 'premium' }, { TEST_OS: 'windows-latest' }, { TEST_BROWSER: 'mobile-chrome' },
+    { GITHUB_RUN_ID: '' }, { PWAPPY_TEST_LOGIN_PASSCODE: '' }]) assert.throws(() => nativeInvocation({ ...ENV, ...override }, '/tmp', 19232, TOKEN));
+});
+
+test('failed preauthentication source guard never spawns a browser/test process', async () => {
+  let spawned = false;
+  await assert.rejects(run(ENV, { guard: async () => { throw Error('blocked'); },
+    spawn: () => { spawned = true; }, unusedPort: async () => 19232 }), /blocked/);
+  assert.equal(spawned, false);
+});
+
+for (const scenario of [{ phase: 'complete', passed: 1, failed: 0, status: 0, expected: 0 },
+  { phase: 'native-preflight', passed: 0, failed: 1, status: 1, expected: 1 },
+  { phase: 'complete', passed: 0, failed: 0, status: 0, expected: 1 },
+  { phase: ENV.PWAPPY_TEST_LOGIN_PASSCODE, passed: 1, failed: 0, status: 0, expected: 1 }]) {
+  test(`wrapper reports only validated counters and phase (${PHASES.includes(scenario.phase) ? scenario.phase : 'invalid'})`, async () => {
+    const root = mkdtempSync(join(tmpdir(), 'native-smoke-offline-'));
+    const output = join(root, 'github-output'); writeFileSync(output, '');
+    const messages = [], oldLog = console.log, oldError = console.error;
+    console.log = (...items) => messages.push(items.join(' ')); console.error = (...items) => messages.push(items.join(' '));
+    try {
+      const exit = await run({ ...ENV, GITHUB_OUTPUT: output, RUNNER_TEMP: root }, { guard: async suite => assert.equal(suite, 'normal'),
+        unusedPort: async () => 19232, spawn: (_command, _args, options) => {
+          assert.equal(options.stdio, 'ignore');
+          writeFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, JSON.stringify({ passed: scenario.passed, failed: scenario.failed, skipped: 0, timedOut: 0, interrupted: 0 }));
+          writeFileSync(options.env.PWAPPY_STAGING_NATIVE_PHASE_PATH, JSON.stringify(scenario.phase));
+          return { status: scenario.status, stdout: ENV.PWAPPY_TEST_LOGIN_PASSCODE, stderr: ENV.PWAPPY_TEST_LOGIN_PASSCODE };
+        } });
+      assert.equal(exit, scenario.expected);
+      assert.doesNotMatch(messages.join('\n'), new RegExp(ENV.PWAPPY_TEST_LOGIN_PASSCODE));
+      assert.match(readFileSync(output, 'utf8'), /^EXIT_CODE=[01]\n$/);
+      if (scenario.phase === 'native-preflight') assert.match(messages.join('\n'), /no adapter fallback/);
+    } finally { console.log = oldLog; console.error = oldError; rmSync(root, { recursive: true, force: true }); }
+  });
+}
+
+test('native transport source has no page evaluation or mocks, isolated evidence is never uploaded', () => {
+  const bridge = readFileSync(new URL('../scripts/staging-native-stdio.cjs', import.meta.url), 'utf8');
+  assert.match(bridge, /session\.send\('WebMCP\.enable'\)/); assert.match(bridge, /session\.send\('WebMCP\.invokeTool'/);
+  assert.doesNotMatch(bridge, /\.evaluate\(|\.executeTool\(/);
+  assert.match(bridge, /playwright_chromiumdev_profile-/);
+  const spec = readFileSync(new URL('../staging-tests/native-persistence.spec.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(spec, /route\.fulfill|\.attach\(|\.screenshot\(/);
+  assert.match(spec, /origins: \[\]/);
+  const config = readFileSync(new URL('../playwright.staging-native.config.ts', import.meta.url), 'utf8');
+  assert.match(config, /testDir: '\.\/staging-tests'/); assert.doesNotMatch(config, /^import .*dotenv/m);
+  assert.match(config, /trace: 'off', screenshot: 'off', video: 'off'/);
+  const workflow = readFileSync(new URL('../.github/workflows/webmcp-branch-verification.yml', import.meta.url), 'utf8');
+  const step = workflow.slice(workflow.indexOf('      - name: Verify native WebMCP'), workflow.indexOf('      - name: Clean only'));
+  assert.match(step, /success\(\).*matrix\.suite == 'normal'.*matrix\.os == 'ubuntu-latest'.*matrix\.browser == 'chromium'/);
+  assert.match(step, /npm run test:webmcp:staging/);
+});

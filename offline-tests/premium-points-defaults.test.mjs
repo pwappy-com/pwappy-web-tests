@@ -1,4 +1,5 @@
 // RAW workflow contracts: synthetic Bash only, no accounts, credentials, or service calls.
+import { restoreApprovedMainCredentialProtection } from './main-credential-protection-contract.mjs';
 import { restoreApprovedMainPushCi } from './main-push-ci-contract.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -115,7 +116,7 @@ test('only exact approved points edits reverse to the unchanged pre-E workflow',
     }
     assert.throws(() => assertExactPriorWorkflow(workflow.replace('default: "normal"', 'default: "premium"')));
     const normal = source => source.split('  e2e-normal:\n')[1].split('  e2e-premium:\n')[0];
-    assert.equal(normal(workflow), normal(restored));
+    assert.equal(normal(restoreApprovedMainCredentialProtection(workflow)), normal(restored));
     assert.equal(step(workflow, 'Resolve normal point preparation'), step(restored, 'Resolve normal point preparation'));
     assert.equal(workflow.split('concurrency:')[0], restored.split('concurrency:')[0]);
 });

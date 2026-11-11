@@ -30,6 +30,20 @@ $templates = [['tagName' => 'app', 'domId' => 'fixture-app', 'attributes' => [],
  ['tagName' => 'p', 'domId' => 'revision', 'attributes' => [], 'text' => $revision],
 ]]];
 $settings = ['app_header' => '<link rel="manifest" href="manifest.webmanifest">', 'lang' => 'en', 'app_exp' => 'Isolated generated PWA', 'body_top' => '', 'body_bottom' => '', 'web_app_manifest' => json_encode(['name' => 'Isolated generated Pwappy', 'short_name' => 'Fixture', 'display' => 'standalone', 'start_url' => './'])];
+// Optional installability fixture: feed real generator manifest/icon assets rather
+// than patching its output. PNGs contain only generated solid-color pixels.
+if (($argv[4] ?? '') === '--installable') {
+    $manifest = json_decode($settings['web_app_manifest'], true);
+    $manifest['icons'] = [];
+    foreach ([192, 512] as $size) {
+        $chunk = static fn($type, $data) => pack('N', strlen($data)) . $type . $data . pack('N', crc32($type . $data));
+        $pixels = str_repeat(chr(0) . str_repeat("\x30\x70\xd0\xff", $size), $size);
+        $png = "\x89PNG\r\n\x1a\n" . $chunk('IHDR', pack('NNCCCCC', $size, $size, 8, 6, 0, 0, 0)) . $chunk('IDAT', gzcompress($pixels)) . $chunk('IEND', '');
+        file_put_contents($assets . '/icon-' . $size . '.png', $png);
+        $manifest['icons'][] = ['src' => './icon-' . $size . '.png', 'sizes' => $size . 'x' . $size, 'type' => 'image/png'];
+    }
+    $settings['web_app_manifest'] = json_encode($manifest);
+}
 $reflection = new ReflectionClass(\Pwappy\Infrastructure\ApplicationService\UserProjectService::class);
 $service = $reflection->newInstanceWithoutConstructor();
 $method = $reflection->getMethod('createOutputWebFiles');

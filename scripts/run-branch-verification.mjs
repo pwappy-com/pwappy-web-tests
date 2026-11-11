@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { guard, MATRIX, POINTS_ENDPOINT } from './branch-verification-guard.mjs';
+import { assertFreshPremiumAuthCache, assertNoRegisteredGeminiKey, PremiumKeyPreflightError } from './premium-key-preflight.mjs';
 const require = createRequire(import.meta.url);
 const { sourceLocations } = require('./branch-safe-locations.cjs');
 export function invocation(suite, browser, os, phase, root, env) {
@@ -41,6 +42,12 @@ export async function run(suite, browser, os, phase, env = process.env, dependen
       || !env.PWAPPY_TEST_LOGIN_PASSCODE || !env.GITHUB_OUTPUT) throw new Error('Missing branch test configuration');
   const root = mkdtempSync(join(env.RUNNER_TEMP || tmpdir(), 'pwappy-branch-check-'));
   const { childEnv, args } = invocation(suite, browser, os, phase, root, env);
+  if (suite === 'premium' && phase === 'tests') {
+    assertFreshPremiumAuthCache(browser, os, dependencies.authRoot || process.cwd());
+    await (dependencies.premiumKeyCheck || assertNoRegisteredGeminiKey)(browser, os, childEnv);
+  }
+  // Do not signal started until the read-only Premium key check has succeeded.
+  // The workflow's app cleanup is therefore also blocked for protected accounts.
   if (phase === 'tests') appendFileSync(env.GITHUB_OUTPUT, 'started=true\n');
   // Suppress all raw child output. Only strict numeric counts are echoed below.
   const result = (dependencies.spawn || spawnSync)(process.execPath, args, { env: childEnv, stdio: 'ignore' });
@@ -56,8 +63,10 @@ export async function run(suite, browser, os, phase, env = process.env, dependen
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try { process.exitCode = await run(...process.argv.slice(2)); }
-  catch {
-    console.error('::error::Branch verification stopped. Check the credential-free guard step and numeric outcome; raw test data is not published.');
+  catch (error) {
+    console.error(error instanceof PremiumKeyPreflightError
+      ? `::error::${error.message}`
+      : '::error::Branch verification stopped. Check the credential-free guard step and numeric outcome; raw test data is not published.');
     process.exitCode = 1;
   }
 }

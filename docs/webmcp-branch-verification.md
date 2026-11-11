@@ -45,15 +45,50 @@ It is not the removal of arbitrary personal apps or production content.
 Premium fails **before login and browser installation** unless repository variable
 `PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA` equals the pinned application SHA.
 Set it only after authorization of that concrete live verification scope, including
-public test publication, backend moderation/AI jobs, test-point consumption and
+public test publication/takedown, backend moderation, test-point consumption and
 synthetic account cleanup. Changing the source pin invalidates old authorization.
 This variable is an execution gate, not permission by itself; it must not be set
 merely to make CI green. The final aggregate fails if Premium is blocked or skipped.
 The operator must confirm that authorization before changing the variable.
 
+A preexisting nonempty/symlinked authentication cache for the selected account
+blocks Premium rather than being reused, deleted or overwritten. Fresh checkouts
+(or the empty `{}` files created by Playwright configuration) remain eligible.
+This prevents the later test process from reusing a different cached identity than
+the account checked below.
+
+Before any Premium test or app mutation, a fresh in-memory request context logs
+into the exact dedicated OS/browser/index-0 account using the normal fixed
+`test-login` endpoint. Before reading settings it inspects storage state only in
+memory, without a file path, and requires exactly one service-issued
+`pwappy_ident_key` cookie (the checked-in `.env.base` copied by backend deployment)
+or the explicit CookieService fallback `pwappy_ident`, matching the requested
+account. Exactly one cookie across both allowed names is required. The live
+staging cookie name has not been observed; other names fail closed. The cookie must be secure,
+HttpOnly, unexpired, path `/`, and apply to the fixed staging host. Host-scoped
+`dev.pwappy-dev.com` and Domain-scoped `.dev.pwappy-dev.com`/`.pwappy-dev.com` are
+accepted according to the PHP CookieService contract. Missing, mismatched or
+duplicate identity cookies block the run before the settings request. JWT/token
+values are not inspected or decoded as identity evidence. It then makes only a GET to
+`https://dev.pwappy-dev.com/pwappy-api/rest/v1/user-setting`. The response must have
+HTTP 200, API code 200, and
+`details.userSetting.isUserGeminiApiKeyRegistered === false`. A registered key,
+missing/malformed flag, unavailable login/settings or a redirect blocks the suite
+before `started=true`, so the workflow does not run its app cleanup either. No
+actual-key endpoint is requested, no response body or cookie is logged/saved, and
+the context is disposed on success and failure. Both requests reject redirects
+and use fixed HTTPS destinations; no cached authentication or dotenv is loaded.
+The account must remain reserved during verification; this read is a point-in-time
+check, not a server-side lock against someone registering a key afterward.
+
 No real Gemini key is read or passed. Registration/settings cases receive the
 obviously synthetic `AIza_TEST_ONLY_WEBMCP`; model-generation cases already mock
-their API. This does **not** imply backend public moderation is free or mocked.
+their API. The reviewed backend main implementation uses OpenAI's free
+`/v1/moderations` endpoint with `omni-moderation-latest`, not paid generation,
+for publication moderation. The user's all-tests request covers synthetic test
+publication and takedown. The deployed backend SHA/runtime configuration has not
+been established by this workflow, so this does not claim that other generation
+paths are free. The source-bound authorization gate remains in place.
 
 ## Coverage and skips
 

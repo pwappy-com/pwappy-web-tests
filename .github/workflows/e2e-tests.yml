@@ -514,7 +514,7 @@ jobs:
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
           PWAPPY_TEST_USER_PREFIX: "pwusr"
           PWAPPY_LOGIN: "1"
-          TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
+          TEST_GEMINI_API_KEY: "AIza_TEST_ONLY_WEBMCP"
 
       # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
@@ -552,7 +552,7 @@ jobs:
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
           PWAPPY_LOGIN: "1"
-          TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
+          TEST_GEMINI_API_KEY: "AIza_TEST_ONLY_WEBMCP"
 
       # テスト失敗またはタイムアウト（キャンセル）時：このブラウザエンジン/OSに関連する「全ての古いキャッシュ」を削除する
       - name: Delete cache on failure or cancellation
@@ -721,8 +721,21 @@ jobs:
       - name: Check point preparation client
         run: node --test tests/tools/test-point-preparation.test.mjs
 
+      - name: Protect existing Premium credentials
+        id: premium_key_preflight
+        shell: bash
+        run: node scripts/preflight-main-premium.mjs
+        env:
+          PWAPPY_PREFLIGHT_BROWSER: ${{ matrix.browser }}
+          PWAPPY_PREFLIGHT_OS: ${{ matrix.os }}
+          PWAPPY_TEST_ACCOUNT_INDEX: "0"
+          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
+          PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
+          PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
+
       - name: Run Premium E2E Tests
         id: run_tests
+        if: steps.premium_key_preflight.outcome == 'success'
         shell: bash
         # 最も安定した直列実行(1ワーカー)で実行。
         run: |
@@ -735,18 +748,19 @@ jobs:
           echo "EXIT_CODE=$?" >> $GITHUB_OUTPUT
         env:
           TEST_RETRIES: ${{ inputs.retries || '0' }}
+          PWAPPY_TEST_ACCOUNT_INDEX: "0"
           TEST_RUN_SUFFIX: ${{ env.OS_SHORT_NAME }}
           PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
           PWAPPY_TEST_USER_PREFIX: "pwusr"
           PWAPPY_LOGIN: "1"
-          TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
+          TEST_GEMINI_API_KEY: "AIza_TEST_ONLY_WEBMCP"
 
       # テスト終了直後に、このランナー(マシン)が汚したワーカーセッションをその場で即座に自活掃除します
       - name: Run Local Cleanup on Finish
         timeout-minutes: 5
-        if: always() && inputs.test_scope != 'points-smoke'
+        if: always() && steps.premium_key_preflight.outcome == 'success' && steps.run_tests.outcome != 'skipped' && inputs.test_scope != 'points-smoke'
         shell: bash
         run: |
           OS_CODE_CHAR="l"
@@ -779,7 +793,7 @@ jobs:
           PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
           PWAPPY_LOGIN: "1"
-          TEST_GEMINI_API_KEY: ${{ secrets.TEST_GEMINI_API_KEY }}
+          TEST_GEMINI_API_KEY: "AIza_TEST_ONLY_WEBMCP"
 
       # テスト失敗またはタイムアウト（キャンセル）時：このブラウザエンジン/OSに関連する「全ての古いキャッシュ」を削除する
       - name: Delete cache on failure or cancellation

@@ -104,3 +104,20 @@ OS-installed PWA behavior, or a default application caching policy.
 
 Node-only `*.test.mjs` checks are excluded from Playwright discovery so collecting
 the live inventory cannot execute Node tests as an import side effect.
+
+## Installed desktop PWA in a disposable OS boundary
+
+`npm run test:webmcp:pwa-installed` uses installed Chrome, Xvfb and bwrap. It
+requires working Linux namespaces and fails rather than using the normal desktop.
+A read-only root, private network/PID/IPC, empty `/run`, private `/tmp`, and
+disposable HOME/XDG/profile keep OS registration and DBus away from the user.
+Only the owned temporary root is writable. No credentials or external network
+are used. The real generator receives synthetic installable manifest/icons.
+
+Six checks prove actual CDP installation, a standalone window, a disposable
+`.desktop` entry, full browser/server shutdown, installed-app offline launch after
+Chrome restart, and uninstall/desktop-entry removal. The temporary app's display
+preference is set to standalone because CDP installation defaults to browser mode.
+This is not `--app` emulation. It verifies Linux Chrome in VMware, not physical
+Android/iOS, the user's normal desktop profile, or the public publishing workflow.
+The existing seven generated-PWA checks remain separate and unchanged.

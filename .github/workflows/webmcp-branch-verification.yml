@@ -96,6 +96,10 @@ jobs:
         run: npx --no-install playwright install --with-deps "$BROWSER_BINARY"
         env:
           BROWSER_BINARY: ${{ matrix.binary }}
+      - name: Probe native WebMCP in empty Chrome before the long live suite
+        if: ${{ matrix.suite == 'normal' && matrix.os == 'ubuntu-latest' && matrix.browser == 'chromium' }}
+        timeout-minutes: 2
+        run: node scripts/preflight-native-chrome.cjs
       - name: Check point preparation and stable account identity offline
         run: node --test tests/tools/test-point-preparation.test.mjs tests/tools/test-account-index.test.mjs
       - name: Run complete suite with raw evidence disabled
@@ -110,6 +114,19 @@ jobs:
           PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
           PWAPPY_TEST_POINTS_READ_ENDPOINT: ${{ vars.PWAPPY_TEST_POINTS_READ_ENDPOINT }}
           PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA: ${{ vars.PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA }}
+      - name: Verify native WebMCP against real staged persistence in temporary Chrome
+        id: native_staging
+        if: ${{ success() && matrix.suite == 'normal' && matrix.os == 'ubuntu-latest' && matrix.browser == 'chromium' }}
+        timeout-minutes: 10
+        run: npm run test:webmcp:staging
+        env:
+          TEST_SUITE: ${{ matrix.suite }}
+          TEST_BROWSER: ${{ matrix.browser }}
+          TEST_OS: ${{ matrix.os }}
+          PWAPPY_TEST_BASE_URL: ${{ secrets.PWAPPY_TEST_BASE_URL }}
+          PWAPPY_TEST_LOGIN_ENDPOINT: ${{ secrets.PWAPPY_TEST_LOGIN_ENDPOINT }}
+          PWAPPY_TEST_LOGIN_PASSCODE: ${{ secrets.PWAPPY_TEST_LOGIN_PASSCODE }}
+          PWAPPY_TEST_POINTS_READ_ENDPOINT: ${{ vars.PWAPPY_TEST_POINTS_READ_ENDPOINT }}
       - name: Clean only the stable account used by this suite
         if: ${{ always() && steps.run_tests.outputs.started == 'true' }}
         timeout-minutes: 10

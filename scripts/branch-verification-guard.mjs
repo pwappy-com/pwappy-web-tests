@@ -41,7 +41,7 @@ export function validateConfiguration(env, event, pin, suite) {
       fail('unexpected staging points configuration');
     }
   }
-  // Normal synthetic-account writes are separate from live Premium publication/moderation costs.
+  // Normal synthetic-account writes are separate from live Premium publication/moderation scope.
   if (suite === 'premium' && env.PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA !== pin.sourceCommit) {
     fail('live Premium authorization for this source commit is missing');
   }

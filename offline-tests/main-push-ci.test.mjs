@@ -160,7 +160,7 @@ function assertPreviousWorkflow(source) {
   const hash = createHash('sha1').update('blob ' + Buffer.byteLength(restored) + '\0').update(restored).digest('hex');
   assert.equal(hash, '915228b40569c83bdd1b0e8db6ef966360c67568');
 }
-test('only the three exact push additions change; prior scheduling, jobs and security remain byte-identical', () => {
+test('only reviewed push and credential-protection additions change; prior scheduling and job budgets remain byte-identical', () => {
   assert.equal(mainPushCiEdits.length, 3);
   assertPreviousWorkflow(workflow);
   for (const { before, after } of mainPushCiEdits) {

@@ -17,7 +17,7 @@ const cleanup = 'tools/a0-cleanup-all-apps.spec.ts';
 
 before(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'pwappy-discovery-'));
-  for (const name of ['playwright.config.ts', 'playwright.webmcp.config.ts', 'package.json']) {
+  for (const name of ['playwright.config.ts', 'playwright.webmcp.config.ts', 'playwright.staging-native.config.ts', 'package.json']) {
     fs.copyFileSync(path.join(repoRoot, name), path.join(root, name));
   }
   fs.cpSync(path.join(repoRoot, 'tests'), path.join(root, 'tests'), {
@@ -27,6 +27,10 @@ before(() => {
       return !stat.isSymbolicLink() && (stat.isDirectory() || /\.(?:ts|cjs|mjs)$/.test(source));
     },
   });
+  for (const name of ['staging-tests', 'scripts']) {
+    fs.cpSync(path.join(repoRoot, name), path.join(root, name), { recursive: true,
+      filter(source) { const stat = fs.lstatSync(source); return !stat.isSymbolicLink() && (stat.isDirectory() || /\.(?:ts|cjs|mjs|json)$/.test(source)); } });
+  }
   fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(root, 'node_modules'), 'dir');
   assert.equal(fs.existsSync(path.join(root, '.env')), false);
   assert.equal(fs.existsSync(path.join(root, '.auth')), false);
@@ -119,4 +123,12 @@ test('dedicated configuration discovers only WebMCP cases without live suites or
   assert.ok(entries.some(item => item.file === 'external-authoring-lifecycle.spec.ts'));
   assert.ok(entries.some(item => item.file === 'persistence-recovery.spec.ts'));
   console.log(`Dedicated WebMCP inventory: ${entries.length} entries; no live suites or cleanup.`);
+});
+
+test('live native staging discovery is separate, credential-free and never default-selected', () => {
+  const entries = list('playwright.staging-native.config.ts');
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].file, 'native-persistence.spec.ts');
+  assert.equal(entries[0].project, 'staging-native-chrome');
+  assert.ok(list('playwright.config.ts').every(item => !item.file.includes('native-persistence')));
 });
