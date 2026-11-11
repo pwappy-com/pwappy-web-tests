@@ -6,7 +6,7 @@ import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { guard } from './branch-verification-guard.mjs';
 import { invocation, readCounts } from './run-branch-verification.mjs';
 const require = createRequire(import.meta.url);
@@ -34,14 +34,16 @@ export function nativeInvocation(env, root, port, token) {
     PWAPPY_STAGING_NATIVE_BLOCKED_PATH: join(root, 'blocked-diagnostic.json'),
     PWAPPY_STAGING_NATIVE_DIAGNOSTIC_PATH: join(root, 'startup-diagnostic.json'),
     PWAPPY_STAGING_NATIVE_TOKEN: token, PWAPPY_STAGING_NATIVE_PHASE_PATH: join(root, 'phase.json') });
-  return { childEnv, args: [require.resolve('@playwright/test/cli'), 'test', '--config=playwright.staging-native.config.ts', '--workers=1', '--retries=0'] };
+  return { childEnv, args: [require.resolve('@playwright/test/cli'), 'test', `--config=${fileURLToPath(new URL('../playwright.staging-native.config.ts', import.meta.url))}`, '--workers=1', '--retries=0'] };
 }
 export async function run(env = process.env, dependencies = {}) {
   await (dependencies.guard || guard)('normal', env);
   const root = mkdtempSync(join(env.RUNNER_TEMP || tmpdir(), 'pwappy-staging-native-'));
   const { childEnv, args } = nativeInvocation(env, root, await (dependencies.unusedPort || unusedPort)(), randomBytes(16).toString('hex'));
   writeFileSync(childEnv.PWAPPY_STAGING_NATIVE_PHASE_PATH, JSON.stringify('native-preflight'), { mode: 0o600 });
-  const result = (dependencies.spawn || spawnSync)(process.execPath, args, { env: childEnv, stdio: 'ignore' });
+  // constants.ts writes .auth beneath cwd. Keep native state in this owned
+  // directory so the later main suite still rejects any preexisting checkout auth.
+  const result = (dependencies.spawn || spawnSync)(process.execPath, args, { cwd: root, env: childEnv, stdio: 'ignore' });
   const exit = Number.isInteger(result.status) && result.status >= 0 && result.status <= 255 ? result.status : 1;
   appendFileSync(env.GITHUB_OUTPUT, `EXIT_CODE=${exit}\n`);
   const counts = readCounts(childEnv.PWAPPY_BRANCH_COUNTS_PATH);

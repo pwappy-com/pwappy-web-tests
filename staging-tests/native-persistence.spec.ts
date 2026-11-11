@@ -3,7 +3,6 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { randomBytes } from 'node:crypto';
 import { writeFileSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { createApp, deleteApp, gotoDashboard, openEditor } from '../tests/tools/dashboard-helpers';
 import { ensureAuthenticated, generateIdentKey } from '../tests/constants';
@@ -18,7 +17,7 @@ function client(url: string, appKey: string) {
   const clientEnv = { ...process.env };
   delete clientEnv.PWAPPY_TEST_LOGIN_PASSCODE;
   delete clientEnv.TEST_GEMINI_API_KEY;
-  const child = spawn(process.execPath, [resolve('scripts/staging-native-stdio.cjs'), endpoint,
+  const child = spawn(process.execPath, [require.resolve('../scripts/staging-native-stdio.cjs'), endpoint,
     url, process.env.PWAPPY_STAGING_NATIVE_TOKEN!, appKey], { stdio: ['pipe', 'pipe', 'ignore'], env: clientEnv });
   let id = 0;
   const pending = new Map<number, Pending>();

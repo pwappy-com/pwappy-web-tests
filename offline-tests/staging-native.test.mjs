@@ -1,8 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { assertFreshTestAccountAuthCache } from '../scripts/premium-key-preflight.mjs';
 import { tmpdir } from 'node:os';
 import { nativeInvocation, run, PHASES } from '../scripts/run-staging-native.mjs';
 const require = createRequire(import.meta.url);
@@ -51,7 +54,7 @@ test('only fixed synthetic editor and asset payloads can pass the mutation bridg
 
 test('wrapper selects only serial normal Ubuntu Chrome and preserves its exact index-zero identity', () => {
   const { childEnv, args } = nativeInvocation(ENV, '/temporary/new', 19232, TOKEN);
-  assert.ok(args.includes('--config=playwright.staging-native.config.ts'));
+  assert.ok(args.includes(`--config=${fileURLToPath(new URL('../playwright.staging-native.config.ts', import.meta.url))}`));
   assert.ok(args.includes('--workers=1')); assert.ok(args.includes('--retries=0'));
   assert.equal(childEnv.PWAPPY_TEST_ACCOUNT_INDEX, '0'); assert.equal(childEnv.TEST_RUN_SUFFIX, 'ubuntu');
   assert.equal(childEnv.PWAPPY_TEST_CLEANUP_BROWSER_CODE, 'c'); assert.equal(childEnv.PWAPPY_TEST_RUN_ID, '1234-1-normal');
@@ -259,4 +262,48 @@ test('blocked diagnostics preserve abort and zero-block assertion at both checkp
   assert.equal((spec.match(/expect\(apiCounts.blocked\)\.toBe\(0\)/g) || []).length, 2);
   assert.match(spec, /recordBlockedRequest[\s\S]*return route\.abort\('blockedbyclient'\)/);
   for (const phase of ['cleanup-close-clients', 'cleanup-close-contexts', 'cleanup-guard', 'cleanup-delete', 'cleanup-verify-absence', 'cleanup-assertions']) assert.ok(PHASES.includes(phase));
+});
+
+for (const preexisting of [false, true]) test(`real browserless native worker isolates auth from main checkout (preexisting=${preexisting})`, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'native-auth-offline-'));
+  const checkout = join(root, 'checkout'), runnerTemp = join(root, 'runner');
+  mkdirSync(checkout); mkdirSync(runnerTemp);
+  const output = join(root, 'github-output'), config = join(root, 'synthetic.config.cjs');
+  const checkoutCache = join(checkout, '.auth/user-u-c-0.json');
+  const sentinel = JSON.stringify({ cookies: [], origins: [], existing: 'SYNTHETIC_DO_NOT_TOUCH' });
+  if (preexisting) { mkdirSync(join(checkout, '.auth')); writeFileSync(checkoutCache, sentinel); }
+  writeFileSync(config, `module.exports = ${JSON.stringify({
+    testDir: fileURLToPath(new URL('.', import.meta.url)), testMatch: 'native-auth-isolation.playwright.ts',
+    reporter: fileURLToPath(new URL('../scripts/staging-native-reporter.cjs', import.meta.url)),
+    workers: 1, retries: 0, timeout: 10000,
+  })};`);
+  const oldCwd = process.cwd();
+  let ownedRoot;
+  try {
+    process.chdir(checkout);
+    const exit = await run({ ...ENV, GITHUB_OUTPUT: output, RUNNER_TEMP: runnerTemp }, {
+      guard: async () => {}, unusedPort: async () => 19232,
+      spawn: (command, args, options) => {
+        ownedRoot = options.cwd;
+        assert.ok(ownedRoot?.startsWith(join(runnerTemp, 'pwappy-staging-native-')));
+        // Discover the real native config/spec from the isolated cwd without a browser.
+        const listed = spawnSync(command, [...args, '--list'], { ...options,
+          env: { ...options.env, PWAPPY_BRANCH_COUNTS_PATH: join(ownedRoot, 'discovery-counts.json') } });
+        assert.equal(listed.status, 0, 'real native config and helper imports resolve outside checkout');
+        return spawnSync(command, args.map(arg => arg.startsWith('--config=') ? `--config=${config}` : arg), options);
+      },
+    });
+    assert.equal(exit, 0);
+    assert.deepEqual(JSON.parse(readFileSync(join(ownedRoot, '.auth/user-u-c-0.json'), 'utf8')),
+      { cookies: [], origins: [], synthetic: true });
+    if (preexisting) {
+      assert.equal(readFileSync(checkoutCache, 'utf8'), sentinel);
+      assert.throws(() => assertFreshTestAccountAuthCache('chromium', 'ubuntu-latest', '0', checkout),
+        /existing authentication state must not be reused or overwritten/);
+      assert.equal(readFileSync(checkoutCache, 'utf8'), sentinel);
+    } else {
+      assert.equal(existsSync(join(checkout, '.auth')), false);
+      assert.doesNotThrow(() => assertFreshTestAccountAuthCache('chromium', 'ubuntu-latest', '0', checkout));
+    }
+  } finally { process.chdir(oldCwd); rmSync(root, { recursive: true, force: true }); }
 });
