@@ -4,6 +4,38 @@ import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { clickAndOpenNewTabSafely } from './window-helpers';
 import { expectEditorReadbackStatus, saveEditorAndExpectSuccess } from './success-assertions';
 
+/** Read-only, fixed vocabulary. No app content, identifiers, errors or URLs leave the page. */
+export function readEditorStartupSnapshot(container: any, captured = true) {
+    const status = container?._webMcpSaveStatus;
+    const root = container?.shadowRoot;
+    const tree = root?.querySelector('template-container')?.shadowRoot;
+    const versionStore = container?.editorJsonVersionStore;
+    const templateStore = container?.templateJsonStore;
+    const version = versionStore?.getState()?.editorJsonVersion?.currentVersion;
+    const children = templateStore?.getState()?.templateJson?.templates?.[0]?.children;
+    let errorClassification = 'unknown';
+    switch (status?.error) {
+        case '保存後のサーバー内容が送信内容と一致しません。ローカル変更を保持しました。': errorClassification = 'readback-mismatch'; break;
+        case '保存後のサーバーデータを確認できませんでした。再取得を確認してから再試行してください。': errorClassification = 'readback-invalid'; break;
+        case '保存後の再取得に失敗しました。': errorClassification = 'readback-failed'; break;
+    }
+    return {
+        captured, containerPresent: !!container, storePresent: !!versionStore && !!templateStore,
+        loading: typeof container?.loading === 'boolean' ? container.loading : null,
+        empty: Array.isArray(children) ? children.length === 0 : null,
+        initialVersionInit: typeof version === 'string' ? version === 'init' : null,
+        saveStatus: ['saving', 'saved', 'failed'].includes(status?.status) ? status.status : 'unknown',
+        serverSaved: typeof status?.serverSaved === 'boolean' ? status.serverSaved : null,
+        serverVerified: typeof status?.serverVerified === 'boolean' ? status.serverVerified : null,
+        starterVisible: !!root?.querySelector('starter-template-modal[visible]'),
+        messageVisible: !!root?.querySelector('message-box[visible]'),
+        initialSaveError: container?._initialSaveError === true,
+        pageNodesPresent: !!tree?.querySelector('#dom-tree .node[data-node-type="page"]'),
+        navigatorNodesPresent: !!tree?.querySelector('#dom-tree .node[data-node-type="ons-navigator"]'),
+        errorClassification,
+    };
+}
+
 /**
  * Playwrightテスト用のエディタ操作ヘルパークラス。
  * エディタのPageオブジェクトとモバイルフラグを状態として保持し、
@@ -229,6 +261,12 @@ export class EditorHelper {
                 await this.page.waitForTimeout(300);
             });
         } catch (e) {
+            // Diagnostic failure never changes or retries the original operation.
+            let snapshot = readEditorStartupSnapshot(null, false);
+            try {
+                snapshot = await this.page.locator('app-container').evaluate(readEditorStartupSnapshot, undefined, { timeout: 2000 });
+            } catch { /* Closed or unavailable page remains explicitly unknown. */ }
+            console.log('[EditorStartupFailure] ' + JSON.stringify(snapshot));
             console.error('[StarterTemplateModal] Failed to close modal:', e);
             throw e;
         } finally {

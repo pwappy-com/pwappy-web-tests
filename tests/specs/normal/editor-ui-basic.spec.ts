@@ -603,7 +603,8 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 if (!pBox || !tBox) break;
 
                 const destX = tBox.x + tBox.width / 2;
-                const destY = tBox.y + tBox.height - 5;
+                // Drop in the parent-owned sibling gap, not inside the button.
+                const destY = tBox.y + tBox.height + 5;
 
                 const isTargetVisible = destY > pBox.y + 30 && destY < pBox.y + pBox.height - 30;
 
@@ -623,18 +624,23 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 
             const finalBox = await btnBottom.boundingBox();
             if (finalBox) {
-                const finalDestY = finalBox.y + finalBox.height - 5;
+                const finalDestY = finalBox.y + finalBox.height + 5;
                 await pointerAction.move(currentX, currentY, finalBox.x + finalBox.width / 2, finalDestY, 5);
                 currentX = finalBox.x + finalBox.width / 2;
                 currentY = finalDestY;
             }
-            await editorPage.waitForTimeout(400);
+            // A child insertion inside btnBottom can produce the same flattened
+            // order while silently nesting buttons. Require the sibling marker.
+            await expect(targetInsertPoint).toHaveClass(/(?:^|\s)node-add-point-selected(?:\s|$)/);
             await pointerAction.up(finalBox?.x, finalBox?.y);
             await editorPage.waitForTimeout(500);
 
-            const finalNodes = editorPage.locator('template-container .node[data-node-type="ons-button"]');
+            const contentArea = editorPage.locator('template-container .node[data-node-explain="コンテンツ"]');
+            const finalNodes = contentArea.locator(':scope > .node[data-node-type="ons-button"]');
+            await expect(finalNodes).toHaveCount(2);
             await expect(finalNodes.nth(0)).toHaveAttribute('data-node-dom-id', 'ons-button1');
             await expect(finalNodes.nth(1)).toHaveAttribute('data-node-dom-id', 'ons-button2');
+            await expect(editorPage.locator('template-container .node[data-node-type="ons-button"]')).toHaveCount(2);
         });
     });
 });

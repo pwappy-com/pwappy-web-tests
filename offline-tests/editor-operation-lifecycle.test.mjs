@@ -41,7 +41,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
     if (specifier === './window-helpers') return nextResolve('./window-helpers.ts', context);
     return nextResolve(specifier, context);
 } });
-const { EditorHelper } = await import('../tests/tools/editor-helpers.ts');
+const { EditorHelper, readEditorStartupSnapshot } = await import('../tests/tools/editor-helpers.ts');
 
 function deferred() { let resolve, reject; const promise = new Promise((a,b) => { resolve=a;reject=b; }); return { promise, resolve, reject }; }
 function fixture({ clickError, assertError, cleanupError, installError, observeError, stateReadError, installAfterCallbackError, clickGate, startupStates, startupGate, startupReadError, snapshotInputError, snapshotConfirmError, snapshotHiddenError, snapshotGate, postSnapshotGate, postSnapshotReadError, existing = false, initiallyClosed = false } = {}) {
@@ -598,4 +598,65 @@ test('a snapshot missed by the initial optional check is handled once when it ar
     assert.equal(f.events.filter(event => event[0] === 'snapshot-confirm').length, 1);
     assert.equal(f.events.filter(event => event[0] === 'snapshot-unlisten').length, 2);
     assert.equal(f.events.filter(event => event[0] === 'click').length, 1);
+});
+
+
+test('startup failure snapshot distinguishes unavailable, absent and initialized empty editor', () => {
+    const unavailable = readEditorStartupSnapshot(null, false);
+    assert.equal(unavailable.captured, false);
+    assert.equal(unavailable.containerPresent, false);
+    assert.equal(unavailable.initialVersionInit, null);
+    assert.equal(readEditorStartupSnapshot(null).captured, true);
+    const container = {
+        loading: false,
+        templateJsonStore: { getState: () => ({ templateJson: { templates: [{ children: [] }] } }) },
+        editorJsonVersionStore: { getState: () => ({ editorJsonVersion: { currentVersion: 'init' } }) },
+    };
+    const snapshot = readEditorStartupSnapshot(container);
+    assert.equal(snapshot.storePresent, true);
+    assert.equal(snapshot.empty, true);
+    assert.equal(snapshot.loading, false);
+    assert.equal(snapshot.initialVersionInit, true);
+});
+
+test('startup failure snapshot reports only known save classes and tri-state booleans', () => {
+    const errors = [
+        ['保存後のサーバー内容が送信内容と一致しません。ローカル変更を保持しました。', 'readback-mismatch'],
+        ['保存後のサーバーデータを確認できませんでした。再取得を確認してから再試行してください。', 'readback-invalid'],
+        ['保存後の再取得に失敗しました。', 'readback-failed'],
+    ];
+    for (const [error, expected] of errors) {
+        const snapshot = readEditorStartupSnapshot({ _initialSaveError: true,
+            _webMcpSaveStatus: { status: 'failed', serverSaved: true, serverVerified: false, error } });
+        assert.equal(snapshot.errorClassification, expected);
+        assert.equal(snapshot.initialSaveError, true);
+        assert.equal(snapshot.saveStatus, 'failed');
+        assert.equal(snapshot.serverSaved, true);
+        assert.equal(snapshot.serverVerified, false);
+    }
+});
+
+test('startup failure snapshot does not return content, raw errors, identifiers or selectors', () => {
+    const secret = 'PRIVATE-https://example.invalid/?token=private';
+    const container = {
+        loading: secret, _initialSaveError: secret,
+        _webMcpSaveStatus: { status: secret, error: secret, serverSaved: secret, serverVerified: secret },
+        templateJsonStore: { getState: () => ({ templateJson: { templates: [{ children: [secret] }] } }) },
+        editorJsonVersionStore: { getState: () => ({ editorJsonVersion: { currentVersion: secret } }) },
+        shadowRoot: { querySelector: selector => selector === 'template-container'
+            ? { shadowRoot: { querySelector: () => ({ textContent: secret }) } } : { textContent: secret } },
+    };
+    const snapshot = readEditorStartupSnapshot(container);
+    assert.equal(snapshot.saveStatus, 'unknown');
+    assert.equal(snapshot.errorClassification, 'unknown');
+    assert.equal(snapshot.loading, null);
+    assert.equal(snapshot.initialSaveError, false);
+    assert.equal(snapshot.serverSaved, null);
+    assert.equal(snapshot.serverVerified, null);
+    assert.equal(snapshot.empty, false);
+    assert.equal(snapshot.initialVersionInit, false);
+    assert.equal(snapshot.starterVisible, true);
+    assert.equal(snapshot.pageNodesPresent, true);
+    assert.equal(JSON.stringify(snapshot).includes(secret), false);
+    assert.equal(Object.keys(snapshot).length, 15);
 });

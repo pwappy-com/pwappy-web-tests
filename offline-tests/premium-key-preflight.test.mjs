@@ -188,6 +188,7 @@ test('false registration flag is disposed before Premium starts using only the s
         const counts = JSON.parse(readFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, 'utf8'));
         const completed = Object.values(counts).reduce((sum, count) => sum + count, 0);
         writeFileSync(options.env.PWAPPY_BRANCH_PROGRESS_PATH, JSON.stringify({ total: completed, completed, counts }));
+        writeFileSync(options.env.PWAPPY_BRANCH_DIAGNOSTICS_PATH, '[]');
         writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]');
         return { status: 0 };
       },
@@ -209,6 +210,7 @@ test('normal and cleanup do not run the Premium registration/key mutation prereq
           const counts = JSON.parse(readFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, 'utf8'));
         const completed = Object.values(counts).reduce((sum, count) => sum + count, 0);
         writeFileSync(options.env.PWAPPY_BRANCH_PROGRESS_PATH, JSON.stringify({ total: completed, completed, counts }));
+        writeFileSync(options.env.PWAPPY_BRANCH_DIAGNOSTICS_PATH, '[]');
         writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]'); return { status: 0 };
         },
       });

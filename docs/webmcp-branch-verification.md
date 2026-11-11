@@ -112,7 +112,7 @@ paths are free. The source-bound authorization gate remains in place.
 
 ## Coverage and skips
 
-Both Normal and Premium cover the prior five CI combinations plus Linux Firefox:
+The requested Normal and Premium scope is the prior five CI combinations plus Linux Firefox. The current runnable plan excludes the explicitly blocked Firefox pair described above:
 
 - Linux Chromium, mobile Chrome emulation, and Firefox.
 - Windows Chromium.
@@ -121,7 +121,7 @@ Both Normal and Premium cover the prior five CI combinations plus Linux Firefox:
   pressure); Premium keeps its existing `macos-latest` selection.
 
 Firefox is an existing configured project and has its own account code `f`.
-It is now included instead of silently omitting it. Mobile rows are browser
+It is explicitly tracked as blocked until the authorized staging account rollout and standalone Firefox trial succeed. Mobile rows are browser
 emulation, not actual Android/iOS device, installation, push or OS-integration proof.
 Other OS/browser Cartesian combinations were not previously configured in CI and
 are not claimed here. Node 24 offline contracts, credential-free discovery and
@@ -151,14 +151,22 @@ runners as an unapproved workaround.
 ## Evidence boundary and failures
 
 The branch config disables trace, screenshot, video and HTML report recording.
-The wrapper suppresses arbitrary test stdout/stderr and reads only an exact
+The wrapper suppresses arbitrary test stdout/stderr and reads an exact
 five-integer count schema from its new temporary directory. Failures also report
 up to 256 static, explicitly allowlisted source-relative definition/stack locations
 with bounded line numbers and fixed status/kind enums. New source files require
 an explicit update to `scripts/branch-safe-sources.json` for location diagnostics.
-Public logs contain those coordinates, counts and process exit code, never exception
-text, test titles, service bodies, credentials, URLs or storage state. This reduces failure diagnostics;
-rerunning with raw public logs/traces is not an approved workaround.
+A separate bounded diagnostics file adds fixed error-class, Playwright-operation
+and matcher enums. Only exact schemas from the known `HttpFailure`,
+`dashboard-navigation-recovery`, and `EditorStartupFailure` helpers are accepted.
+The parent validates these again before printing. Startup evidence contains only
+booleans, nullable booleans and fixed save/error states, never store contents.
+Unknown native errors stay `unknown`; they are not inferred from arbitrary text.
+
+Public logs contain these validated enums/booleans, coordinates, counts and process
+exit code, never exception text, test titles, service bodies, credentials, URLs or
+storage state. Raw logs/traces remain prohibited. Offline hostile-input tests and
+actual isolated Playwright reporter checks verify this boundary.
 
 Only the existing verified metadata-only `summary.json` is uploaded. It reports
 the child process result, not cleanup or overall job success. The aggregate job
@@ -171,3 +179,17 @@ lock, so no other deployment may run concurrently during this verification.
 Offline check: `node --test offline-tests/branch-verification.test.mjs`.
 All guard tests use fabricated events/responses, disposable local files and child
 process doubles. They do not authenticate, make network requests or run live tests.
+
+
+## Native tree regression repairs
+
+The normal reorder test now targets the parent-owned sibling insertion gap and
+requires its selected marker before releasing the pointer. It then asserts exact
+direct-child order and the total button count, preventing accidental nesting from
+passing on flattened descendant order. This is a correction to the test's native
+drop coordinates, not a drag/drop skip or relaxed assertion.
+
+The web source contains a separate actual-component regression for pending CSS
+commits during native mouse down/up. Source-side browser evidence and the staged
+full-suite result must be reported separately; local reproduction does not prove
+that every historical CI failure had the same cause.

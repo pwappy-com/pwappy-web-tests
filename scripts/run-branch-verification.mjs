@@ -9,6 +9,7 @@ import { assertRunnableSelection } from './branch-verification-plan.mjs';
 import { guard, MATRIX, POINTS_ENDPOINT } from './branch-verification-guard.mjs';
 import { assertFreshPremiumAuthCache, assertNoRegisteredGeminiKey, PremiumKeyPreflightError } from './premium-key-preflight.mjs';
 const require = createRequire(import.meta.url);
+const { readDiagnostics } = require('./branch-safe-diagnostics.cjs');
 const { sourceLocations } = require('./branch-safe-locations.cjs');
 export function invocation(suite, browser, os, phase, root, env) {
   const entry = MATRIX.find(item => item.browser === browser && item.os === os);
@@ -26,6 +27,7 @@ export function invocation(suite, browser, os, phase, root, env) {
     DOTENV_CONFIG_PATH: join(root, 'absent.env'),
     PWAPPY_BRANCH_OUTPUT_DIR: join(root, 'results'), PWAPPY_BRANCH_COUNTS_PATH: join(root, 'counts.json'),
     PWAPPY_BRANCH_PROGRESS_PATH: join(root, 'progress.json'),
+    PWAPPY_BRANCH_DIAGNOSTICS_PATH: join(root, 'diagnostics.json'),
     PWAPPY_BRANCH_FAILURES_PATH: join(root, 'failures.json') };
   return { childEnv, args: [require.resolve('@playwright/test/cli'), 'test',
     phase === 'tests' ? `tests/specs/${suite}` : 'tests/tools/a0-cleanup-all-apps.spec.ts',
@@ -85,7 +87,7 @@ export async function run(suite, browser, os, phase, env = process.env, dependen
   // Do not signal started until the read-only Premium key check has succeeded.
   // The workflow's app cleanup is therefore also blocked for protected accounts.
   if (phase === 'tests') appendFileSync(env.GITHUB_OUTPUT, 'started=true\n');
-  // Suppress all raw child output. Only strict numeric counts are echoed below.
+  // Suppress all raw child output. Only validated counts, coordinates and enums are echoed below.
   let previousProgress;
   let invalidProgress = false;
   const progress = () => {
@@ -112,6 +114,8 @@ export async function run(suite, browser, os, phase, env = process.env, dependen
     }
   } else throw new Error('Branch progress unavailable');
   const failures = sourceLocations().validate(JSON.parse(readFileSync(childEnv.PWAPPY_BRANCH_FAILURES_PATH, 'utf8')));
+  const diagnostics = readDiagnostics(childEnv.PWAPPY_BRANCH_DIAGNOSTICS_PATH);
+  for (const item of diagnostics) console.log('Branch diagnostic: ' + JSON.stringify(item));
   for (const item of failures) console.log(`Branch failure: ${item.status} ${item.kind} ${item.file}:${item.line}`);
   console.log(`Branch ${suite} ${phase}: passed=${counts.passed} failed=${counts.failed} skipped=${counts.skipped} timedOut=${counts.timedOut} interrupted=${counts.interrupted}; exit=${exit}`);
   return exit || (counts.passed === 0 || counts.failed + counts.timedOut + counts.interrupted > 0 ? 1 : 0);

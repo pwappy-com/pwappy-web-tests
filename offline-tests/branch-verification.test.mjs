@@ -153,6 +153,7 @@ test('runner guard finishes before child starts, records exact exit and publishe
         const counts = readCounts(options.env.PWAPPY_BRANCH_COUNTS_PATH);
         const completed = Object.values(counts).reduce((sum, count) => sum + count, 0);
         writeFileSync(options.env.PWAPPY_BRANCH_PROGRESS_PATH, JSON.stringify({ total: completed, completed, counts }));
+        writeFileSync(options.env.PWAPPY_BRANCH_DIAGNOSTICS_PATH, '[]');
         writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]');
         return { status: 1, stdout: CANARY, stderr: CANARY };
       },
@@ -251,6 +252,7 @@ test('cleanup rechecks the marker after its child finishes and never marks anoth
         const counts = readCounts(options.env.PWAPPY_BRANCH_COUNTS_PATH);
         const completed = Object.values(counts).reduce((sum, count) => sum + count, 0);
         writeFileSync(options.env.PWAPPY_BRANCH_PROGRESS_PATH, JSON.stringify({ total: completed, completed, counts }));
+        writeFileSync(options.env.PWAPPY_BRANCH_DIAGNOSTICS_PATH, '[]');
         writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]'); return { status: 0 };
       },
     });
@@ -271,7 +273,7 @@ test('real Playwright child uses the branch config, filters raw output and repor
       return !stat.isSymbolicLink() && (stat.isDirectory() || /\.(?:ts|cjs|mjs)$/.test(source));
     } });
     mkdirSync(join(root, 'scripts'));
-    for (const file of ['branch-count-reporter.cjs', 'branch-safe-locations.cjs', 'branch-safe-sources.json']) {
+    for (const file of ['branch-count-reporter.cjs', 'branch-safe-diagnostics.cjs', 'branch-safe-locations.cjs', 'branch-safe-sources.json']) {
       copyFileSync(join(repo, 'scripts', file), join(root, 'scripts', file));
     }
     symlinkSync(join(repo, 'node_modules'), join(root, 'node_modules'), 'dir');
@@ -302,9 +304,10 @@ test('real Playwright child uses the branch config, filters raw output and repor
     assert.ok(logs.some(line => line.startsWith('Branch progress: total=3 completed=')));
     assert.match(logs.join('\n'), /passed=1 failed=1 skipped=1/);
     assert.match(logs.join('\n'), /Branch failure: failed definition tests\/specs\/normal\/editor-ui-basic.spec.ts:2/);
+    assert.ok(logs.some(line => line.startsWith('Branch diagnostic: ') && JSON.parse(line.slice('Branch diagnostic: '.length)).matcher === 'toBe'));
     assert.match(logs.join('\n'), /Branch failure: failed stack tests\/specs\/normal\/editor-ui-basic.spec.ts:2/);
     assert.doesNotMatch(logs.join('\n'), new RegExp(CANARY));
-    assert.doesNotMatch(logs.join('\n'), /Expected|Received|expect\(|toBe|Error:/);
+    assert.doesNotMatch(logs.join('\n'), /Expected|Received|expect\(|Error:/);
   } finally { console.log = originalLog; rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -359,7 +362,8 @@ test('runner rejects missing completion, inconsistent final counts and invalid i
           if (mode !== 'missing') writeFileSync(path, JSON.stringify({ total: mode === 'incomplete' ? 2 : 1, completed: 1, counts }));
           progress();
           writeFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, JSON.stringify(mode === 'mismatch' ? { ...counts, passed: 2 } : counts));
-          writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]');
+          writeFileSync(options.env.PWAPPY_BRANCH_DIAGNOSTICS_PATH, '[]');
+        writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]');
           return { status: 0 };
         },
       }), /branch progress/i);

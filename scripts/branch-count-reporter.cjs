@@ -1,11 +1,13 @@
 'use strict';
-// Discard test titles, errors, stdout/stderr, attachments and service data.
+// Discard raw titles/errors/output; retain only validated fixed diagnostic enums.
 const { writeFileSync, renameSync } = require('node:fs');
+const diagnostics = require('./branch-safe-diagnostics.cjs');
 const { sourceLocations, statuses } = require('./branch-safe-locations.cjs');
 module.exports = class BranchCountReporter {
   constructor() {
     this.counts = { passed: 0, failed: 0, skipped: 0, timedOut: 0, interrupted: 0 };
     this.failures = [];
+    this.diagnostics = [];
     this.sources = sourceLocations();
   }
   onBegin(_config, suite) {
@@ -23,6 +25,11 @@ module.exports = class BranchCountReporter {
     writeFileSync(target + '.tmp', JSON.stringify({ total: this.total, completed, counts: this.counts }), { mode: 0o600 });
     renameSync(target + '.tmp', target);
   }
+  onStdOut(chunk, test) {
+    const location = this.sources.location(test?.location?.file, test?.location?.line);
+    const helper = diagnostics.parseHelper(chunk);
+    if (location && helper && this.diagnostics.length < diagnostics.LIMIT) this.diagnostics.push({ ...location, ...helper });
+  }
   onTestEnd(test, result) {
     if (!Object.hasOwn(this.counts, result.status)) throw new Error('Unknown test status');
     this.counts[result.status]++;
@@ -33,11 +40,21 @@ module.exports = class BranchCountReporter {
       if (location && this.failures.length < 256) this.failures.push({ kind, status: result.status, ...location });
     };
     add('definition', definition);
+    if (definition) {
+      const errors = (result.errors || []).slice(0, 5);
+      if (!errors.length) errors.push(undefined);
+      for (const error of errors) {
+        if (this.diagnostics.length < diagnostics.LIMIT) this.diagnostics.push({
+          kind: 'error', status: result.status, ...definition, ...diagnostics.classify(error, result.status) });
+      }
+    }
     for (const error of (result.errors || []).slice(0, 5)) {
       for (const location of this.sources.fromStack(error.stack)) add('stack', location);
     }
   }
   onEnd() {
+    if (process.env.PWAPPY_BRANCH_DIAGNOSTICS_PATH) writeFileSync(process.env.PWAPPY_BRANCH_DIAGNOSTICS_PATH,
+      JSON.stringify(diagnostics.validate(this.diagnostics, this.sources)), { flag: 'wx', mode: 0o600 });
     writeFileSync(process.env.PWAPPY_BRANCH_COUNTS_PATH, JSON.stringify(this.counts), { flag: 'wx', mode: 0o600 });
     writeFileSync(process.env.PWAPPY_BRANCH_FAILURES_PATH, JSON.stringify(this.sources.validate(this.failures)), { flag: 'wx', mode: 0o600 });
   }
