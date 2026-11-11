@@ -1,4 +1,5 @@
 // RAW workflow contracts: synthetic Bash only, no accounts, credentials, or service calls.
+import { restoreApprovedMainPushCi } from './main-push-ci-contract.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -102,7 +103,7 @@ for (const value of ['true', 'false']) {
 }
 
 function assertExactPriorWorkflow(source) {
-    const restored = restoreApprovedPremiumPointPreparation(source);
+    const restored = restoreApprovedPremiumPointPreparation(restoreApprovedMainPushCi(source));
     const hash = createHash('sha1').update('blob ' + Buffer.byteLength(restored) + '\0').update(restored).digest('hex');
     assert.equal(hash, 'd05e1f4b977f77328c62b79a365fe72c40c94a0f');
     return restored;

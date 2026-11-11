@@ -30,7 +30,11 @@ test('native mixed-store save survives a completely fresh browser context', asyn
   await nativeCall(page, 'pwappy_upsert_test', { name: 'Durable test definition', code: 'export default async function runTest(){ if(2 + 2 !== 4) throw new Error("arithmetic"); }' });
   await nativeCall(page, 'pwappy_upsert_api_mock', { path: '/isolated-persisted-api', method: 'GET', response: '{"persisted":true}' });
   await nativeCall(page, 'pwappy_upsert_browser_mock', { path: '__persistedFixture.value', browserMockType: 'property', response: '"durable"' });
+  // Save a deliberately pending render flag through the real reducer. A fresh
+  // editor must reset it itself, rather than rely on a later incidental UI action.
+  await page.locator('app-container').evaluate((host: any) => host.templateJsonStore.dispatch(host.templateJsonSlice.reload()));
   const changed = await readStores(page);
+  expect(changed.templateItems.forceReload).toBe(true);
   for (const field of persistedFields) expect(changed[field], `${field} must contain a real local edit`).not.toEqual(before[field]);
   expect(await nativeCall(page, 'pwappy_get_save_status')).toMatchObject({ dirty: true });
   expect(await saveCurrent(page)).toMatchObject({ success: true, dirty: false, serverSaved: true, serverVerified: true });

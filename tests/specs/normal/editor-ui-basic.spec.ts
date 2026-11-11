@@ -401,7 +401,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
 
     test('ドラッグ＆ドロップ：座標操作による要素の順序入れ替え', async ({ editorPage, editorHelper, isMobile }) => {
 
-        test.skip(!!process.env.CI, 'CI環境ではマウス座標によるドラッグ＆ドロップが不安定なためスキップします。');
+        test.skip(!!process.env.CI && process.env.PWAPPY_FULL_BRANCH_VERIFICATION !== 'true', 'CI環境ではマウス座標によるドラッグ＆ドロップが不安定なためスキップします。');
 
         await editorHelper.handleSnapshotRestoreDialog();
 

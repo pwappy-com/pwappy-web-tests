@@ -1,7 +1,8 @@
 # Safe, reproducible isolated WebMCP runs
 
 The existing `e2e-tests.yml` intentionally invokes the all-app cleanup script for
-its generated test accounts. That workflow and cleanup script are unchanged.
+its generated test accounts. The cleanup script and account scope are retained;
+the release workflow adds a main-push trigger to resume automatic verification.
 Do not confuse that intended cleanup with the separate isolated workflow here.
 This document does not authorize a live account, publication, PP charges, or deletion.
 
@@ -66,7 +67,8 @@ or deploying another repository.
 
 Adding this file does not provision a runner, register its label, push a branch,
 or start a GitHub Actions job. Those actions have not been performed by this work.
-The existing normal/premium CI and cleanup are left intact.
+The existing normal/premium tests and cleanup are retained. The main-push trigger
+and separate branch verification are documented in `docs/webmcp-branch-verification.md`.
 
 ## Discovery boundary regression check
 

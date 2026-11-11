@@ -14,6 +14,10 @@ concurrency:
 
 # ワークフローが実行されるトリガーを定義
 on:
+  # mainへのマージ後に全Normal/Premiumテストを自動実行する。
+  push:
+    branches:
+      - main
   # 定期実行 (schedule)
   schedule:
     # 3時間毎に実行 (JST 10:00, 13:00, 16:00, 19:00, 22:00, 翌5:00, 8:00) -> Ubuntu専用にする
@@ -159,6 +163,9 @@ jobs:
             elif [[ "${{ github.event.schedule }}" == "0 18 * * *" ]]; then
               echo 'matrix=[{"os": "windows-latest", "browser": "chromium", "binary": "chromium"}, {"os": "macos-latest", "browser": "webkit", "binary": "webkit"}, {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}]' >> $GITHUB_OUTPUT
             fi
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            # mainへのpushは手動入力に依存せず全OS/ブラウザを検証する。
+            echo 'matrix=[{"os": "ubuntu-latest", "browser": "chromium", "binary": "chromium"}, {"os": "ubuntu-latest", "browser": "mobile-chrome", "binary": "chromium"}, {"os": "windows-latest", "browser": "chromium", "binary": "chromium"}, {"os": "macos-latest", "browser": "webkit", "binary": "webkit"}, {"os": "macos-latest", "browser": "mobile-safari", "binary": "webkit"}]' >> $GITHUB_OUTPUT
           else
             # 手動実行 (workflow_dispatch)
             OS_INPUT="${{ inputs.os || github.event.inputs.os }}"
@@ -185,6 +192,9 @@ jobs:
             else
               echo "run_normal=true" >> $GITHUB_OUTPUT
             fi
+          elif [ "${{ github.event_name }}" == "push" ]; then
+            echo "run_normal=true" >> $GITHUB_OUTPUT
+            echo "run_premium=true" >> $GITHUB_OUTPUT
           elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
             # 旧仕様の event.inputs と新仕様 inputs を両方カバー
             SUITE="${{ inputs.test_suite || github.event.inputs.test_suite }}"

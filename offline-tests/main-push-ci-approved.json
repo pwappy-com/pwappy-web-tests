@@ -1,0 +1,14 @@
+[
+  {
+    "before": "on:\n  # 定期実行 (schedule)\n",
+    "after": "on:\n  # mainへのマージ後に全Normal/Premiumテストを自動実行する。\n  push:\n    branches:\n      - main\n  # 定期実行 (schedule)\n"
+  },
+  {
+    "before": "          else\n            # 手動実行 (workflow_dispatch)\n",
+    "after": "          elif [[ \"${{ github.event_name }}\" == \"push\" ]]; then\n            # mainへのpushは手動入力に依存せず全OS/ブラウザを検証する。\n            echo 'matrix=[{\"os\": \"ubuntu-latest\", \"browser\": \"chromium\", \"binary\": \"chromium\"}, {\"os\": \"ubuntu-latest\", \"browser\": \"mobile-chrome\", \"binary\": \"chromium\"}, {\"os\": \"windows-latest\", \"browser\": \"chromium\", \"binary\": \"chromium\"}, {\"os\": \"macos-latest\", \"browser\": \"webkit\", \"binary\": \"webkit\"}, {\"os\": \"macos-latest\", \"browser\": \"mobile-safari\", \"binary\": \"webkit\"}]' >> $GITHUB_OUTPUT\n          else\n            # 手動実行 (workflow_dispatch)\n"
+  },
+  {
+    "before": "          elif [ \"${{ github.event_name }}\" == \"workflow_dispatch\" ]; then\n",
+    "after": "          elif [ \"${{ github.event_name }}\" == \"push\" ]; then\n            echo \"run_normal=true\" >> $GITHUB_OUTPUT\n            echo \"run_premium=true\" >> $GITHUB_OUTPUT\n          elif [ \"${{ github.event_name }}\" == \"workflow_dispatch\" ]; then\n"
+  }
+]

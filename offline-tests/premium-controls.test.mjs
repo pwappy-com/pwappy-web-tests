@@ -1,4 +1,5 @@
 // Source + shell contracts only: no application login, browser state, or service requests.
+import { restoreApprovedMainPushCi } from './main-push-ci-contract.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -55,7 +56,7 @@ test('Premium retry environment reaches validated CLI while worker and budget st
     assert.doesNotMatch(runBlock, /TEST_WORKERS|--timeout|continue-on-error/);
 });
 test('only exact reviewed retry edits are reversible to the base workflow Git blob', () => {
-    const restored = restoreApprovedPremiumRepairs(workflow);
+    const restored = restoreApprovedPremiumRepairs(restoreApprovedMainPushCi(workflow));
     const hash = createHash('sha1').update('blob ' + Buffer.byteLength(restored) + '\0').update(restored).digest('hex');
     assert.equal(hash, '0d269ff2f0e5ecac66e73efb274dade61016bc70');
     assert.throws(() => restoreApprovedPremiumRepairs(workflow.replace('--workers=1 --retries="$RETRIES"', '--workers=2 --retries="$RETRIES"')));

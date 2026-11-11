@@ -277,7 +277,7 @@ test.describe('AIエージェント機能：UI・連携・コマンド反映テ�
     test('手動実行モード：プロンプトのコピーと応答の貼り付けUI', async ({ editorPage }) => {
 
         // CI環境（GitHub Actionsなど）の場合のみスキップ
-        test.skip(!!process.env.CI, 'CI環境ではクリップボード権限の制限によりテストが失敗するためスキップします。ローカルでは実行されます。');
+        test.skip(!!process.env.CI && process.env.PWAPPY_FULL_BRANCH_VERIFICATION !== 'true', 'CI環境ではクリップボード権限の制限によりテストが失敗するためスキップします。ローカルでは実行されます。');
 
         await test.step('1. 手動モードで指示を開始', async () => {
             await editorPage.locator('#fab-bottom-menu-box').click();

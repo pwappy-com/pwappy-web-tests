@@ -1,3 +1,4 @@
+import { restoreApprovedMainPushCi } from './main-push-ci-contract.mjs';
 import { restoreApprovedWebMcpIntegration } from './webmcp-integration-contract.mjs';
 // Oracle/source contracts only. Actual formatting is verified by staging E2E.
 import { test } from 'node:test';
@@ -137,7 +138,7 @@ test('legacy contracts change only their explicit four-to-six scenario counts an
     }
 });
 test('live workflow and test budget stay unchanged', () => {
-    assert.equal(blob(read('.github/workflows/e2e-tests.yml')), '915228b40569c83bdd1b0e8db6ef966360c67568');
+    assert.equal(blob(restoreApprovedMainPushCi(read('.github/workflows/e2e-tests.yml'))), '915228b40569c83bdd1b0e8db6ef966360c67568');
     assert.equal(blob(restoreApprovedWebMcpIntegration('playwright.config.ts', read('playwright.config.ts'))), '66a03298a97609c171390f29d37955ccf086cf76');
     assert.equal(blob(restoreApprovedWebMcpIntegration('package.json', read('package.json'))), 'cb731d5ce2654976d0b24f52bd975c1fd2272e8f');
 });
