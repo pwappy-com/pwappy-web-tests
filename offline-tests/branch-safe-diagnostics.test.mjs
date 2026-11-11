@@ -120,3 +120,34 @@ test('editor startup allows only the exact enum and boolean snapshot at both bou
   }
   assert.equal(parseHelper(line('EditorStartupFailure', { ...startup, extra: secret })), null);
 });
+
+test('drag diagnostics allow only exact boolean/enum schema at both boundaries', () => {
+  const drag = { phase: 'before-assert', captured: true, targetExists: true, targetInScrollport: true,
+    pointerInScrollport: true, dragImageActive: true, dragActive: true, sourceMatched: true,
+    siblingMarkerSelected: false, hit: 'target-gap' };
+  const parsed = parseHelper(line('EditorDragState', drag));
+  assert.deepEqual(parsed, { kind: 'editor-drag', ...drag });
+  assert.deepEqual(validate([{ ...location, ...parsed }]), [{ ...location, ...parsed }]);
+  for (const key of Object.keys(drag)) {
+    for (const invalid of [secret, null, 123, {}, []]) {
+      assert.equal(parseHelper(line('EditorDragState', { ...drag, [key]: invalid })), null);
+      assert.throws(() => validate([{ ...location, ...parsed, [key]: invalid }]), /Invalid branch diagnostics/);
+    }
+    const missing = { ...drag }; delete missing[key];
+    assert.equal(parseHelper(line('EditorDragState', missing)), null);
+  }
+  for (const hit of ['target-gap', 'target-node', 'dragged-node', 'toolbar', 'outside', 'other']) {
+    assert.equal(parseHelper(line('EditorDragState', { ...drag, phase: 'assertion-failed', hit })).hit, hit);
+  }
+  for (const extra of [{ x: 1 }, { className: secret }, { url: secret }, { text: secret }]) {
+    assert.equal(parseHelper(line('EditorDragState', { ...drag, ...extra })), null);
+    assert.throws(() => validate([{ ...location, ...parsed, ...extra }]), /Invalid branch diagnostics/);
+  }
+  assert.equal(parseHelper(line('EditorDragState', drag) + secret), null);
+  assert.equal(parseHelper(line('EditorDragState', drag).repeat(2)), null);
+  const reporter = new Reporter();
+  reporter.onStdOut(line('EditorDragState', { ...drag, text: secret }), { location });
+  reporter.onStdOut(line('EditorDragState', drag), { location });
+  assert.equal(reporter.diagnostics.length, 1);
+  assert.doesNotMatch(JSON.stringify(reporter.diagnostics), /SECRET/);
+});

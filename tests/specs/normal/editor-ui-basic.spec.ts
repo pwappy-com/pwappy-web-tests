@@ -3,6 +3,7 @@ import * as path from 'path';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor, addVersion } from '../../tools/dashboard-helpers';
 import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';
+import { readSiblingDragSnapshot } from '../../tools/drag-state-diagnostics';
 import { getStorageStatePath } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
@@ -483,7 +484,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             const toolbox = editorPage.locator('tool-box');
             const toolboxContainer = toolbox.locator('.container');
             const toolboxItem = toolbox.locator(`tool-box-item[data-item-type="${componentName}"]`);
-            const layoutPanel = editorPage.locator('template-container .panel');
+            const layoutPanel = editorPage.locator('template-container #dom-tree');
 
             await editorHelper.openMoveingHandle('left');
 
@@ -584,7 +585,7 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
         await test.step('2. ドラッグ操作による順序反転（再進入スクロール発火版）', async () => {
             const btnTop = editorPage.locator('template-container .node[data-node-dom-id="ons-button2"]');
             const btnBottom = editorPage.locator('template-container .node[data-node-dom-id="ons-button1"]');
-            const layoutPanel = editorPage.locator('template-container .panel');
+            const layoutPanel = editorPage.locator('template-container #dom-tree');
             const targetInsertPoint = editorPage.locator('template-container .node[data-node-dom-id="ons-button1"] + .node-add-point');
 
             await btnTop.scrollIntoViewIfNeeded();
@@ -631,7 +632,19 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             }
             // A child insertion inside btnBottom can produce the same flattened
             // order while silently nesting buttons. Require the sibling marker.
-            await expect(targetInsertPoint).toHaveClass(/(?:^|\s)node-add-point-selected(?:\s|$)/);
+            const reportDragState = async (phase: 'before-assert' | 'assertion-failed') => {
+                const state = await editorPage.locator('template-container').evaluate(
+                    readSiblingDragSnapshot, { x: currentX, y: currentY }, { timeout: 1000 }
+                ).catch(() => readSiblingDragSnapshot(null, { x: 0, y: 0 }));
+                console.log('[EditorDragState] ' + JSON.stringify({ phase, ...state }));
+            };
+            await reportDragState('before-assert');
+            try {
+                await expect(targetInsertPoint).toHaveClass(/(?:^|\s)node-add-point-selected(?:\s|$)/);
+            } catch (error) {
+                await reportDragState('assertion-failed');
+                throw error;
+            }
             await pointerAction.up(finalBox?.x, finalBox?.y);
             await editorPage.waitForTimeout(500);
 

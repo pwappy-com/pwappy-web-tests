@@ -17,5 +17,8 @@ export function verificationPlan() {
       } else matrix.push(row);
     }
   }
+  // Run the known slow WebKit regression first without dropping any coverage.
+  const priority = row => row.suite === 'normal' && row.os === 'macos-latest' && row.browser === 'webkit';
+  matrix.sort((left, right) => Number(priority(right)) - Number(priority(left)));
   return { matrix, blocked };
 }

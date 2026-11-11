@@ -43,7 +43,13 @@ const navBools = ['failedDocument', 'responseSeen', 'committed', 'nonGetSeen', '
 const startupBools = ['captured', 'containerPresent', 'storePresent', 'starterVisible', 'messageVisible', 'initialSaveError', 'pageNodesPresent', 'navigatorNodesPresent'];
 const startupNullable = ['loading', 'empty', 'initialVersionInit', 'serverSaved', 'serverVerified'];
 const startupKeys = [...startupBools, ...startupNullable, 'saveStatus', 'errorClassification'].join(',');
+const dragBools = ['captured', 'targetExists', 'targetInScrollport', 'pointerInScrollport', 'dragImageActive', 'dragActive', 'sourceMatched', 'siblingMarkerSelected'];
+const dragKeys = ['phase', ...dragBools, 'hit'].join(',');
 function validHelper(value) {
+  if (value?.kind === 'editor-drag') return keys(value, 'kind,' + dragKeys)
+    && dragBools.every(key => typeof value[key] === 'boolean')
+    && member(value.phase, ['before-assert', 'assertion-failed'])
+    && member(value.hit, ['target-gap', 'target-node', 'dragged-node', 'toolbar', 'outside', 'other']);
   if (value?.kind === 'editor-startup') return keys(value, 'kind,' + startupKeys)
     && startupBools.every(key => typeof value[key] === 'boolean')
     && startupNullable.every(key => value[key] === null || typeof value[key] === 'boolean')
@@ -65,10 +71,15 @@ function validHelper(value) {
 }
 function parseHelper(chunk) {
   if (!(typeof chunk === 'string' || Buffer.isBuffer(chunk)) || chunk.length > 4096) return null;
-  const match = /^\[(dashboard-navigation-recovery|HttpFailure|EditorStartupFailure)\] (\{[^\r\n]*\})\r?\n?$/.exec(chunk.toString());
+  const match = /^\[(dashboard-navigation-recovery|HttpFailure|EditorStartupFailure|EditorDragState)\] (\{[^\r\n]*\})\r?\n?$/.exec(chunk.toString());
   if (!match) return null;
   try {
     const raw = JSON.parse(match[2]);
+    if (match[1] === 'EditorDragState') {
+      if (!keys(raw, dragKeys)) return null;
+      const value = { kind: 'editor-drag', ...raw };
+      return validHelper(value) ? value : null;
+    }
     if (match[1] === 'EditorStartupFailure') {
       if (!keys(raw, startupKeys)) return null;
       const value = { kind: 'editor-startup', ...raw };
