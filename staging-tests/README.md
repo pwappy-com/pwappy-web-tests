@@ -1,8 +1,9 @@
 # Native WebMCP staging persistence verification
 
-Run only through `npm run test:webmcp:staging`, in the branch workflow after the
-normal Ubuntu Chromium suite succeeds and before its account cleanup. This
-supplement is outside the default `tests/` directory. It is not selected by
+Run only through `npm run test:webmcp:staging`, in the branch workflow before the
+normal Ubuntu Chromium suite. This early gate catches startup/persistence
+regressions before the long suite. The serial matrix stops remaining combinations
+on failure; a stopped or incomplete run never qualifies for merge. This supplement is outside the default `tests/` directory. It is not selected by
 ordinary `npm test`, normal/Premium selectors or the isolated WebMCP runner.
 `playwright test --config=playwright.staging-native.config.ts --list` is safe,
 credential-free discovery, not a live execution.
@@ -35,8 +36,9 @@ credential-free discovery, not a live execution.
   AI credentials, AI generation, archive/restore or real-point purchase occurs.
 - Cleanup deletes only this newly created app through the existing UI helper,
   including an uncertain result of its single create attempt. Mutations are
-  never automatically replayed. The workflow's existing stable-account cleanup
-  still runs even if the supplement fails.
+  never automatically replayed. If this early smoke fails before the normal
+  suite starts, its own finally block handles only its new app. The workflow's
+  wider stable-account cleanup runs only when the normal suite actually started.
 
 ## What this verifies
 
@@ -57,8 +59,10 @@ The UI helper may evaluate DOM for its existing setup behavior. That is not the
 native transport and is not presented as such.
 
 The wrapper suppresses all child stdout/stderr. Trace, screenshots, video and
-attachments are disabled. It prints only validated numeric counts and one fixed
-phase label. Raw application JSON, asset bytes, cookies and backend errors stay
+attachments are disabled. It prints only validated numeric counts, a fixed
+phase label and strictly allowlisted startup diagnostic metadata. Normal and
+Premium suites emit numeric progress every 30 seconds, bounded to two hours;
+raw child output is still ignored and final completeness is separately checked. Raw application JSON, asset bytes, cookies and backend errors stay
 out of public logs and artifacts.
 
 ## Offline validation and limits

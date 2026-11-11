@@ -10,8 +10,9 @@ import { pathToFileURL } from 'node:url';
 import { guard } from './branch-verification-guard.mjs';
 import { invocation, readCounts } from './run-branch-verification.mjs';
 const require = createRequire(import.meta.url);
+const { validateDiagnostic, validateCleanup } = require('./staging-startup-diagnostic.cjs');
 export const PHASES = ['not-started', 'guard', 'native-preflight', 'authentication', 'create-app',
-  'native-discovery', 'native-edit', 'asset-upload-read', 'save', 'fresh-context-readback', 'cleanup', 'complete'];
+  'editor-startup', 'native-discovery', 'native-edit', 'asset-upload-read', 'save', 'fresh-context-readback', 'cleanup', 'complete'];
 async function unusedPort() {
   const server = createServer();
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -30,6 +31,8 @@ export function nativeInvocation(env, root, port, token) {
   const { childEnv } = invocation('normal', 'chromium', 'ubuntu-latest', 'tests', root, env);
   // Reuse normal/Linux/Chromium identity and PP-preparation receipt, never a new account.
   Object.assign(childEnv, { PWAPPY_STAGING_NATIVE_GUARDED: 'true', PWAPPY_STAGING_NATIVE_PORT: String(port),
+    PWAPPY_STAGING_NATIVE_CLEANUP_PATH: join(root, 'cleanup-outcome.json'),
+    PWAPPY_STAGING_NATIVE_DIAGNOSTIC_PATH: join(root, 'startup-diagnostic.json'),
     PWAPPY_STAGING_NATIVE_TOKEN: token, PWAPPY_STAGING_NATIVE_PHASE_PATH: join(root, 'phase.json') });
   return { childEnv, args: [require.resolve('@playwright/test/cli'), 'test', '--config=playwright.staging-native.config.ts', '--workers=1', '--retries=0'] };
 }
@@ -45,6 +48,21 @@ export async function run(env = process.env, dependencies = {}) {
   let phase = 'not-started';
   try { const value = JSON.parse(readFileSync(childEnv.PWAPPY_STAGING_NATIVE_PHASE_PATH, 'utf8')); if (PHASES.includes(value)) phase = value; } catch {}
   console.log(`Native staging: phase=${phase} passed=${counts.passed} failed=${counts.failed} skipped=${counts.skipped} timedOut=${counts.timedOut} interrupted=${counts.interrupted}; exit=${exit}`);
+  let cleanup = null;
+  try {
+    const raw = readFileSync(childEnv.PWAPPY_STAGING_NATIVE_CLEANUP_PATH, 'utf8');
+    if (raw.length <= 1024) cleanup = validateCleanup(JSON.parse(raw));
+  } catch {}
+  console.log(`Native cleanup: ${cleanup ? JSON.stringify(cleanup) : 'unknown'}`);
+  if (phase === 'editor-startup') {
+    let diagnostic = null;
+    try {
+      const raw = readFileSync(childEnv.PWAPPY_STAGING_NATIVE_DIAGNOSTIC_PATH, 'utf8');
+      if (raw.length <= 8192) diagnostic = validateDiagnostic(JSON.parse(raw));
+    } catch {}
+    if (diagnostic) console.log(`Native startup diagnostic: ${JSON.stringify(diagnostic)}`);
+    else console.log('Native startup diagnostic: unavailable');
+  }
   if (phase === 'native-preflight') console.error('::error::Native Chrome CDP WebMCP is required. Check Chrome installation/version; no adapter fallback is used.');
   return exit || (counts.passed !== 1 || counts.failed + counts.timedOut + counts.interrupted + counts.skipped > 0 || phase !== 'complete' ? 1 : 0);
 }

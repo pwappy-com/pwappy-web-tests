@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import { MATRIX, STAGING_ORIGIN, LOGIN_ENDPOINT, POINTS_ENDPOINT, BRANCH,
   validateConfiguration, verifyStage, readPin } from '../scripts/branch-verification-guard.mjs';
-import { invocation, readCounts, run } from '../scripts/run-branch-verification.mjs';
+import { invocation, readCounts, readProgress, spawnWithProgress, run } from '../scripts/run-branch-verification.mjs';
 const require = createRequire(import.meta.url);
 const SOURCE = 'a'.repeat(40), TESTS = 'b'.repeat(40), CANARY = 'SYNTHETIC_SECRET_NEVER_ECHO';
 const pin = { sourceCommit: SOURCE };
@@ -146,6 +146,9 @@ test('runner guard finishes before child starts, records exact exit and publishe
       spawn: (_executable, _args, options) => {
         calls.push('spawn'); assert.equal(options.stdio, 'ignore');
         writeFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, JSON.stringify({ passed: 3, failed: 1, skipped: 2, timedOut: 0, interrupted: 0 }));
+        const counts = readCounts(options.env.PWAPPY_BRANCH_COUNTS_PATH);
+        const completed = Object.values(counts).reduce((sum, count) => sum + count, 0);
+        writeFileSync(options.env.PWAPPY_BRANCH_PROGRESS_PATH, JSON.stringify({ total: completed, completed, counts }));
         writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]');
         return { status: 1, stdout: CANARY, stderr: CANARY };
       },
@@ -241,6 +244,9 @@ test('cleanup rechecks the marker after its child finishes and never marks anoth
       spawn: (_executable, _args, options) => {
         calls.push('cleanup');
         writeFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, JSON.stringify({ passed: 1, failed: 0, skipped: 0, timedOut: 0, interrupted: 0 }));
+        const counts = readCounts(options.env.PWAPPY_BRANCH_COUNTS_PATH);
+        const completed = Object.values(counts).reduce((sum, count) => sum + count, 0);
+        writeFileSync(options.env.PWAPPY_BRANCH_PROGRESS_PATH, JSON.stringify({ total: completed, completed, counts }));
         writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]'); return { status: 0 };
       },
     });
@@ -276,21 +282,84 @@ test('real Playwright child uses the branch config, filters raw output and repor
     // Only this disposable copy changes. No browser fixture or service operation runs.
     writeFileSync(join(root, file), `import { test, expect } from '@playwright/test';
       test('SYNTHETIC_SECRET_NEVER_ECHO', () => { console.log('SYNTHETIC_SECRET_NEVER_ECHO'); expect(1).toBe(2); });
-      test('passing', () => { expect(1).toBe(1); });
+      test('passing', async () => { await new Promise(resolve => setTimeout(resolve, 100)); expect(1).toBe(1); });
       test.skip('applicability skip', () => {});`);
     console.log = line => logs.push(line);
     const status = await run('normal', 'chromium', 'ubuntu-latest', 'tests', { ...env,
       RUNNER_TEMP: root, GITHUB_OUTPUT: output, NODE_OPTIONS: `--require=${guardPath}`,
       PATH: process.env.PATH, HOME: root }, {
       guard: async () => {},
-      spawn: (executable, args, options) => spawnSync(executable, args.map(value => value === 'tests/specs/normal' ? file : value),
-        { ...options, cwd: root, timeout: 30000 }),
+      spawn: (executable, args, options, progress) => spawnWithProgress(executable, args.map(value => value === 'tests/specs/normal' ? file : value),
+        { ...options, cwd: root, timeout: 30000 }, progress, {
+          setInterval: callback => setInterval(callback, 10),
+        }),
     });
     assert.equal(status, 1);
+    assert.ok(logs.some(line => line.startsWith('Branch progress: total=3 completed=')));
     assert.match(logs.join('\n'), /passed=1 failed=1 skipped=1/);
     assert.match(logs.join('\n'), /Branch failure: failed definition tests\/specs\/normal\/editor-ui-basic.spec.ts:2/);
     assert.match(logs.join('\n'), /Branch failure: failed stack tests\/specs\/normal\/editor-ui-basic.spec.ts:2/);
     assert.doesNotMatch(logs.join('\n'), new RegExp(CANARY));
     assert.doesNotMatch(logs.join('\n'), /Expected|Received|expect\(|toBe|Error:/);
+  } finally { console.log = originalLog; rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test('progress snapshots reject nonnumeric, extra, oversized, inconsistent and regressing data', () => {
+  const root = mkdtempSync(join(tmpdir(), 'branch-progress-schema-'));
+  const path = join(root, 'progress.json');
+  const good = { total: 3, completed: 1, counts: { passed: 1, failed: 0, skipped: 0, timedOut: 0, interrupted: 0 } };
+  try {
+    writeFileSync(path, JSON.stringify(good)); assert.deepEqual(readProgress(path), good);
+    for (const value of [null, [], { ...good, extra: CANARY }, { ...good, total: CANARY },
+      { ...good, total: 100001 }, { ...good, total: 0 }, { ...good, completed: 2 },
+      { ...good, counts: { ...good.counts, passed: -1 } },
+      { ...good, counts: { ...good.counts, passed: 1.5 } },
+      { ...good, counts: { ...good.counts, extra: CANARY } }]) {
+      writeFileSync(path, JSON.stringify(value)); assert.throws(() => readProgress(path));
+    }
+    writeFileSync(path, JSON.stringify(good));
+    assert.throws(() => readProgress(path, { ...good, total: 4 }));
+    assert.throws(() => readProgress(path, { ...good, counts: { ...good.counts, passed: 2 } }));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('asynchronous child reporting is bounded, ignores raw streams, and clears timer on close/error', async () => {
+  const { EventEmitter } = await import('node:events');
+  for (const failed of [false, true]) {
+    const child = new EventEmitter(); let callback, cleared = 0, updates = 0;
+    const result = spawnWithProgress('synthetic', [], { stdio: 'ignore' }, () => updates++, {
+      spawn: (_executable, _args, options) => { assert.equal(options.stdio, 'ignore'); return child; },
+      setInterval: (fn, milliseconds) => { callback = fn; assert.equal(milliseconds, 30000); return 123; },
+      clearInterval: timer => { assert.equal(timer, 123); cleared++; },
+    });
+    for (let i = 0; i < 1000; i++) callback();
+    assert.equal(updates, 240);
+    if (failed) child.emit('error', new Error(CANARY)); else child.emit('close', 0);
+    assert.deepEqual(await result, { status: failed ? 1 : 0 }); assert.equal(cleared, 1);
+  }
+});
+
+test('runner rejects missing completion, inconsistent final counts and invalid intermediate progress', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'branch-progress-final-'));
+  const output = join(root, 'output'); writeFileSync(output, '');
+  const counts = { passed: 1, failed: 0, skipped: 0, timedOut: 0, interrupted: 0 };
+  const originalLog = console.log, logs = []; console.log = line => logs.push(line);
+  try {
+    for (const mode of ['missing', 'incomplete', 'mismatch', 'invalid-intermediate']) {
+      await assert.rejects(run('normal', 'chromium', 'ubuntu-latest', 'tests', { ...env, RUNNER_TEMP: root, GITHUB_OUTPUT: output }, {
+        guard: async () => {},
+        spawn: (_executable, _args, options, progress) => {
+          const path = options.env.PWAPPY_BRANCH_PROGRESS_PATH;
+          if (mode === 'invalid-intermediate') { writeFileSync(path, CANARY); progress(); }
+          if (mode !== 'missing') writeFileSync(path, JSON.stringify({ total: mode === 'incomplete' ? 2 : 1, completed: 1, counts }));
+          progress();
+          writeFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, JSON.stringify(mode === 'mismatch' ? { ...counts, passed: 2 } : counts));
+          writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]');
+          return { status: 0 };
+        },
+      }), /branch progress/i);
+    }
+    assert.doesNotMatch(logs.join('\n'), new RegExp(CANARY));
   } finally { console.log = originalLog; rmSync(root, { recursive: true, force: true }); }
 });

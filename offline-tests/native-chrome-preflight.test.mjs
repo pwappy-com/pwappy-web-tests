@@ -44,7 +44,7 @@ test('probe rejects unsafe version metadata and any nonblank page before native 
     assert.ok(!probe.calls.includes('WebMCP.enable')); assert.equal(probe.calls.at(-1), 'close');
   }
 });
-test('early workflow probe precedes live suite with no secret environment; guarded supplement remains after it', () => {
+test('early workflow probe precedes live suite with no secret environment; guarded persistence smoke also precedes it', () => {
   const workflow = readFileSync(new URL('../.github/workflows/webmcp-branch-verification.yml', import.meta.url), 'utf8');
   const start = workflow.indexOf('      - name: Probe native WebMCP');
   const end = workflow.indexOf('      - name:', start + 1);
@@ -54,7 +54,8 @@ test('early workflow probe precedes live suite with no secret environment; guard
   assert.match(step, /matrix\.suite == 'normal'.*matrix\.os == 'ubuntu-latest'.*matrix\.browser == 'chromium'/);
   assert.match(step, /run: node scripts\/preflight-native-chrome\.cjs/);
   assert.doesNotMatch(step, /secrets\.|\benv:/);
-  assert.ok(workflow.indexOf('      - name: Verify native WebMCP against real staged persistence') > workflow.indexOf('      - name: Run complete suite'));
+  assert.ok(workflow.indexOf('      - name: Verify native WebMCP against real staged persistence') < workflow.indexOf('      - name: Run complete suite'));
+  assert.match(workflow, /^      fail-fast: true$/m);
   const source = readFileSync(new URL('../scripts/preflight-native-chrome.cjs', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /process\.env|\.goto\(|\.evaluate\(|document\.modelContext/);
   assert.match(source, /console\.log\(`Native WebMCP Chrome preflight PASS; Chrome=\$\{version\}`\)/);

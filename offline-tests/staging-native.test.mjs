@@ -109,3 +109,82 @@ test('native transport source has no page evaluation or mocks, isolated evidence
   assert.match(step, /success\(\).*matrix\.suite == 'normal'.*matrix\.os == 'ubuntu-latest'.*matrix\.browser == 'chromium'/);
   assert.match(step, /npm run test:webmcp:staging/);
 });
+
+const { gzipSync } = require('node:zlib');
+const { FIELDS, emptyDiagnostic, ownEditorRequest, responseEvidence, sanitizeSnapshot, validateDiagnostic } = require('../scripts/staging-startup-diagnostic.cjs');
+const encode = value => gzipSync(JSON.stringify(value)).toString('base64');
+test('startup evidence compares only eight fixed decoded fields and never exports payloads', () => {
+  const secret = 'SYNTHETIC_PRIVATE_CANARY';
+  const sent = Object.fromEntries(FIELDS.map(field => [field, encode({ synthetic: secret, a: 1 })]));
+  const details = { ...sent, editorJsonVersion: 'aW5pdA==', unexpected: secret };
+  details.testItems = encode({ synthetic: secret, a: 2 });
+  delete details.toolBoxItems;
+  const result = responseEvidence('GET', 200, { code: 200, details, message: secret }, sent);
+  assert.equal(result.fields.testItems.equal, false);
+  assert.equal(result.fields.appSettings.equal, true);
+  assert.deepEqual(result.fields.toolBoxItems, { present: false, equal: null });
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(secret));
+  assert.equal(result.editorJsonVersionPresent, true);
+  assert.equal(responseEvidence('GET', 200, { details: { editorJson: details } }, sent).fields.appSettings.present, false);
+  assert.equal(responseEvidence('GET', 200, { details: { appSettings: secret } }, sent).fields.appSettings.equal, null);
+});
+test('startup response observation is confined to exact owned app and endpoint', () => {
+  const endpoint = `${ORIGIN}/pwappy-api/rest/v1/editor-json`;
+  const get = `${endpoint.replace('/rest/', '/read/')}?appKey=${APP}&version=${VERSION}`;
+  assert.equal(ownEditorRequest(get, 'GET', APP), true);
+  assert.equal(ownEditorRequest(endpoint, 'PUT', APP, { appKey: APP, version: VERSION }), true);
+  for (const url of [get + '&extra=secret', get.replace(APP, 'existing'), get.replace(ORIGIN, 'https://example.org'), get + '#x']) {
+    assert.equal(ownEditorRequest(url, 'GET', APP), false);
+  }
+  assert.equal(ownEditorRequest(endpoint, 'POST', APP, { appKey: APP, version: VERSION }), false);
+});
+test('diagnostic strict schema rejects any unknown keys, free text, invalid enums or numbers', () => {
+  const base = emptyDiagnostic();
+  assert.deepEqual(validateDiagnostic(base), base);
+  for (const mutation of [{ extra: 'secret' }, { saveStatus: 'secret' }, { errorClassification: 'secret' },
+    { getCode: 'secret' }, { putHttpStatus: 999 }, { pageNodes: -1 }, { initialVersionInit: 'secret' },
+    { fields: { ...base.fields, secret: true } }, { fields: { ...base.fields, testItems: { present: true, equal: null, secret: true } } }]) {
+    assert.equal(validateDiagnostic({ ...base, ...mutation }), null);
+  }
+  assert.equal(sanitizeSnapshot({ error: 'secret', saveStatus: 'secret' }).errorClassification, 'unknown');
+});
+for (const malicious of [false, true]) test(`startup wrapper emits only strict evidence (malicious=${malicious})`, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'native-startup-offline-'));
+  const output = join(root, 'github-output'); writeFileSync(output, '');
+  const messages = [], oldLog = console.log, oldError = console.error;
+  console.log = (...items) => messages.push(items.join(' ')); console.error = (...items) => messages.push(items.join(' '));
+  try {
+    const exit = await run({ ...ENV, GITHUB_OUTPUT: output, RUNNER_TEMP: root }, { guard: async () => {}, unusedPort: async () => 19232,
+      spawn: (_command, _args, { env }) => {
+        writeFileSync(env.PWAPPY_BRANCH_COUNTS_PATH, JSON.stringify({ passed: 0, failed: 1, skipped: 0, timedOut: 0, interrupted: 0 }));
+        writeFileSync(env.PWAPPY_STAGING_NATIVE_PHASE_PATH, JSON.stringify('editor-startup'));
+        writeFileSync(env.PWAPPY_STAGING_NATIVE_CLEANUP_PATH, JSON.stringify({ outcome: 'failed', deleteRequested: true, absenceVerified: false, blockedWrites: false, ...(malicious ? { extra: ENV.PWAPPY_TEST_LOGIN_PASSCODE } : {}) }));
+        writeFileSync(env.PWAPPY_STAGING_NATIVE_DIAGNOSTIC_PATH, JSON.stringify({ ...emptyDiagnostic(), ...(malicious ? { extra: ENV.PWAPPY_TEST_LOGIN_PASSCODE } : {}) }));
+        return { status: 1 };
+      } });
+    assert.equal(exit, 1);
+    assert.doesNotMatch(messages.join('\n'), new RegExp(ENV.PWAPPY_TEST_LOGIN_PASSCODE));
+    assert.match(messages.join('\n'), malicious ? /diagnostic: unavailable/ : /"schemaVersion":1/);
+    assert.match(messages.join('\n'), malicious ? /Native cleanup: unknown/ : /Native cleanup: \{"outcome":"failed"/);
+  } finally { console.log = oldLog; console.error = oldError; rmSync(root, { recursive: true, force: true }); }
+});
+test('startup capture preserves guarded finally cleanup and never actively requests backend data', () => {
+  const spec = readFileSync(new URL('../staging-tests/native-persistence.spec.ts', import.meta.url), 'utf8');
+  const capture = spec.slice(spec.indexOf('const captureStartup'), spec.indexOf('let primaryFailure'));
+  assert.match(capture, /validateTarget/);
+  assert.match(capture, /url\.origin !== expected\.origin/);
+  assert.doesNotMatch(capture, /\.request\(|\.fetch\(|fetch\(|\.goto\(|\.click\(|pageerror|console\./);
+  assert.match(spec, /phase\('editor-startup'\);\s+editor = await openEditor/);
+  assert.match(spec, /finally \{[\s\S]*if \(cleanupNeeded\)[\s\S]*await guard\('normal'\)[\s\S]*await deleteApp\(page, appKey\)/);
+  assert.match(spec, /body\?\.appKey === appKey && body\?\.version === VERSION/);
+});
+
+const { validateCleanup } = require('../scripts/staging-startup-diagnostic.cjs');
+test('cleanup evidence rejects secrets and unproven success', () => {
+  const good = { outcome: 'succeeded', deleteRequested: true, absenceVerified: true, blockedWrites: false };
+  assert.deepEqual(validateCleanup(good), good);
+  for (const change of [{ extra: 'secret' }, { outcome: 'secret' }, { deleteRequested: false }, { absenceVerified: false }, { blockedWrites: true }]) {
+    assert.equal(validateCleanup({ ...good, ...change }), null);
+  }
+  assert.equal(validateCleanup({ ...good, outcome: 'failed' }).outcome, 'failed');
+});

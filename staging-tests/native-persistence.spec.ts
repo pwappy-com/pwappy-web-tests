@@ -9,6 +9,8 @@ import { createApp, deleteApp, gotoDashboard, openEditor } from '../tests/tools/
 import { ensureAuthenticated, generateIdentKey } from '../tests/constants';
 const { ORIGIN, VERSION, ASSET, SCRIPT, DESCRIPTION, fixedPayloads, validateTarget } = require('../scripts/staging-native-contract.cjs');
 
+const { emptyDiagnostic, ownEditorRequest, responseEvidence, sanitizeSnapshot, ERRORS } = require('../scripts/staging-startup-diagnostic.cjs');
+
 type Pending = { resolve: (result: any) => void; reject: (error: Error) => void; timer: NodeJS.Timeout };
 function client(url: string, appKey: string) {
   const endpoint = `http://127.0.0.1:${process.env.PWAPPY_STAGING_NATIVE_PORT}`;
@@ -124,6 +126,70 @@ test('native staging edits and asset bytes persist after fresh-context reload', 
     expect(result.base64).toBe(Buffer.from(ASSET.text).toString('base64'));
     expect(result.size).toBe(Buffer.byteLength(ASSET.text));
   };
+  const startupDiagnostic = emptyDiagnostic();
+  let startupSent: any;
+  const observedResponses = new Set<Promise<void>>();
+  // Passive observations only, restricted to this run's random owned app.
+  context.on('request', request => {
+    if (lastPhase !== 'editor-startup' || request.method() !== 'PUT') return;
+    try {
+      const body = request.postDataJSON();
+      if (ownEditorRequest(request.url(), 'PUT', appKey, body)) startupSent = body.editorJson;
+    } catch {}
+  });
+  context.on('response', response => {
+    if (lastPhase !== 'editor-startup') return;
+    const request = response.request(), method = request.method();
+    let body: any;
+    try { if (method === 'PUT') body = request.postDataJSON(); } catch { return; }
+    if (!ownEditorRequest(response.url(), method, appKey, body)) return;
+    const sent = startupSent;
+    const pending = (async () => {
+      let json: any;
+      try { json = await response.json(); } catch {}
+      Object.assign(startupDiagnostic, responseEvidence(method, response.status(), json, sent));
+    })();
+    observedResponses.add(pending);
+    void pending.finally(() => observedResponses.delete(pending));
+  });
+  const captureStartup = async () => {
+    // openEditor can throw before returning its page. Never inspect another app.
+    const target = context.pages().find(candidate => {
+      try { validateTarget(`http://127.0.0.1:${process.env.PWAPPY_STAGING_NATIVE_PORT}`, candidate.url(), process.env.PWAPPY_STAGING_NATIVE_TOKEN, appKey); return true; }
+      catch { return false; }
+    });
+    if (target) {
+      try {
+      const snapshot = await target.locator('app-container').evaluateAll((nodes, expected) => {
+        const url = new URL(location.href);
+        if (url.origin !== expected.origin || url.pathname !== '/app_editor.html'
+          || url.searchParams.get('appKey') !== expected.appKey || url.searchParams.get('version') !== expected.version) throw Error('Target changed');
+        const errors = expected.errors;
+        const container = nodes[0] as any;
+        const status = container?._webMcpSaveStatus;
+        const root = container?.shadowRoot;
+        const tree = root?.querySelector('template-container')?.shadowRoot;
+        const version = container?.editorJsonVersionStore?.getState()?.editorJsonVersion?.currentVersion;
+        // Classify exact known errors inside the page. Raw errors never leave it.
+        const error = Object.prototype.hasOwnProperty.call(errors, status?.error) ? status.error : '';
+        return { saveStatus: ['saving', 'saved', 'failed'].includes(status?.status) ? status.status : 'unknown',
+          serverSaved: typeof status?.serverSaved === 'boolean' ? status.serverSaved : null,
+          serverVerified: typeof status?.serverVerified === 'boolean' ? status.serverVerified : null,
+          initialVersionInit: typeof version === 'string' ? version === 'init' : null,
+          starterVisible: !!root?.querySelector('starter-template-modal[visible]'),
+          snapshotVisible: !!root?.querySelector('message-box[visible]'),
+          pageNodes: tree?.querySelectorAll('#dom-tree .node[data-node-type="page"]').length || 0,
+          navigatorNodes: tree?.querySelectorAll('#dom-tree .node[data-node-type="ons-navigator"]').length || 0, error };
+      }, { errors: ERRORS, origin: ORIGIN, appKey, version: VERSION });
+      Object.assign(startupDiagnostic, sanitizeSnapshot(snapshot));
+      } catch { /* A closed/changed page must not suppress passive safe evidence. */ }
+    }
+    // Do not wait indefinitely for a failed network request during cleanup.
+    await Promise.race([Promise.all([...observedResponses]), new Promise(resolve => setTimeout(resolve, 1000))]);
+    writeFileSync(process.env.PWAPPY_STAGING_NATIVE_DIAGNOSTIC_PATH!, JSON.stringify(startupDiagnostic), { mode: 0o600 });
+    startupSent = undefined;
+  };
+  const cleanupOutcome = { outcome: 'not-needed', deleteRequested: false, absenceVerified: false, blockedWrites: false };
   let primaryFailure: unknown, failurePhase: string | undefined;
   try {
     phase('native-preflight');
@@ -143,6 +209,7 @@ test('native staging edits and asset bytes persist after fresh-context reload', 
     cleanupNeeded = true; // Includes uncertain completion of this one new-key create; never replay it.
     await createApp(page, appName, appKey);
     expect(apiCounts.create).toBe(1);
+    phase('editor-startup');
     editor = await openEditor(page, context, appName, VERSION, { skipStarterModal: true });
     validateTarget(`http://127.0.0.1:${process.env.PWAPPY_STAGING_NATIVE_PORT}`, editor.url(), process.env.PWAPPY_STAGING_NATIVE_TOKEN, appKey);
     phase('native-discovery');
@@ -192,22 +259,35 @@ test('native staging edits and asset bytes persist after fresh-context reload', 
     await readAsset();
     expect(apiCounts.assetRead).toBe(2);
     expect(apiCounts.blocked).toBe(0);
-  } catch (error) { primaryFailure = error; failurePhase = lastPhase; }
+  } catch (error) {
+    primaryFailure = error; failurePhase = lastPhase;
+    if (failurePhase === 'editor-startup') { try { await captureStartup(); } catch {} }
+  }
   finally {
     for (const connection of clients) await connection.close();
     await fresh?.close(); await editor?.close();
     if (cleanupNeeded) {
+      cleanupOutcome.outcome = 'unknown';
       try {
         phase('cleanup');
         await guard('normal'); // A changed deployment cannot be mutated by stale cleanup.
         await deleteApp(page, appKey);
         await gotoDashboard(page);
         await expect(page.locator('.app-card .app-key').filter({ hasText: appKey })).toHaveCount(0);
+        cleanupOutcome.absenceVerified = true;
         if (apiCounts.create === 1 && !primaryFailure) expect(apiCounts.deleted).toBe(1);
         expect(apiCounts.blocked).toBe(0);
-      } catch (error) { if (!primaryFailure) { primaryFailure = error; failurePhase = 'cleanup'; } }
+        cleanupOutcome.outcome = apiCounts.deleted > 0 ? 'succeeded' : 'unknown';
+      } catch (error) {
+        cleanupOutcome.outcome = 'failed';
+        if (!primaryFailure) { primaryFailure = error; failurePhase = 'cleanup'; }
+      }
+      cleanupOutcome.deleteRequested = apiCounts.deleted > 0;
+      cleanupOutcome.blockedWrites = apiCounts.blocked > 0;
     }
   }
+  // Persist separately after cleanup so a secondary failure cannot hide behind startup.
+  try { writeFileSync(process.env.PWAPPY_STAGING_NATIVE_CLEANUP_PATH!, JSON.stringify(cleanupOutcome), { mode: 0o600 }); } catch {}
   if (primaryFailure) { phase(failurePhase!); throw primaryFailure; }
   phase('complete');
 });

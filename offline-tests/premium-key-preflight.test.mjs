@@ -185,6 +185,9 @@ test('false registration flag is disposed before Premium starts using only the s
         assert.ok(args.includes('tests/specs/premium'));
         assert.equal(readFileSync(output, 'utf8'), 'started=true\n');
         writeFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, JSON.stringify({ passed: 1, failed: 0, skipped: 0, timedOut: 0, interrupted: 0 }));
+        const counts = JSON.parse(readFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, 'utf8'));
+        const completed = Object.values(counts).reduce((sum, count) => sum + count, 0);
+        writeFileSync(options.env.PWAPPY_BRANCH_PROGRESS_PATH, JSON.stringify({ total: completed, completed, counts }));
         writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]');
         return { status: 0 };
       },
@@ -203,7 +206,10 @@ test('normal and cleanup do not run the Premium registration/key mutation prereq
         guard: async () => {}, premiumKeyCheck: () => assert.fail('Only Premium test setup checks registration'),
         spawn: (_executable, _args, options) => {
           writeFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, JSON.stringify({ passed: 1, failed: 0, skipped: 0, timedOut: 0, interrupted: 0 }));
-          writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]'); return { status: 0 };
+          const counts = JSON.parse(readFileSync(options.env.PWAPPY_BRANCH_COUNTS_PATH, 'utf8'));
+        const completed = Object.values(counts).reduce((sum, count) => sum + count, 0);
+        writeFileSync(options.env.PWAPPY_BRANCH_PROGRESS_PATH, JSON.stringify({ total: completed, completed, counts }));
+        writeFileSync(options.env.PWAPPY_BRANCH_FAILURES_PATH, '[]'); return { status: 0 };
         },
       });
       assert.equal(exit, 0);

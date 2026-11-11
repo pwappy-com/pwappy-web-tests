@@ -1,6 +1,6 @@
 'use strict';
 // Discard test titles, errors, stdout/stderr, attachments and service data.
-const { writeFileSync } = require('node:fs');
+const { writeFileSync, renameSync } = require('node:fs');
 const { sourceLocations, statuses } = require('./branch-safe-locations.cjs');
 module.exports = class BranchCountReporter {
   constructor() {
@@ -8,9 +8,25 @@ module.exports = class BranchCountReporter {
     this.failures = [];
     this.sources = sourceLocations();
   }
+  onBegin(_config, suite) {
+    this.total = suite.allTests().length;
+    this.publishProgress();
+  }
+  publishProgress() {
+    // A single atomic snapshot cannot expose partial JSON to the parent.
+    if (!process.env.PWAPPY_BRANCH_PROGRESS_PATH || this.total === undefined) return;
+    const completed = Object.values(this.counts).reduce((sum, value) => sum + value, 0);
+    if (!Number.isSafeInteger(this.total) || this.total < completed || this.total > 100000) {
+      throw new Error('Invalid branch progress counts');
+    }
+    const target = process.env.PWAPPY_BRANCH_PROGRESS_PATH;
+    writeFileSync(target + '.tmp', JSON.stringify({ total: this.total, completed, counts: this.counts }), { mode: 0o600 });
+    renameSync(target + '.tmp', target);
+  }
   onTestEnd(test, result) {
     if (!Object.hasOwn(this.counts, result.status)) throw new Error('Unknown test status');
     this.counts[result.status]++;
+    this.publishProgress();
     if (!statuses.includes(result.status)) return;
     const definition = this.sources.location(test.location?.file, test.location?.line);
     const add = (kind, location) => {
