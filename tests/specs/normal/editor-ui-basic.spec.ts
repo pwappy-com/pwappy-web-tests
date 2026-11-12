@@ -3,7 +3,7 @@ import * as path from 'path';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor, addVersion } from '../../tools/dashboard-helpers';
 import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';
-import { readSiblingDragSnapshot } from '../../tools/drag-state-diagnostics';
+import { readSiblingDragSnapshot, findNativeScrollEdge } from '../../tools/drag-state-diagnostics';
 import { getStorageStatePath } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
@@ -625,17 +625,17 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                     if (pointStillAtGap && await targetInsertPoint.evaluate(el =>
                         el.classList.contains('node-add-point-selected'))) break;
                 } else {
-                    const hoverY = destY >= pBox.y + pBox.height - 30 ? pBox.y + pBox.height - 15 : pBox.y + 15;
-                    // When the source is already at the scroll edge, moving only
-                    // to its centre can stay within the 10px drag threshold.
-                    // Enter the edge diagonally so native auto-scroll starts.
-                    const sourceX = startBox.x + startBox.width / 2;
-                    const leftEdgeX = pBox.x + 10;
-                    const rightEdgeX = pBox.x + pBox.width - 10;
-                    const hoverX = Math.abs(sourceX - leftEdgeX) > Math.abs(sourceX - rightEdgeX) ? leftEdgeX : rightEdgeX;
-                    await pointerAction.move(currentX, currentY, hoverX, hoverY, 10);
-                    currentX = hoverX;
-                    currentY = hoverY;
+                    // The bottom trash/copy toolbar can cover otherwise valid
+                    // panel coordinates. Hit-test only; never hide or move UI.
+                    const edge = await editorPage.locator('template-container').evaluate(findNativeScrollEdge, {
+                        sourceX: startBox.x + startBox.width / 2,
+                        sourceY: startBox.y + startBox.height / 2,
+                        down: destY >= pBox.y + pBox.height - 30
+                    });
+                    if (!edge) throw new Error('No unobstructed native scroll edge');
+                    await pointerAction.move(currentX, currentY, edge.x, edge.y, 10);
+                    currentX = edge.x;
+                    currentY = edge.y;
                     await editorPage.waitForTimeout(200);
                 }
             }

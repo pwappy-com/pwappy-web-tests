@@ -230,3 +230,11 @@ farthest from the original pointer (rather than a node-relative offset that can
 coincide with its center), and adds boolean-only scroll-limit, viewport and popup
 diagnostics. These distinguish a stopped scroll from an unreachable or clipped
 sibling gap without exposing DOM contents, coordinates, identifiers or URLs.
+
+Run 43138626242 provided the missing distinction: `canScroll=true`,
+`scrollAtBottom=false`, `targetBelow=true`, `pointerInViewport=true`,
+`popupOpen=false`, but `hit=toolbar`. A coordinate inside the tree's rectangle
+can still hit its overlaid trash/copy controls. The next revision chooses an
+edge point by read-only shadow-root hit testing, rejecting every overlay hit
+and requiring motion beyond the native threshold. It does not hide controls,
+force scrolling, alter editor state or relax sibling/order assertions.

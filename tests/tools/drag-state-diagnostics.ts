@@ -42,3 +42,26 @@ export function readSiblingDragSnapshot(container: any, point: { x: number; y: n
             && !!marker.classList.contains('node-add-point-selected'), hit
     };
 }
+
+/** Read-only hit testing: select an unobstructed native auto-scroll edge. */
+export function findNativeScrollEdge(container: any, input: { sourceX: number; sourceY: number; down: boolean }) {
+    const root = container?.shadowRoot;
+    const tree = root?.querySelector('#dom-tree');
+    const win = container?.ownerDocument?.defaultView;
+    if (!tree || !win) return null;
+    const rect = tree.getBoundingClientRect();
+    const xs = [rect.left + 10, rect.right - 10, rect.left + rect.width / 2];
+    const candidates: {x:number;y:number;distance:number}[] = [];
+    for (const inset of [5, 10, 15, 22, 28]) {
+        const y = input.down ? rect.bottom - inset : rect.top + inset;
+        for (const x of xs) {
+            if (x <= 0 || y <= 0 || x >= win.innerWidth || y >= win.innerHeight) continue;
+            const hit = root.elementFromPoint(x, y);
+            if (!hit || !(hit === tree || tree.contains(hit))) continue;
+            const distance = Math.max(Math.abs(x - input.sourceX), Math.abs(y - input.sourceY));
+            if (distance > 10) candidates.push({x,y,distance});
+        }
+    }
+    candidates.sort((a,b) => b.distance - a.distance);
+    return candidates.length ? {x:candidates[0].x,y:candidates[0].y} : null;
+}

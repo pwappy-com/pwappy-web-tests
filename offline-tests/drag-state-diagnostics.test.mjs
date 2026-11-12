@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { readSiblingDragSnapshot } from '../tests/tools/drag-state-diagnostics.ts';
+import { readSiblingDragSnapshot, findNativeScrollEdge } from '../tests/tools/drag-state-diagnostics.ts';
 const secret = 'CANARY_private_label_URL_ID_class';
 function fixture(hitKind = 'target-gap') {
   const marker = { classList: { contains: value => ['node-add-point', 'node-add-point-selected'].includes(value) } };
@@ -74,12 +74,15 @@ test('reorder tracks the moving gap and never makes an unchecked final drop move
   assert.match(flow, /await expect\(finalNodes.nth\(0\)\).toHaveAttribute\('data-node-dom-id', 'ons-button1'\)/);
 });
 
-test('reorder enters the scroll edge diagonally to cross the native drag threshold', () => {
-  const source = readFileSync(new URL('../tests/specs/normal/editor-ui-basic.spec.ts', import.meta.url), 'utf8');
-  const start = source.indexOf("await test.step('2. ドラッグ操作による順序反転");
-  const flow = source.slice(start, source.indexOf('// Merged from: tests/specs/normal/editor-html-tag-dialog', start));
-  assert.match(flow, /const hoverX = Math.abs/);
-  assert.match(flow, /leftEdgeX : rightEdgeX/);
-  assert.match(flow, /pointerAction.move\(currentX, currentY, hoverX, hoverY, 10\)/);
-  assert.match(flow, /currentX = hoverX/);
+test('native scroll edge avoids overlay hits and exceeds the start threshold', () => {
+  const node = {};
+  const tree = { getBoundingClientRect: () => ({left:10,right:110,width:100,top:20,bottom:120}), contains: el => el === node };
+  const container = {ownerDocument:{defaultView:{innerWidth:200,innerHeight:200}},shadowRoot:{querySelector:()=>tree,elementFromPoint:(x,y)=> x > 60 ? {} : node}};
+  const point = findNativeScrollEdge(container,{sourceX:50,sourceY:110,down:true});
+  assert.equal(point.x,20);
+  assert.ok(point.y > 90 && point.y < 120);
+  assert.ok(Math.abs(point.x - 50) > 10);
+  container.shadowRoot.elementFromPoint = () => ({});
+  assert.equal(findNativeScrollEdge(container,{sourceX:50,sourceY:110,down:true}),null);
+  assert.equal(findNativeScrollEdge(null,{sourceX:50,sourceY:110,down:true}),null);
 });
