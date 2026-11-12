@@ -2,7 +2,8 @@
 export function readSiblingDragSnapshot(container: any, point: { x: number; y: number }) {
     const empty = { captured: false, targetExists: false, targetInScrollport: false,
         pointerInScrollport: false, dragImageActive: false, dragActive: false,
-        sourceMatched: false, siblingMarkerSelected: false, hit: 'outside' };
+        sourceMatched: false, siblingMarkerSelected: false, scrollAtBottom: false, scrollAtTop: false,
+        canScroll: false, targetBelow: false, pointerInViewport: false, popupOpen: false, hit: 'outside' };
     const root = container?.shadowRoot;
     const doc = container?.ownerDocument;
     const win = doc?.defaultView;
@@ -27,7 +28,14 @@ export function readSiblingDragSnapshot(container: any, point: { x: number; y: n
     return {
         captured: true, targetExists: !!target,
         targetInScrollport: !!targetRect && inside(targetRect.left + targetRect.width / 2, targetRect.bottom + 5),
-        pointerInScrollport, dragImageActive: !!doc.querySelector('.custom-drag-image'),
+        pointerInScrollport,
+        scrollAtBottom: !!tree && tree.scrollTop + tree.clientHeight >= tree.scrollHeight - 1,
+        scrollAtTop: !!tree && tree.scrollTop <= 1,
+        canScroll: !!tree && tree.scrollHeight > tree.clientHeight + 1,
+        targetBelow: !!targetRect && !!rect && targetRect.bottom + 5 >= rect.bottom,
+        pointerInViewport: point.x > 0 && point.y > 0 && point.x < win.innerWidth && point.y < win.innerHeight,
+        popupOpen: container.showTemplatePopup === true,
+        dragImageActive: !!doc.querySelector('.custom-drag-image'),
         dragActive: win.dragItemType === 'node-id',
         sourceMatched: !!source && win.dragItemType === 'node-id' && win.dragItemId === source.dataset.nodeId,
         siblingMarkerSelected: !!marker?.classList.contains('node-add-point')

@@ -223,3 +223,10 @@ With the identical small viewport, both tests passed and scrollTop increased;
 exact sibling selection, order and button-count assertions remain intact.
 The same external preview-asset limitation above applies. This local result
 is not a substitute for the complete staging CI run.
+
+The subsequent CI WebKit run at 2c2d2e0 still failed the same assertion despite
+local success. It is not resolved. The next test revision chooses the panel edge
+farthest from the original pointer (rather than a node-relative offset that can
+coincide with its center), and adds boolean-only scroll-limit, viewport and popup
+diagnostics. These distinguish a stopped scroll from an unreachable or clipped
+sibling gap without exposing DOM contents, coordinates, identifiers or URLs.

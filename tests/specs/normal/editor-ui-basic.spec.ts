@@ -629,7 +629,10 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                     // When the source is already at the scroll edge, moving only
                     // to its centre can stay within the 10px drag threshold.
                     // Enter the edge diagonally so native auto-scroll starts.
-                    const hoverX = Math.max(pBox.x + 10, Math.min(pBox.x + pBox.width - 10, tBox.x + 20));
+                    const sourceX = startBox.x + startBox.width / 2;
+                    const leftEdgeX = pBox.x + 10;
+                    const rightEdgeX = pBox.x + pBox.width - 10;
+                    const hoverX = Math.abs(sourceX - leftEdgeX) > Math.abs(sourceX - rightEdgeX) ? leftEdgeX : rightEdgeX;
                     await pointerAction.move(currentX, currentY, hoverX, hoverY, 10);
                     currentX = hoverX;
                     currentY = hoverY;

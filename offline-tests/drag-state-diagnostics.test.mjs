@@ -78,8 +78,8 @@ test('reorder enters the scroll edge diagonally to cross the native drag thresho
   const source = readFileSync(new URL('../tests/specs/normal/editor-ui-basic.spec.ts', import.meta.url), 'utf8');
   const start = source.indexOf("await test.step('2. ドラッグ操作による順序反転");
   const flow = source.slice(start, source.indexOf('// Merged from: tests/specs/normal/editor-html-tag-dialog', start));
-  assert.match(flow, /const hoverX = Math.max/);
-  assert.match(flow, /tBox.x \+ 20/);
+  assert.match(flow, /const hoverX = Math.abs/);
+  assert.match(flow, /leftEdgeX : rightEdgeX/);
   assert.match(flow, /pointerAction.move\(currentX, currentY, hoverX, hoverY, 10\)/);
   assert.match(flow, /currentX = hoverX/);
 });

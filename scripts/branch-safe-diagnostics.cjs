@@ -43,7 +43,7 @@ const navBools = ['failedDocument', 'responseSeen', 'committed', 'nonGetSeen', '
 const startupBools = ['captured', 'containerPresent', 'storePresent', 'starterVisible', 'messageVisible', 'initialSaveError', 'pageNodesPresent', 'navigatorNodesPresent'];
 const startupNullable = ['loading', 'empty', 'initialVersionInit', 'serverSaved', 'serverVerified'];
 const startupKeys = [...startupBools, ...startupNullable, 'saveStatus', 'errorClassification'].join(',');
-const dragBools = ['captured', 'targetExists', 'targetInScrollport', 'pointerInScrollport', 'dragImageActive', 'dragActive', 'sourceMatched', 'siblingMarkerSelected'];
+const dragBools = ['captured', 'targetExists', 'targetInScrollport', 'pointerInScrollport', 'dragImageActive', 'dragActive', 'sourceMatched', 'siblingMarkerSelected', 'scrollAtBottom', 'scrollAtTop', 'canScroll', 'targetBelow', 'pointerInViewport', 'popupOpen'];
 const dragKeys = ['phase', ...dragBools, 'hit'].join(',');
 function validHelper(value) {
   if (value?.kind === 'editor-drag') return keys(value, 'kind,' + dragKeys)
