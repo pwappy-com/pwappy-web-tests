@@ -43,7 +43,7 @@ const navBools = ['failedDocument', 'responseSeen', 'committed', 'nonGetSeen', '
 const startupBools = ['captured', 'containerPresent', 'storePresent', 'starterVisible', 'messageVisible', 'initialSaveError', 'pageNodesPresent', 'navigatorNodesPresent'];
 const startupNullable = ['loading', 'empty', 'initialVersionInit', 'serverSaved', 'serverVerified'];
 const startupKeys = [...startupBools, ...startupNullable, 'saveStatus', 'errorClassification'].join(',');
-const dragBools = ['captured', 'targetExists', 'targetInScrollport', 'pointerInScrollport', 'dragImageActive', 'dragActive', 'sourceMatched', 'siblingMarkerSelected', 'scrollAtBottom', 'scrollAtTop', 'canScroll', 'targetBelow', 'pointerInViewport', 'popupOpen', 'pointerAtScrollEdge', 'hitWithinTree'];
+const dragBools = ['captured', 'targetExists', 'targetInScrollport', 'pointerInScrollport', 'dragImageActive', 'dragActive', 'sourceMatched', 'siblingMarkerSelected', 'scrollAtBottom', 'scrollAtTop', 'canScroll', 'targetBelow', 'pointerInViewport', 'popupOpen', 'pointerAtScrollEdge', 'hitWithinTree', 'scrollTrendSampled', 'scrollObservedIncrease', 'scrollObservedDecrease', 'scrollObservedAwayFromTop', 'scrollObservedReturnToTop', 'scrollSampleUnavailable'];
 const dragKeys = ['phase', ...dragBools, 'hit'].join(',');
 function validHelper(value) {
   if (value?.kind === 'editor-attribute') return keys(value, 'kind,state')

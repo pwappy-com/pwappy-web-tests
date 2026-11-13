@@ -1,3 +1,4 @@
+import { createScrollTrend } from '../../tools/drag-scroll-trend';
 import { test as base, expect, Page, Locator, CDPSession, Dialog } from '@playwright/test';
 import * as path from 'path';
 import 'dotenv/config';
@@ -598,7 +599,14 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             let currentX = startBox.x + startBox.width / 2;
             let currentY = startBox.y + startBox.height / 2;
 
+            const scrollTrend = createScrollTrend();
+            const sampleScroll = async () => {
+                const value = await layoutPanel.evaluate(el => el.scrollTop, undefined, { timeout: 1000 }).catch(() => null);
+                scrollTrend.observe(value);
+            };
+            await sampleScroll();
             for (let i = 0; i < 100; i++) {
+                await sampleScroll();
                 const pBox = await layoutPanel.boundingBox();
                 const tBox = await btnBottom.boundingBox();
                 if (!pBox || !tBox) break;
@@ -654,11 +662,12 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             // pointer on the selected sibling gap, not outside the scrollport.
             // A child insertion inside btnBottom can produce the same flattened
             // order while silently nesting buttons. Require the sibling marker.
+            await sampleScroll();
             const reportDragState = async (phase: 'before-assert' | 'assertion-failed') => {
                 const state = await editorPage.locator('template-container').evaluate(
                     readSiblingDragSnapshot, { x: currentX, y: currentY }, { timeout: 1000 }
                 ).catch(() => readSiblingDragSnapshot(null, { x: 0, y: 0 }));
-                console.log('[EditorDragState] ' + JSON.stringify({ phase, ...state }));
+                console.log('[EditorDragState] ' + JSON.stringify({ phase, ...state, ...scrollTrend.summary() }));
             };
             await reportDragState('before-assert');
             try {
