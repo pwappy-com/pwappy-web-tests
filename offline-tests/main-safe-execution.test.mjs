@@ -20,6 +20,19 @@ const env = { GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF: 'refs/heads/di
   PWAPPY_TEST_LOGIN_ENDPOINT: LOGIN_ENDPOINT, PWAPPY_TEST_LOGIN_PASSCODE: CANARY,
   PWAPPY_TEST_POINTS_ENABLED: 'true', PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA: SOURCE };
 const empty = () => ({ passed: 0, failed: 0, skipped: 0, timedOut: 0, interrupted: 0 });
+const genericMainError = '::error::Main verification stopped; deployment, configuration or numeric evidence did not validate. Raw test data is not published.';
+// Expected negative cases must assert diagnostics without publishing GitHub error annotations.
+async function captureMainErrors(invoke, expected) {
+  const original = console.error, lines = [];
+  console.error = (...values) => lines.push(values.join(' '));
+  try {
+    const result = await invoke();
+    assert.deepEqual(lines, expected);
+    assert.doesNotMatch(lines.join('\n'), new RegExp(CANARY));
+    return result;
+  } finally { console.error = original; }
+}
+
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'main-safe-test-'));
   const output = join(root, 'github-output'); writeFileSync(output, '');
@@ -123,7 +136,8 @@ test('guard and all account checks finish before spawn, registered keys block te
     const f2 = fixture(); const blocked = deps(f2);
     blocked.keyCheck = async () => { throw new PremiumKeyPreflightError('registered'); };
     try {
-      assert.equal(await main(['premium', 'chromium', 'ubuntu-latest', 'tests'], f2.env, blocked), 1);
+      assert.equal(await captureMainErrors(() => main(['premium', 'chromium', 'ubuntu-latest', 'tests'], f2.env, blocked),
+        ['Main verification failure phase: account-key-preflight', `::error::${new PremiumKeyPreflightError('registered').message}`]), 1);
       assert.deepEqual(blocked.calls, ['guard']);
       assert.equal(readFileSync(f2.output, 'utf8'), 'EXIT_CODE=1\n');
       assert.doesNotMatch(readFileSync(f2.output, 'utf8'), /started|state_dir/);
@@ -134,7 +148,8 @@ test('malformed/failed/incomplete child evidence stays failed and saves the actu
   for (const options of [{ exit: 7, status: 'failed' }, { failedAttempt: true }, { total: 2 }]) {
     const f = fixture(); const d = deps(f, options); if (options.failedAttempt) f.env.TEST_RETRIES = '1';
     try {
-      assert.notEqual(await main(['normal', 'chromium', 'ubuntu-latest', 'tests'], f.env, d), 0);
+      assert.notEqual(await captureMainErrors(() => main(['normal', 'chromium', 'ubuntu-latest', 'tests'], f.env, d),
+        options.total ? ['Main verification failure phase: test-execution-or-evidence', genericMainError] : []), 0);
       const output = readFileSync(f.output, 'utf8');
       assert.match(output, new RegExp(`RAW_TEST_EXIT_CODE=${options.exit ?? 0}\\n`)); assert.match(output, new RegExp(`EXIT_CODE=${options.exit || 1}\\n`));
     } finally { f.dispose(); }
@@ -267,7 +282,8 @@ test('successful child exits cannot hide missing, incomplete or failed account r
     const f = fixture(); const d = deps(f); const spawn = d.spawn;
     try {
       d.spawn = async (...args) => { const result = await spawn(...args); corrupt(args[2].env); return result; };
-      assert.equal(await main(['normal', 'chromium', 'ubuntu-latest', 'tests'], f.env, d), 1);
+      assert.equal(await captureMainErrors(() => main(['normal', 'chromium', 'ubuntu-latest', 'tests'], f.env, d),
+        ['Main verification failure phase: test-execution-or-evidence', genericMainError]), 1);
       assert.match(readFileSync(f.output, 'utf8'), /RAW_TEST_EXIT_CODE=0\nEXIT_CODE=1/);
     } finally { f.dispose(); }
   }
