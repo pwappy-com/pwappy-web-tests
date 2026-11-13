@@ -3,7 +3,7 @@ import * as path from 'path';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor, addVersion } from '../../tools/dashboard-helpers';
 import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';
-import { readSiblingDragSnapshot, findNativeScrollEdge } from '../../tools/drag-state-diagnostics';
+import { readSiblingDragSnapshot, findNativeScrollEdge, findNativeScrollReentry } from '../../tools/drag-state-diagnostics';
 import { getStorageStatePath } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
@@ -633,6 +633,15 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                         down: destY >= pBox.y + pBox.height - 30
                     });
                     if (!edge) throw new Error('No unobstructed native scroll edge');
+                    const reentry = await editorPage.locator('template-container').evaluate(findNativeScrollReentry, {
+                        edge, down: destY >= pBox.y + pBox.height - 30
+                    });
+                    if (!reentry) throw new Error('No unobstructed native scroll re-entry point');
+                    // Re-enter through actual pointer movement rather than repeatedly
+                    // targeting an identical edge point. Do not mutate scroll or drag state.
+                    await pointerAction.move(currentX, currentY, reentry.x, reentry.y, 5);
+                    currentX = reentry.x;
+                    currentY = reentry.y;
                     await pointerAction.move(currentX, currentY, edge.x, edge.y, 10);
                     currentX = edge.x;
                     currentY = edge.y;

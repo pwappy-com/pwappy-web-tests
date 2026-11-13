@@ -265,3 +265,28 @@ credential-free discovery 7/7; isolated-runner options 3/3; isolated actual-brow
 reorder 2/2 and full multiselect lifecycle 2/2. No staging API mutation was made
 locally. Scratch browser/server processes were closed. The branch CI rerun is
 required; a successful local run is not permission to merge failing coverage.
+
+### Second staging result and explicit native re-entry
+
+Run 43391458092: normal Desktop WebKit, Linux Chromium, Linux Mobile Chrome and
+Windows Chromium succeeded. Desktop WebKit reached 129 passed / 0 failed / 4
+excluded, so the previous pre-test stop did not recur. Mobile Safari improved
+to 127 passed / 1 failed / 5 excluded: attribute creation passed; reorder remained
+failed. All five normal cleanup steps succeeded. Premium jobs are still running
+as this note is written. Firefox remains blocked and main is unchanged.
+
+The failed reorder snapshot confirms `pointerAtScrollEdge=true`,
+`hitWithinTree=true`, `targetBelow=true`, `scrollAtBottom=false`, with active drag
+and matching source. Correct test-side coordinates alone do not prove the
+controller's scroll timer is running. Its timer stops while the root popup is
+open and restarts on movement. Local Desktop/Mobile WebKit emits mousemove even
+for identical coordinates, so suppression on macOS is not established.
+
+The test now makes an actual read-only-hit-tested movement into the tree interior
+and back to its native edge, instead of repeatedly targeting an identical point.
+It never sets scrollTop, changes drag state, hides controls, or weakens sibling
+and parentage assertions. Both isolated real-editor browser variants pass. This
+is test-interaction hardening, not a proven production fix; the next staging run
+must decide whether it resolves the remaining failure. Mobile Safari is first in
+the next matrix without dropping any coverage. Expected offline negative cases
+now capture/assert their error output instead of publishing false CI annotations.

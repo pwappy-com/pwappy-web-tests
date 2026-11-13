@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { readSiblingDragSnapshot, findNativeScrollEdge } from '../tests/tools/drag-state-diagnostics.ts';
+import { readSiblingDragSnapshot, findNativeScrollEdge, findNativeScrollReentry } from '../tests/tools/drag-state-diagnostics.ts';
 const secret = 'CANARY_private_label_URL_ID_class';
 function fixture(hitKind = 'target-gap') {
   const marker = { classList: { contains: value => ['node-add-point', 'node-add-point-selected'].includes(value) } };
@@ -95,4 +95,30 @@ test('scroll edge and overlay diagnostics remain bounded independent booleans', 
   assert.equal(covered.pointerAtScrollEdge, true);
   assert.equal(covered.hitWithinTree, false);
   assert.equal(readSiblingDragSnapshot(fixture(), { x: 50, y: 310 }).pointerAtScrollEdge, false);
+});
+
+
+test('re-entry leaves the edge band, avoids overlays and rejects cramped or offscreen points', () => {
+  const node = {};
+  const rect = {left:10,right:110,width:100,top:20,bottom:220};
+  const tree = {getBoundingClientRect:()=>rect,contains:el=>el === node};
+  const win = {innerWidth:300,innerHeight:300};
+  const container = {ownerDocument:{defaultView:win},shadowRoot:{querySelector:()=>tree,elementFromPoint:(x)=> x === 100 ? {} : node}};
+  assert.deepEqual(findNativeScrollReentry(container,{edge:{x:100,y:215},down:true}),{x:20,y:150});
+  assert.deepEqual(findNativeScrollReentry(container,{edge:{x:20,y:25},down:false}),{x:20,y:90});
+  container.shadowRoot.elementFromPoint = ()=>({});
+  assert.equal(findNativeScrollReentry(container,{edge:{x:20,y:215},down:true}),null);
+  container.shadowRoot.elementFromPoint = ()=>node;
+  rect.bottom = 110;
+  assert.equal(findNativeScrollReentry(container,{edge:{x:20,y:105},down:true}),null);
+  rect.bottom = 220; win.innerHeight = 100;
+  assert.equal(findNativeScrollReentry(container,{edge:{x:20,y:215},down:true}),null);
+  assert.equal(findNativeScrollReentry(null,{edge:{x:20,y:215},down:true}),null);
+});
+test('reorder moves inside then re-enters without mutating scroll or drag state', () => {
+  const source = readFileSync(new URL('../tests/specs/normal/editor-ui-basic.spec.ts', import.meta.url), 'utf8');
+  assert.match(source, /pointerAction.move\(currentX, currentY, reentry.x, reentry.y, 5\)/);
+  assert.match(source, /currentX = reentry.x;\s*currentY = reentry.y;\s*await pointerAction.move\(currentX, currentY, edge.x, edge.y, 10\)/);
+  const helper = readFileSync(new URL('../tests/tools/drag-state-diagnostics.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(helper, /scrollTop\s*=|scrollTo\(|dispatchEvent|showTemplatePopup\s*=(?!=)/);
 });

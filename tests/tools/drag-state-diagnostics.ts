@@ -67,3 +67,21 @@ export function findNativeScrollEdge(container: any, input: { sourceX: number; s
     candidates.sort((a,b) => b.distance - a.distance);
     return candidates.length ? {x:candidates[0].x,y:candidates[0].y} : null;
 }
+
+/** Read-only hit testing: leave the 30px edge band before native re-entry. */
+export function findNativeScrollReentry(container: any, input: { edge: { x: number; y: number }; down: boolean }) {
+    const root = container?.shadowRoot;
+    const tree = root?.querySelector('#dom-tree');
+    const win = container?.ownerDocument?.defaultView;
+    if (!tree || !win) return null;
+    const rect = tree.getBoundingClientRect();
+    // Forty pixels inside the boundary of the native 30px auto-scroll band.
+    const y = input.down ? rect.bottom - 70 : rect.top + 70;
+    if (y <= rect.top + 30 || y >= rect.bottom - 30 || y <= 0 || y >= win.innerHeight) return null;
+    for (const x of [input.edge.x, rect.left + 10, rect.right - 10, rect.left + rect.width / 2]) {
+        if (x <= rect.left || x >= rect.right || x <= 0 || x >= win.innerWidth) continue;
+        const hit = root.elementFromPoint(x, y);
+        if (hit && (hit === tree || tree.contains(hit))) return { x, y };
+    }
+    return null;
+}

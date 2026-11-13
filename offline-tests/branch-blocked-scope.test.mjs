@@ -9,7 +9,7 @@ const workflow = readFileSync(new URL('../.github/workflows/webmcp-branch-verifi
 test('fixed plan preserves ten existing suites and records both blocked Firefox suites', () => {
   const { matrix, blocked } = verificationPlan();
   assert.equal(matrix.length, 10);
-  assert.deepEqual([matrix[0].suite, matrix[0].os, matrix[0].browser], ['normal', 'macos-latest', 'webkit']);
+  assert.deepEqual([matrix[0].suite, matrix[0].os, matrix[0].browser], ['normal', 'macos-latest', 'mobile-safari']);
   assert.equal(new Set(matrix.map(row => `${row.suite}/${row.os}/${row.browser}`)).size, 10);
   for (const suite of ['normal', 'premium']) {
     assert.deepEqual(matrix.filter(row => row.suite === suite).map(row => `${row.os}/${row.browser}`).sort(), [
