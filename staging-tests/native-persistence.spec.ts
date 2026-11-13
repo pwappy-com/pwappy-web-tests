@@ -249,21 +249,35 @@ test('native staging edits and asset bytes persist after fresh-context reload', 
     // already-authorized cookie session crosses into the new, empty browser context.
     await external.close(); await editor.close(); editor = undefined;
     phase('fresh-context-readback');
+    phase('readback-context');
     fresh = await browser.newContext({ storageState: { cookies: (await context.storageState()).cookies, origins: [] }, viewport: { width: 1280, height: 900 } });
     await restrictWrites(fresh, 'fresh');
     const reloaded = await fresh.newPage();
+    phase('readback-navigation');
     await reloaded.goto(url, { waitUntil: 'domcontentloaded' });
+    phase('readback-loading');
     await expect(reloaded.locator('app-container-loading-overlay')).toBeHidden();
+    phase('readback-native-connect');
     await connect(reloaded);
+    phase('readback-export');
     const reopened = await call('pwappy_export_project');
+    phase('readback-templates');
     expect(reopened.backup.state.templateJson.templates).toEqual(saved.backup.state.templateJson.templates);
+    phase('readback-scripts');
     expect(reopened.backup.state.scriptItems.scripts).toEqual(saved.backup.state.scriptItems.scripts);
+    phase('readback-css');
     expect((await call('pwappy_get_global_stylesheet')).css).toBe(savedCss.css);
+    phase('readback-settings');
     expect((await call('pwappy_get_app_settings')).description).toBe(DESCRIPTION);
+    phase('readback-save-status');
     expect((await call('pwappy_get_save_status')).dirty).toBe(false);
+    phase('readback-asset-list');
     expect((await call('pwappy_list_asset_files', payloads.pwappy_list_asset_files)).files.map((file: any) => file.name)).toContain(ASSET.name);
+    phase('readback-asset-bytes');
     await readAsset();
+    phase('readback-asset-count');
     expect(apiCounts.assetRead).toBe(2);
+    phase('readback-blocked-writes');
     expect(apiCounts.blocked).toBe(0);
   } catch (error) {
     primaryFailure = error; failurePhase = lastPhase;

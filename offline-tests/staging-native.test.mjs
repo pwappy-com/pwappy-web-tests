@@ -307,3 +307,19 @@ for (const preexisting of [false, true]) test(`real browserless native worker is
     }
   } finally { process.chdir(oldCwd); rmSync(root, { recursive: true, force: true }); }
 });
+
+test('fresh-context readback reports exact fixed checkpoints without weakening assertions', () => {
+  const spec = readFileSync(new URL('../staging-tests/native-persistence.spec.ts', import.meta.url), 'utf8');
+  const block = spec.slice(spec.indexOf("phase('fresh-context-readback')"), spec.indexOf('} catch (error)', spec.indexOf("phase('fresh-context-readback')")));
+  const checkpoints = [...block.matchAll(/phase\('([^']+)'\)/g)].map(match => match[1]);
+  assert.deepEqual(checkpoints, ['fresh-context-readback', 'readback-context', 'readback-navigation',
+    'readback-loading', 'readback-native-connect', 'readback-export', 'readback-templates', 'readback-scripts',
+    'readback-css', 'readback-settings', 'readback-save-status', 'readback-asset-list', 'readback-asset-bytes',
+    'readback-asset-count', 'readback-blocked-writes']);
+  for (const checkpoint of checkpoints) assert.ok(PHASES.includes(checkpoint));
+  assert.match(block, /expect\(reopened\.backup\.state\.templateJson\.templates\)\.toEqual\(saved\.backup\.state\.templateJson\.templates\)/);
+  assert.match(block, /expect\(reopened\.backup\.state\.scriptItems\.scripts\)\.toEqual\(saved\.backup\.state\.scriptItems\.scripts\)/);
+  assert.match(block, /expect\(apiCounts\.assetRead\)\.toBe\(2\)/);
+  assert.match(block, /expect\(apiCounts\.blocked\)\.toBe\(0\)/);
+  assert.doesNotMatch(block, /console\.|JSON\.stringify|route\.continue|catch/);
+});

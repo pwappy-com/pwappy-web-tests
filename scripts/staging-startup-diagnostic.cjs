@@ -83,6 +83,9 @@ module.exports.validateCleanup = validateCleanup;
 // request URLs, bodies, headers, app keys, titles, or error text in this structure.
 const REQUEST_PHASES = ['unknown', 'not-started', 'guard', 'native-preflight', 'authentication', 'create-app',
   'editor-startup', 'native-discovery', 'native-edit', 'asset-upload-read', 'save', 'fresh-context-readback',
+  'readback-context', 'readback-navigation', 'readback-loading', 'readback-native-connect',
+  'readback-export', 'readback-templates', 'readback-scripts', 'readback-css', 'readback-settings',
+  'readback-save-status', 'readback-asset-list', 'readback-asset-bytes', 'readback-asset-count', 'readback-blocked-writes',
   'cleanup', 'cleanup-close-clients', 'cleanup-close-contexts', 'cleanup-guard', 'cleanup-delete',
   'cleanup-verify-absence', 'cleanup-assertions', 'complete'];
 const BLOCK_ENUMS = {
