@@ -238,3 +238,30 @@ can still hit its overlaid trash/copy controls. The next revision chooses an
 edge point by read-only shadow-root hit testing, rejecting every overlay hit
 and requiring motion beyond the native threshold. It does not hide controls,
 force scrolling, alter editor state or relax sibling/order assertions.
+
+## 2026-11-13 continuation: preserve failures and expose bounded causes
+
+Run 43158404725 ended with eight successful matrix jobs and two failed normal
+Safari jobs. Desktop WebKit stopped before test-state creation with generic
+preflight failure; Mobile Safari reported 126 passes, two failures and five
+platform exclusions. The latter failures were reorder and multiselect-definition
+setup. Firefox remains blocked; neither main branch has been merged.
+
+The current exact reorder flow passes in isolated WebKit and Mobile Safari at a
+500px viewport height, with the actual editor bundle and real cached Onsen 2.12.8
+assets. Multiselect add, select A, select A+B, clear, and delete also passes on
+both engines. These local results do not establish the CI root cause or resolve
+staging failures. No drag assertions or application behavior were weakened.
+
+The wrapper now reports a fixed failure-phase name, not exception messages or
+remote response data. Attribute creation verifies the entered values and exact
+dialog button, checks the rendered editor input rather than the definition list,
+and no longer silently dismisses application error alerts. Bounded attribute and
+drag state diagnostics retain privacy while distinguishing rejection, open dialog,
+missing input, obscured scroll edge and tree hits in subsequent CI evidence.
+
+Verification for this continuation: Node 24.22.1 offline contracts 760/760;
+credential-free discovery 7/7; isolated-runner options 3/3; isolated actual-browser
+reorder 2/2 and full multiselect lifecycle 2/2. No staging API mutation was made
+locally. Scratch browser/server processes were closed. The branch CI rerun is
+required; a successful local run is not permission to merge failing coverage.

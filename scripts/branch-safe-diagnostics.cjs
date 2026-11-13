@@ -43,9 +43,11 @@ const navBools = ['failedDocument', 'responseSeen', 'committed', 'nonGetSeen', '
 const startupBools = ['captured', 'containerPresent', 'storePresent', 'starterVisible', 'messageVisible', 'initialSaveError', 'pageNodesPresent', 'navigatorNodesPresent'];
 const startupNullable = ['loading', 'empty', 'initialVersionInit', 'serverSaved', 'serverVerified'];
 const startupKeys = [...startupBools, ...startupNullable, 'saveStatus', 'errorClassification'].join(',');
-const dragBools = ['captured', 'targetExists', 'targetInScrollport', 'pointerInScrollport', 'dragImageActive', 'dragActive', 'sourceMatched', 'siblingMarkerSelected', 'scrollAtBottom', 'scrollAtTop', 'canScroll', 'targetBelow', 'pointerInViewport', 'popupOpen'];
+const dragBools = ['captured', 'targetExists', 'targetInScrollport', 'pointerInScrollport', 'dragImageActive', 'dragActive', 'sourceMatched', 'siblingMarkerSelected', 'scrollAtBottom', 'scrollAtTop', 'canScroll', 'targetBelow', 'pointerInViewport', 'popupOpen', 'pointerAtScrollEdge', 'hitWithinTree'];
 const dragKeys = ['phase', ...dragBools, 'hit'].join(',');
 function validHelper(value) {
+  if (value?.kind === 'editor-attribute') return keys(value, 'kind,state')
+    && member(value.state, ['unobserved', 'application-rejected', 'dialog-open', 'added', 'input-not-visible']);
   if (value?.kind === 'editor-drag') return keys(value, 'kind,' + dragKeys)
     && dragBools.every(key => typeof value[key] === 'boolean')
     && member(value.phase, ['before-assert', 'assertion-failed'])
@@ -71,10 +73,15 @@ function validHelper(value) {
 }
 function parseHelper(chunk) {
   if (!(typeof chunk === 'string' || Buffer.isBuffer(chunk)) || chunk.length > 4096) return null;
-  const match = /^\[(dashboard-navigation-recovery|HttpFailure|EditorStartupFailure|EditorDragState)\] (\{[^\r\n]*\})\r?\n?$/.exec(chunk.toString());
+  const match = /^\[(dashboard-navigation-recovery|HttpFailure|EditorStartupFailure|EditorDragState|EditorAttributeState)\] (\{[^\r\n]*\})\r?\n?$/.exec(chunk.toString());
   if (!match) return null;
   try {
     const raw = JSON.parse(match[2]);
+    if (match[1] === 'EditorAttributeState') {
+      if (!keys(raw, 'state')) return null;
+      const value = { kind: 'editor-attribute', ...raw };
+      return validHelper(value) ? value : null;
+    }
     if (match[1] === 'EditorDragState') {
       if (!keys(raw, dragKeys)) return null;
       const value = { kind: 'editor-drag', ...raw };

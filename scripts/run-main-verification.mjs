@@ -15,6 +15,8 @@ const { readDiagnostics } = require('./branch-safe-diagnostics.cjs');
 const { sourceLocations } = require('./branch-safe-locations.cjs');
 const keys = ['failed', 'interrupted', 'passed', 'skipped', 'timedOut'];
 const fail = () => { throw new Error('Invalid main verification evidence'); };
+// Associate only fixed internal phases, never exception text or remote response data.
+const failurePhases = new WeakMap();
 const sum = counts => Object.values(counts).reduce((total, value) => total + value, 0);
 export function mainSelection(suite, browser, os, env, cpuCount = cpus().length, mode = 'main') {
   if (!['main', 'branch'].includes(mode)) fail();
@@ -154,13 +156,17 @@ function validateRuntime(env) {
   if (!/^[1-9][0-9]{0,19}$/.test(env.GITHUB_RUN_ID || '') || !/^[1-9][0-9]{0,7}$/.test(env.GITHUB_RUN_ATTEMPT || '')
       || !env.PWAPPY_TEST_LOGIN_PASSCODE || !env.GITHUB_OUTPUT) fail();
 }
-async function runMainInternal(suite, browser, os, phase, env, dependencies, mode) {
+async function runMainInternal(suite, browser, os, phase, env, dependencies, mode, diagnostic) {
+  diagnostic.phase = 'selection';
   if (!['tests', 'cleanup'].includes(phase)) fail();
   const selection = mainSelection(suite, browser, os, env, dependencies.cpuCount, mode);
+  diagnostic.phase = 'runtime-configuration';
   validateRuntime(env);
+  diagnostic.phase = 'initial-deployment-guard';
   const guarded = await (dependencies.guard || mainGuard)(suite, env);
   const temp = resolve(env.RUNNER_TEMP || tmpdir());
   if (phase === 'cleanup') {
+    diagnostic.phase = 'cleanup';
     const root = resolve(env.PWAPPY_MAIN_STATE_DIR || '');
     if (dirname(root) !== temp || !/^pwappy-main-check-[A-Za-z0-9_-]+$/.test(basename(root))
         || lstatSync(root).isSymbolicLink() || !lstatSync(root).isDirectory()) fail();
@@ -188,26 +194,36 @@ async function runMainInternal(suite, browser, os, phase, env, dependencies, mod
   }
   // Every candidate parallel slot must be fresh and free of registered keys before any test starts.
   if (selection.scope === 'points-smoke') {
+    diagnostic.phase = 'smoke-key-preflight';
     await (dependencies.smokeKeyCheck || assertNoRegisteredSmokeAccountKey)(browser, os, env);
   } else {
+    diagnostic.phase = 'fresh-auth-cache';
     for (let index = 0; index < selection.workers; index++) {
       assertFreshTestAccountAuthCache(browser, os, index, dependencies.authRoot || process.cwd());
     }
+    diagnostic.phase = 'account-key-preflight';
     for (let index = 0; index < selection.workers; index++) {
       await (dependencies.keyCheck || assertNoRegisteredTestAccountKey)(browser, os, index, env);
     }
   }
+  diagnostic.phase = 'final-deployment-guard';
   await (dependencies.guard || mainGuard)(suite, env);
+  diagnostic.phase = 'state-creation';
   const root = mkdtempSync(join(temp, 'pwappy-main-check-'));
   writeFileSync(join(root, 'manifest.json'), JSON.stringify(manifest(selection, env, guarded.sourceCommit)), { flag: 'wx', mode: 0o600 });
   appendFileSync(env.GITHUB_OUTPUT, `state_dir=${root}\n`);
+  diagnostic.phase = 'test-execution-or-evidence';
   return execute(selection, phase, root, env, dependencies);
 }
 export async function runMain(suite, browser, os, phase, env = process.env, dependencies = {}, mode = 'main') {
   let exit = 1;
+  const diagnostic = { phase: 'selection' };
   try {
-    exit = await runMainInternal(suite, browser, os, phase, env, dependencies, mode);
+    exit = await runMainInternal(suite, browser, os, phase, env, dependencies, mode, diagnostic);
     return exit;
+  } catch (error) {
+    if (error && (typeof error === 'object' || typeof error === 'function')) failurePhases.set(error, diagnostic.phase);
+    throw error;
   } finally {
     if (phase === 'tests' && env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `EXIT_CODE=${exit}\n`);
   }
@@ -217,6 +233,7 @@ export async function main(args = process.argv.slice(2), env = process.env, depe
     if (args.length !== 4) fail();
     return await runMain(...args, env, dependencies, mode);
   } catch (error) {
+    console.error(`Main verification failure phase: ${failurePhases.get(error) || 'arguments-or-output'}`);
     console.error(error instanceof PremiumKeyPreflightError ? `::error::${error.message}`
       : '::error::Main verification stopped; deployment, configuration or numeric evidence did not validate. Raw test data is not published.');
     return 1;

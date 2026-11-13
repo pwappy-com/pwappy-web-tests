@@ -124,7 +124,7 @@ test('editor startup allows only the exact enum and boolean snapshot at both bou
 test('drag diagnostics allow only exact boolean/enum schema at both boundaries', () => {
   const drag = { phase: 'before-assert', captured: true, targetExists: true, targetInScrollport: true,
     pointerInScrollport: true, dragImageActive: true, dragActive: true, sourceMatched: true,
-    siblingMarkerSelected: false, scrollAtBottom: false, scrollAtTop: false, canScroll: true, targetBelow: false, pointerInViewport: true, popupOpen: false, hit: 'target-gap' };
+    siblingMarkerSelected: false, scrollAtBottom: false, scrollAtTop: false, canScroll: true, targetBelow: false, pointerInViewport: true, popupOpen: false, pointerAtScrollEdge: false, hitWithinTree: true, hit: 'target-gap' };
   const parsed = parseHelper(line('EditorDragState', drag));
   assert.deepEqual(parsed, { kind: 'editor-drag', ...drag });
   assert.deepEqual(validate([{ ...location, ...parsed }]), [{ ...location, ...parsed }]);
@@ -150,4 +150,25 @@ test('drag diagnostics allow only exact boolean/enum schema at both boundaries',
   reporter.onStdOut(line('EditorDragState', drag), { location });
   assert.equal(reporter.diagnostics.length, 1);
   assert.doesNotMatch(JSON.stringify(reporter.diagnostics), /SECRET/);
+});
+
+test('attribute failure state crosses both boundaries only as a fixed enum', () => {
+  for (const state of ['unobserved', 'application-rejected', 'dialog-open', 'added', 'input-not-visible']) {
+    const parsed = parseHelper(line('EditorAttributeState', { state }));
+    assert.deepEqual(parsed, { kind: 'editor-attribute', state });
+    assert.deepEqual(validate([{ ...location, ...parsed }]), [{ ...location, ...parsed }]);
+  }
+  for (const bad of [{}, { state: secret }, { state: null }, { state: {} },
+    { state: 'dialog-open', text: secret }, { state: 'added', id: secret }]) {
+    assert.equal(parseHelper(line('EditorAttributeState', bad)), null);
+    assert.throws(() => validate([{ ...location, kind: 'editor-attribute', ...bad }]), /Invalid branch diagnostics/);
+  }
+  const reporter = new Reporter();
+  reporter.onStdOut(line('EditorAttributeState', { state: 'dialog-open', text: secret }), { location });
+  reporter.onStdOut(line('EditorAttributeState', { state: 'dialog-open' }), { location });
+  assert.equal(reporter.diagnostics.length, 1);
+  assert.equal(reporter.diagnostics[0].state, 'dialog-open');
+  assert.doesNotMatch(JSON.stringify(reporter.diagnostics), /SECRET/);
+  const source = readFileSync(new URL('../tests/tools/editor-helpers.ts', import.meta.url), 'utf8');
+  assert.match(source, /catch \(error\) \{\s*console\.log\('\[EditorAttributeState\] ' \+ JSON\.stringify\(\{ state \}\)\);\s*throw error;/);
 });

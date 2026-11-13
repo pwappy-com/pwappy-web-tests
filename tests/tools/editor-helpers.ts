@@ -549,28 +549,28 @@ export class EditorHelper {
 
         await nameCombobox.fill(name);
         await templateCombobox.fill(template);
+        // Verify the actual rendered values before submission, including after Lit updates.
+        await expect(nameCombobox).toHaveValue(name);
+        await expect(templateCombobox).toHaveValue(template);
+        await propertyContainer.locator('#attributeEditMenu').getByRole('button', { name: '追加', exact: true }).click();
 
-        await propertyContainer.getByRole('button', { name: '追加' }).click();
-
-        // 2. モーダルが閉じて、追加された入力フィールドがDOMに描画されるまでのラグを toPass で吸収
-        const newPropertyRow = propertyContainer.locator(`[data-attribute-type="${name}"], [data-attribute-key="${name}"]`).first();
-
-        await expect(async () => {
-            // アラート（重複エラー等）が割り込んでいないか確認
-            const alert = this.page.locator('alert-component');
-            if (await alert.isVisible().catch(() => false)) {
-                await alert.getByRole('button', { name: '閉じる' }).click({ force: true }).catch(() => { });
-            }
-
-            // 設定用ポップアップが完全に閉じていることを確認
-            await expect(propertyContainer.locator('#attributeList')).toBeHidden({ timeout: 1000 });
-
-            // 追加された行が可視（レンダリング済み）になっていることを検証
-            await expect(newPropertyRow).toBeVisible({ timeout: 1000 });
-        }).toPass({
-            timeout: 15000,      // 最大15秒間リトライ
-            intervals: [1000]    // 1秒間隔
-        });
+        // Only the editor input counts as success, not its hidden definition-list entry.
+        const newPropertyInput = propertyContainer.locator(`.editor [data-attribute-type="${name}"]`).first();
+        const alert = this.page.locator('alert-component');
+        let state: 'unobserved' | 'application-rejected' | 'dialog-open' | 'added' | 'input-not-visible' = 'unobserved';
+        try {
+            await expect.poll(async () => {
+                // Fixed vocabulary only; never log the application's alert text.
+                if (await alert.isVisible()) state = 'application-rejected';
+                else if (await propertyContainer.locator('#attributeEditMenu').isVisible()
+                    || await propertyContainer.locator('#attributeList').isVisible()) state = 'dialog-open';
+                else state = await newPropertyInput.isVisible() ? 'added' : 'input-not-visible';
+                return state;
+            }, { timeout: 15000, intervals: [100, 250, 500, 1000] }).toBe('added');
+        } catch (error) {
+            console.log('[EditorAttributeState] ' + JSON.stringify({ state }));
+            throw error;
+        }
     }
 
     /**

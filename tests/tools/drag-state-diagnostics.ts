@@ -3,7 +3,7 @@ export function readSiblingDragSnapshot(container: any, point: { x: number; y: n
     const empty = { captured: false, targetExists: false, targetInScrollport: false,
         pointerInScrollport: false, dragImageActive: false, dragActive: false,
         sourceMatched: false, siblingMarkerSelected: false, scrollAtBottom: false, scrollAtTop: false,
-        canScroll: false, targetBelow: false, pointerInViewport: false, popupOpen: false, hit: 'outside' };
+        canScroll: false, targetBelow: false, pointerInViewport: false, popupOpen: false, pointerAtScrollEdge: false, hitWithinTree: false, hit: 'outside' };
     const root = container?.shadowRoot;
     const doc = container?.ownerDocument;
     const win = doc?.defaultView;
@@ -29,6 +29,8 @@ export function readSiblingDragSnapshot(container: any, point: { x: number; y: n
         captured: true, targetExists: !!target,
         targetInScrollport: !!targetRect && inside(targetRect.left + targetRect.width / 2, targetRect.bottom + 5),
         pointerInScrollport,
+        pointerAtScrollEdge: pointerInScrollport && (point.y < rect.top + 30 || point.y > rect.bottom - 30),
+        hitWithinTree: !!tree && !!hitElement && (hitElement === tree || tree.contains(hitElement)),
         scrollAtBottom: !!tree && tree.scrollTop + tree.clientHeight >= tree.scrollHeight - 1,
         scrollAtTop: !!tree && tree.scrollTop <= 1,
         canScroll: !!tree && tree.scrollHeight > tree.clientHeight + 1,

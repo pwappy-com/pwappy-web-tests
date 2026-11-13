@@ -390,3 +390,36 @@ test('exact migration reverses only reviewed execution/install spans and keeps a
   assert.throws(() => restoreApprovedMainSafeExecution(source.replace('"$TEST_OS" tests', '"$TEST_OS" cleanup')));
   assert.throws(() => restoreApprovedMainSafeExecution(source.replace("steps.run_tests.outputs.started == 'true'", "steps.run_tests.outputs.started != 'false'")));
 });
+
+test('opaque startup failures expose only fixed phase codes and preserve fail-closed behavior', async () => {
+  for (const phase of ['selection', 'runtime-configuration', 'initial-deployment-guard',
+    'fresh-auth-cache', 'account-key-preflight', 'final-deployment-guard', 'state-creation', 'test-execution-or-evidence']) {
+    const f = fixture();
+    const d = deps(f); let guardCalls = 0, spawnCalls = 0;
+    const cfg = { ...f.env };
+    const args = ['normal', 'chromium', 'ubuntu-latest', 'tests'];
+    d.guard = async () => {
+      guardCalls++;
+      if ((phase === 'initial-deployment-guard' && guardCalls === 1)
+          || (phase === 'final-deployment-guard' && guardCalls === 2)) throw new Error(CANARY);
+      return pin;
+    };
+    d.keyCheck = async () => { if (phase === 'account-key-preflight') throw new Error(CANARY); };
+    d.spawn = async () => { spawnCalls++; throw new Error(CANARY); };
+    if (phase === 'selection') args[1] = CANARY;
+    if (phase === 'runtime-configuration') cfg.PWAPPY_TEST_LOGIN_PASSCODE = '';
+    if (phase === 'fresh-auth-cache') {
+      mkdirSync(join(f.root, '.auth'));
+      writeFileSync(join(f.root, '.auth', 'user-u-c-0.json'), CANARY);
+    }
+    if (phase === 'state-creation') cfg.RUNNER_TEMP = join(f.root, 'missing');
+    const lines = [], original = console.error;
+    console.error = (...values) => lines.push(values.join(' '));
+    try {
+      assert.equal(await main(args, cfg, d), 1);
+      assert.equal(lines[0], `Main verification failure phase: ${phase}`);
+      assert.doesNotMatch(lines.join('\n'), new RegExp(CANARY));
+      assert.equal(spawnCalls, phase === 'test-execution-or-evidence' ? 1 : 0);
+    } finally { console.error = original; f.dispose(); }
+  }
+});

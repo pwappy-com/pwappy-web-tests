@@ -9,7 +9,7 @@ function fixture(hitKind = 'target-gap') {
   const target = { parentElement: parent, nextElementSibling: marker, textContent: secret,
     getBoundingClientRect: () => ({ left: 10, right: 90, width: 80, top: 100, bottom: 150 }) };
   const source = { dataset: { nodeId: secret } };
-  const tree = { getBoundingClientRect: () => ({ left: 0, right: 100, top: 60, bottom: 300 }) };
+  const tree = { contains: () => hitKind !== 'toolbar' && hitKind !== 'outside', getBoundingClientRect: () => ({ left: 0, right: 100, top: 60, bottom: 300 }) };
   const hit = { className: secret, closest: selector => selector === '.node'
     ? hitKind === 'target-node' ? target : hitKind === 'dragged-node' ? source : hitKind === 'target-gap' ? parent : null
     : hitKind === 'toolbar' ? {} : null };
@@ -24,6 +24,8 @@ test('snapshot emits booleans and bounded hit enums, never source content or geo
     for (const [key, value] of Object.entries(result)) if (key !== 'hit') assert.equal(typeof value, 'boolean');
     assert.doesNotMatch(JSON.stringify(result), /CANARY|155|className|textContent|nodeId/);
     assert.equal(result.targetInScrollport, true);
+    assert.equal(result.pointerAtScrollEdge, false);
+    assert.equal(result.hitWithinTree, kind !== 'toolbar' && kind !== 'outside');
     assert.equal(result.sourceMatched, true);
     assert.equal(result.siblingMarkerSelected, true);
   }
@@ -56,7 +58,7 @@ test('negative drag state remains false for missing target, wrong source and cli
   assert.equal(result.siblingMarkerSelected, false); assert.equal(result.sourceMatched, false);
   assert.equal(result.dragImageActive, false);
   container.shadowRoot.querySelector = selector => selector === '#dom-tree'
-    ? { getBoundingClientRect: () => ({ left: 0, right: 100, top: 160, bottom: 300 }) } : query(selector);
+    ? { contains: () => true, getBoundingClientRect: () => ({ left: 0, right: 100, top: 160, bottom: 300 }) } : query(selector);
   result = readSiblingDragSnapshot(container, { x: 50, y: 155 });
   assert.equal(result.targetExists, true); assert.equal(result.targetInScrollport, false);
   assert.equal(result.pointerInScrollport, false); assert.notEqual(result.hit, 'target-gap');
@@ -85,4 +87,12 @@ test('native scroll edge avoids overlay hits and exceeds the start threshold', (
   container.shadowRoot.elementFromPoint = () => ({});
   assert.equal(findNativeScrollEdge(container,{sourceX:50,sourceY:110,down:true}),null);
   assert.equal(findNativeScrollEdge(null,{sourceX:50,sourceY:110,down:true}),null);
+});
+
+test('scroll edge and overlay diagnostics remain bounded independent booleans', () => {
+  assert.equal(readSiblingDragSnapshot(fixture(), { x: 50, y: 280 }).pointerAtScrollEdge, true);
+  const covered = readSiblingDragSnapshot(fixture('toolbar'), { x: 50, y: 280 });
+  assert.equal(covered.pointerAtScrollEdge, true);
+  assert.equal(covered.hitWithinTree, false);
+  assert.equal(readSiblingDragSnapshot(fixture(), { x: 50, y: 310 }).pointerAtScrollEdge, false);
 });
