@@ -85,3 +85,30 @@ export function findNativeScrollReentry(container: any, input: { edge: { x: numb
     }
     return null;
 }
+
+/** Read-only hit test of the real parent-owned sibling gap, including edge bands.
+ * A visible gap need not be 30px away from the scrollport edge: at maximum
+ * scroll that artificial margin may be impossible to reach.
+ */
+export function findNativeSiblingGap(container: any) {
+    const root = container?.shadowRoot;
+    const tree = root?.querySelector('#dom-tree');
+    const target = root?.querySelector('.node[data-node-dom-id="ons-button1"]');
+    const win = container?.ownerDocument?.defaultView;
+    if (!tree || !target || !win || !target.nextElementSibling?.classList.contains('node-add-point')) return null;
+    const panel = tree.getBoundingClientRect();
+    const rect = target.getBoundingClientRect();
+    const y = rect.bottom + 5;
+    if (y <= panel.top || y >= panel.bottom || y <= 0 || y >= win.innerHeight) return null;
+    for (const x of [rect.left + rect.width / 2, rect.left + 20, rect.right - 20]) {
+        if (x <= panel.left || x >= panel.right || x <= 0 || x >= win.innerWidth) continue;
+        const hit = root.elementFromPoint(x, y);
+        // Mirror the native controller's parent lookup. Never move UI, scroll,
+        // alter drag state or accept a point inside the target button.
+        if (hit?.closest('.node') !== target.parentElement) continue;
+        const siblings = Array.from(target.parentElement.children) as any[];
+        const above = siblings.filter(el => el.classList.contains('node') && el.getBoundingClientRect().bottom < y + 2).at(-1);
+        if (above === target) return { x, y };
+    }
+    return null;
+}

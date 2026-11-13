@@ -122,3 +122,26 @@ test('reorder moves inside then re-enters without mutating scroll or drag state'
   const helper = readFileSync(new URL('../tests/tools/drag-state-diagnostics.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(helper, /scrollTop\s*=|scrollTo\(|dispatchEvent|showTemplatePopup\s*=(?!=)/);
 });
+
+test('actual sibling gap at scroll edge is reachable; covered, clipped and nested targets are not', async () => {
+  const { findNativeSiblingGap } = await import('../tests/tools/drag-state-diagnostics.ts');
+  const parent = { children: [] };
+  const target = {parentElement: parent, classList: {contains:c=>c === 'node'},
+    nextElementSibling:{classList:{contains:c=>c === 'node-add-point'}},
+    getBoundingClientRect:()=>({left:10,right:90,width:80,bottom:280})};
+  parent.children = [target];
+  const tree = {getBoundingClientRect:()=>({left:0,right:100,top:0,bottom:300})};
+  const root = {querySelector:s=>s === '#dom-tree' ? tree : target, elementFromPoint:()=>({closest:()=>parent})};
+  const container = {shadowRoot:root,ownerDocument:{defaultView:{innerWidth:400,innerHeight:400}}};
+  // The former 30px margin rejects 285, despite this being a valid native gap.
+  assert.equal(285 < 300 - 30, false);
+  assert.deepEqual(findNativeSiblingGap(container),{x:50,y:285});
+  root.elementFromPoint = ()=>({closest:()=>target});
+  assert.equal(findNativeSiblingGap(container),null);
+  root.elementFromPoint = ()=>null;
+  assert.equal(findNativeSiblingGap(container),null);
+  root.elementFromPoint = ()=>({closest:()=>parent});
+  container.ownerDocument.defaultView.innerHeight = 280;
+  assert.equal(findNativeSiblingGap(container),null);
+  assert.equal(findNativeSiblingGap(null),null);
+});

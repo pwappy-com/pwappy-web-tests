@@ -3,7 +3,7 @@ import * as path from 'path';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor, addVersion } from '../../tools/dashboard-helpers';
 import { EditorHelper, normalizeWhitespace } from '../../tools/editor-helpers';
-import { readSiblingDragSnapshot, findNativeScrollEdge, findNativeScrollReentry } from '../../tools/drag-state-diagnostics';
+import { readSiblingDragSnapshot, findNativeScrollEdge, findNativeScrollReentry, findNativeSiblingGap } from '../../tools/drag-state-diagnostics';
 import { getStorageStatePath } from '../../constants';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
@@ -603,11 +603,12 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 const tBox = await btnBottom.boundingBox();
                 if (!pBox || !tBox) break;
 
-                const destX = tBox.x + tBox.width / 2;
+                const gap = await editorPage.locator('template-container').evaluate(findNativeSiblingGap);
+                const destX = gap?.x ?? tBox.x + tBox.width / 2;
                 // Drop in the parent-owned sibling gap, not inside the button.
-                const destY = tBox.y + tBox.height + 5;
+                const destY = gap?.y ?? tBox.y + tBox.height + 5;
 
-                const isTargetVisible = destY > pBox.y + 30 && destY < pBox.y + pBox.height - 30;
+                const isTargetVisible = gap !== null;
 
                 if (isTargetVisible) {
                     await pointerAction.move(currentX, currentY, destX, destY, 15);
