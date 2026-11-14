@@ -122,7 +122,7 @@ test('editor startup allows only the exact enum and boolean snapshot at both bou
 });
 
 test('drag diagnostics allow only exact boolean/enum schema at both boundaries', () => {
-  const drag = { phase: 'before-assert', captured: true, targetExists: true, targetInScrollport: true,
+  const drag = { probeAvailable: false, probeConnected: false, probeMethodIntact: false, probeWindowObserved: false, probeRequestObserved: false, probeEventObserved: false, probeMovementObserved: false, probeIncreaseObserved: false, probeDecreaseObserved: false, probeRequestThrew: false, phase: 'before-assert', captured: true, targetExists: true, targetInScrollport: true,
     pointerInScrollport: true, dragImageActive: true, dragActive: true, sourceMatched: true,
     siblingMarkerSelected: false, scrollAtBottom: false, scrollAtTop: false, canScroll: true, targetBelow: false, pointerInViewport: true, popupOpen: false, pointerAtScrollEdge: false, hitWithinTree: true, scrollTrendSampled: false, scrollObservedIncrease: false, scrollObservedDecrease: false, scrollObservedAwayFromTop: false, scrollObservedReturnToTop: false, scrollSampleUnavailable: false, hit: 'target-gap' };
   const parsed = parseHelper(line('EditorDragState', drag));

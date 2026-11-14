@@ -1,3 +1,4 @@
+import { installTreeScrollProbe } from '../../tools/tree-scroll-probe';
 import { createScrollTrend } from '../../tools/drag-scroll-trend';
 import { test as base, expect, Page, Locator, CDPSession, Dialog } from '@playwright/test';
 import * as path from 'path';
@@ -584,6 +585,11 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
         });
 
         await test.step('2. ドラッグ操作による順序反転（再進入スクロール発火版）', async () => {
+            const scrollProbe = await editorPage.locator('template-container #dom-tree')
+                .evaluateHandle(installTreeScrollProbe, undefined, { timeout: 1000 }).catch(() => null);
+            try {
+            if (scrollProbe) await scrollProbe.evaluate(p => p?.begin()).catch(() => {});
+
             const btnTop = editorPage.locator('template-container .node[data-node-dom-id="ons-button2"]');
             const btnBottom = editorPage.locator('template-container .node[data-node-dom-id="ons-button1"]');
             const layoutPanel = editorPage.locator('template-container #dom-tree');
@@ -667,7 +673,23 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
                 const state = await editorPage.locator('template-container').evaluate(
                     readSiblingDragSnapshot, { x: currentX, y: currentY }, { timeout: 1000 }
                 ).catch(() => readSiblingDragSnapshot(null, { x: 0, y: 0 }));
-                console.log('[EditorDragState] ' + JSON.stringify({ phase, ...state, ...scrollTrend.summary() }));
+                const probeSummary = scrollProbe
+                    ? await scrollProbe.evaluate(p => p?.summary()).catch(() => null) : null;
+                const probeState = {
+                    probeAvailable: probeSummary?.available === true,
+                    probeConnected: probeSummary?.connected === true,
+                    probeMethodIntact: probeSummary?.methodIntact === true,
+                    probeWindowObserved: probeSummary?.windowObserved === true,
+                    probeRequestObserved: probeSummary?.requestObserved === true,
+                    probeEventObserved: probeSummary?.eventObserved === true,
+                    probeMovementObserved: probeSummary?.movementObserved === true,
+                    probeIncreaseObserved: probeSummary?.increaseObserved === true,
+                    probeDecreaseObserved: probeSummary?.decreaseObserved === true,
+                    probeRequestThrew: probeSummary?.requestThrew === true,
+                };
+                console.log('[EditorDragState] ' + JSON.stringify({ phase, ...state, ...scrollTrend.summary(), ...probeState }));
+                // The failure report measures only the unchanged assertion wait.
+                if (phase === 'before-assert' && scrollProbe) await scrollProbe.evaluate(p => p?.begin()).catch(() => {});
             };
             await reportDragState('before-assert');
             try {
@@ -685,6 +707,12 @@ test.describe('エディタ内：UI構造操作の高度なテスト', () => {
             await expect(finalNodes.nth(0)).toHaveAttribute('data-node-dom-id', 'ons-button1');
             await expect(finalNodes.nth(1)).toHaveAttribute('data-node-dom-id', 'ons-button2');
             await expect(editorPage.locator('template-container .node[data-node-type="ons-button"]')).toHaveCount(2);
+            } finally {
+                if (scrollProbe) {
+                    await scrollProbe.evaluate(p => p?.dispose()).catch(() => {});
+                    await scrollProbe.dispose().catch(() => {});
+                }
+            }
         });
     });
 });
