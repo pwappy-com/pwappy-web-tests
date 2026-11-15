@@ -4,25 +4,18 @@ This workflow is preparation for `feat/webmcp-authoring`, not proof of a success
 live run. It does not enable, disable, dispatch, or edit the existing main workflow.
 No source is merged or deployed by this workflow.
 
-## Temporarily blocked Firefox scope
+## Firefox temporarily deferred from the required matrix
 
-The branch-only plan in `scripts/branch-verification-plan.mjs` retains the six
-requested browser/OS pairs, but records Ubuntu Firefox normal and Premium as
-**blocked, not run**. Staging account preparation rejected `pwuf000` with HTTP 403;
-the current backend authorization does not include the Firefox account family.
-This is an account authorization blocker, not evidence of a Firefox feature failure.
-Do not alias Firefox to another account or broaden backend authorization to bypass it.
+The owner deferred Ubuntu Firefox Normal and Premium from this verification
+pass. They are recorded as **deferred, not run**, not passed. Staging account
+preparation rejected `pwuf000` with HTTP 403. The separate Firefox configuration
+is retained; no alternate account or new authentication permission is introduced.
 
-The preflight publishes both blocked records in its job summary and warnings,
-and schedules the ten existing normal/Premium combinations. Fail-fast is disabled
-only in this branch workflow so one failure does not cancel unrelated coverage;
-execution remains serial and source/authorization guards remain mandatory.
-The final aggregate fails while blocked coverage remains, even if all ten runnable
-suites pass. Missing blocked-count output also fails closed. Direct branch runner
-Firefox tests and cleanup reject locally before any network request or login.
-There is no input/environment override for the blocked pair or arbitrary selection.
-Removing this blocker or changing the requested scope requires a separate reviewed
-change; isolated local Firefox checks do not satisfy the missing staging suites.
+Preflight reports the two deferred combinations explicitly and schedules all ten
+required Normal/Premium jobs. The aggregate requires the exact scope and success
+of the required jobs, including cleanup. Missing/incorrect counts or any failed,
+skipped or unauthorized required job still fail the run. Direct branch runner
+Firefox tests and cleanup continue to reject before networking or login.
 
 ## Exact source and intentional trigger
 
@@ -112,7 +105,7 @@ paths are free. The source-bound authorization gate remains in place.
 
 ## Coverage and skips
 
-The requested Normal and Premium scope is the prior five CI combinations plus Linux Firefox. The current runnable plan excludes the explicitly blocked Firefox pair described above:
+The requested Normal and Premium scope is the prior five CI combinations plus Linux Firefox. The current runnable plan excludes the explicitly deferred Firefox pair described above:
 
 - Linux Chromium, mobile Chrome emulation, and Firefox.
 - Windows Chromium.
@@ -121,7 +114,7 @@ The requested Normal and Premium scope is the prior five CI combinations plus Li
   pressure); Premium keeps its existing `macos-latest` selection.
 
 Firefox is an existing configured project and has its own account code `f`.
-It is explicitly tracked as blocked until the authorized staging account rollout and standalone Firefox trial succeed. Mobile rows are browser
+It is explicitly tracked as deferred until the authorized staging account rollout and standalone Firefox trial succeed. Mobile rows are browser
 emulation, not actual Android/iOS device, installation, push or OS-integration proof.
 Other OS/browser Cartesian combinations were not previously configured in CI and
 are not claimed here. Node 24 offline contracts, credential-free discovery and
@@ -170,8 +163,7 @@ actual isolated Playwright reporter checks verify this boundary.
 
 Only the existing verified metadata-only `summary.json` is uploaded. It reports
 the child process result, not cleanup or overall job success. The aggregate job
-requires every matrix job and cleanup to succeed. Blocked tests remain
-`not-recorded`, never passed. If the deployed marker changes mid-run, the next test
+requires every matrix job and cleanup to succeed. Deferred Firefox tests remain not run, never passed. If the deployed marker changes mid-run, the next test
 or cleanup process stops; investigate and restore the intended deployment before
 retrying. A GET marker is a point-in-time check, not an infrastructure deployment
 lock, so no other deployment may run concurrently during this verification.

@@ -2,12 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { verificationPlan, BLOCKED_FIREFOX_REASON } from '../scripts/branch-verification-plan.mjs';
+import { verificationPlan, DEFERRED_FIREFOX_REASON } from '../scripts/branch-verification-plan.mjs';
 import { invocation, run } from '../scripts/run-branch-verification.mjs';
 
 const workflow = readFileSync(new URL('../.github/workflows/webmcp-branch-verification.yml', import.meta.url), 'utf8');
-test('fixed plan preserves ten existing suites and records both blocked Firefox suites', () => {
-  const { matrix, blocked } = verificationPlan();
+test('fixed plan preserves ten existing suites and records both deferred Firefox suites', () => {
+  const { matrix, deferred } = verificationPlan();
   assert.equal(matrix.length, 10);
   assert.deepEqual([matrix[0].suite, matrix[0].os, matrix[0].browser], ['normal', 'macos-latest', 'mobile-safari']);
   assert.equal(new Set(matrix.map(row => `${row.suite}/${row.os}/${row.browser}`)).size, 10);
@@ -20,8 +20,8 @@ test('fixed plan preserves ten existing suites and records both blocked Firefox 
       assert.equal(row.runner, suite === 'premium' ? row.os : row.os === 'macos-latest' ? 'macos-26-intel' : row.os);
     }
   }
-  assert.deepEqual(blocked, ['normal', 'premium'].map(suite => ({ suite, os: 'ubuntu-latest', browser: 'firefox',
-    status: 'blocked', reason: BLOCKED_FIREFOX_REASON })));
+  assert.deepEqual(deferred, ['normal', 'premium'].map(suite => ({ suite, os: 'ubuntu-latest', browser: 'firefox',
+    status: 'deferred', reason: DEFERRED_FIREFOX_REASON })));
 });
 
 test('direct Firefox tests and cleanup stop before guard, network, key checks or spawn', async () => {
@@ -34,32 +34,32 @@ test('direct Firefox tests and cleanup stop before guard, network, key checks or
   }
 });
 
-test('workflow carries blocked count, visible records and executes all runnable suites serially', () => {
-  assert.match(workflow, /blocked_count: \$\{\{ steps.matrix.outputs.blocked_count \}\}/);
-  assert.match(workflow, /blocked_count=\$\{blocked.length\}/);
+test('workflow carries deferred count, visible records and executes all runnable suites serially', () => {
+  assert.match(workflow, /deferred_count: \$\{\{ steps.matrix.outputs.deferred_count \}\}/);
+  assert.match(workflow, /deferred_count=\$\{deferred.length\}/);
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
-  assert.match(workflow, /BLOCKED \(not run\)/);
-  assert.match(workflow, /BLOCKED_COUNT: \$\{\{ needs.preflight.outputs.blocked_count \}\}/);
+  assert.match(workflow, /DEFERRED \(out of scope, not run\)/);
+  assert.match(workflow, /DEFERRED_COUNT: \$\{\{ needs.preflight.outputs.deferred_count \}\}/);
   assert.match(workflow, /fail-fast: false/);
   assert.match(workflow, /max-parallel: 1/);
 });
 
-test('actual final shell gate fails for blocked or missing counts even when runnable suites pass', () => {
+test('actual final shell gate requires all ten jobs and exactly two deferred Firefox suites', () => {
   const gate = workflow.split('  verification-result:')[1].split('        run: |\n')[1]
     .split('\n').map(line => line.replace(/^          /, '')).join('\n');
-  for (const count of ['2', '', 'invalid']) {
+  for (const [count, required] of [['0', '10'], ['', '10'], ['invalid', '10'], ['2', '9'], ['2', '']]) {
     const result = spawnSync('bash', ['-c', gate], { encoding: 'utf8',
-      env: { PREFLIGHT_RESULT: 'success', VERIFICATION_RESULT: 'success', BLOCKED_COUNT: count } });
+      env: { PREFLIGHT_RESULT: 'success', VERIFICATION_RESULT: 'success', DEFERRED_COUNT: count, REQUIRED_COUNT: required } });
     assert.equal(result.status, 1);
-    assert.match(result.stdout, /coverage is blocked and was not run/);
-    assert.doesNotMatch(result.stdout, /Configured branch suites passed/);
+    assert.match(result.stdout, /Unexpected verification scope/);
+    assert.doesNotMatch(result.stdout, /All ten required branch suites passed/);
   }
   for (const result of ['failure', 'cancelled', 'skipped', '']) {
     assert.equal(spawnSync('bash', ['-c', gate], { env: {
-      PREFLIGHT_RESULT: 'success', VERIFICATION_RESULT: result, BLOCKED_COUNT: '0',
+      PREFLIGHT_RESULT: 'success', VERIFICATION_RESULT: result, DEFERRED_COUNT: '2', REQUIRED_COUNT: '10',
     } }).status, 1);
   }
   assert.equal(spawnSync('bash', ['-c', gate], { env: {
-    PREFLIGHT_RESULT: 'success', VERIFICATION_RESULT: 'success', BLOCKED_COUNT: '0',
+    PREFLIGHT_RESULT: 'success', VERIFICATION_RESULT: 'success', DEFERRED_COUNT: '2', REQUIRED_COUNT: '10',
   } }).status, 0);
 });
