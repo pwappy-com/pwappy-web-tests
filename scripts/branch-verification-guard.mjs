@@ -20,7 +20,23 @@ const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 export function readPin() {
   return JSON.parse(readFileSync(new URL('../.github/webmcp-verification.json', import.meta.url), 'utf8'));
 }
-export function validateStagingConfiguration(env, pin, suite) {
+// Recurring approval is confined to the repository's exact main workflow.
+// Dispatch/feature branches retain their independent per-source approval.
+export function isTrustedRecurringMain(env, event) {
+  const repo = 'pwappy-com/pwappy-web-tests';
+  if (env.GITHUB_REPOSITORY !== repo || event?.repository?.full_name !== repo
+      || event.repository.fork !== false || event.repository.default_branch !== 'main'
+      || env.GITHUB_REF !== 'refs/heads/main' || !sha(env.GITHUB_SHA)
+      || env.GITHUB_WORKFLOW_SHA !== env.GITHUB_SHA
+      || env.GITHUB_WORKFLOW_REF !== `${repo}/.github/workflows/e2e-tests.yml@refs/heads/main`) return false;
+  if (env.GITHUB_EVENT_NAME === 'schedule') {
+    return ['0 1,4,7,10,13,20,23 * * *', '0 18 * * *', '0 0 * * *'].includes(event?.schedule);
+  }
+  return env.GITHUB_EVENT_NAME === 'push' && event?.ref === env.GITHUB_REF
+    && event.after === env.GITHUB_SHA && event.head_commit?.id === env.GITHUB_SHA
+    && event.deleted === false && event.forced === false;
+}
+export function validateStagingConfiguration(env, pin, suite, mainEvent) {
   if (!['preflight', 'normal', 'premium'].includes(suite)) fail('invalid suite');
   if (!pin || Object.keys(pin).join(',') !== 'sourceCommit' || !sha(pin.sourceCommit)) fail('invalid source pin');
   // A second supplied SHA is optional, but must never silently override the checked-in pin.
@@ -36,7 +52,8 @@ export function validateStagingConfiguration(env, pin, suite) {
     }
   }
   // Normal synthetic-account writes are separate from live Premium publication/moderation scope.
-  if (suite === 'premium' && env.PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA !== pin.sourceCommit) {
+  if (suite === 'premium' && env.PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA !== pin.sourceCommit
+      && !isTrustedRecurringMain(env, mainEvent)) {
     fail('live Premium authorization for this source commit is missing');
   }
   return { sourceCommit: pin.sourceCommit, baseURL: base.href };

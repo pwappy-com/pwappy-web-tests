@@ -21,7 +21,7 @@ export function validateMainConfiguration(env, event, pin, suite) {
       break;
     default: fail();
   }
-  return validateStagingConfiguration(env, pin, suite);
+  return validateStagingConfiguration(env, pin, suite, event);
 }
 export async function mainGuard(suite, env = process.env, dependencies = {}) {
   const event = JSON.parse(readFileSync(env.GITHUB_EVENT_PATH, 'utf8'));
