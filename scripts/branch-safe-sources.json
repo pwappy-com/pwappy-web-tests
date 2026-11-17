@@ -30,6 +30,7 @@
   "tests/tools/initial-dashboard-navigation.ts",
   "tests/tools/monaco-native-shortcut.ts",
   "tests/tools/premium-control-helpers.ts",
+  "tests/tools/runner-benchmark.spec.ts",
   "tests/tools/success-assertions.ts",
   "tests/tools/success-zip.ts",
   "tests/tools/test-point-preparation.ts",

@@ -38,8 +38,10 @@ export function mainSelection(suite, browser, os, env, cpuCount = cpus().length,
     'quick-property-regression': ['tests/specs/normal/editor-quick-property-editor.spec.ts'],
     'style-ownership-regression': ['tests/specs/normal/editor-style-ownership.spec.ts'],
     'points-smoke': [],
+    'runner-benchmark': ['tests/tools/runner-benchmark.spec.ts'],
   };
   const points = mode === 'branch' ? 'true' : env.PWAPPY_TEST_POINTS_ENABLED;
+  if (scope === 'runner-benchmark' && (suite !== 'normal' || workers !== 1 || retries !== '0')) fail();
   if (!Object.hasOwn(scopes, scope) || !['true', 'false'].includes(points)) fail();
   return { suite, browser, os, workers, retries: Number(retries), scope, points, mode,
     suffix: entry.suffix, code: entry.code, testArgs: scopes[scope] };
@@ -52,7 +54,9 @@ export function mainInvocation(selection, phase, root, env, account) {
     PWAPPY_TEST_RUN_ID: `${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}-${selection.suite}`,
     TEST_GEMINI_API_KEY: 'AIza_TEST_ONLY_WEBMCP', PWAPPY_LOGIN: '1', PWAPPY_TEST_USER_PREFIX: 'pwusr',
     DOTENV_CONFIG_PATH: join(root, 'absent.env'),
-    PWAPPY_MAIN_DISABLE_RAW_EVIDENCE: selection.mode === 'branch' ? 'true' : 'false',
+    PWAPPY_MAIN_DISABLE_RAW_EVIDENCE: selection.mode === 'branch' || selection.scope === 'runner-benchmark' ? 'true' : 'false',
+    PWAPPY_RUNNER_BENCHMARK: selection.scope === 'runner-benchmark' && phase === 'tests' ? 'true' : '',
+    PWAPPY_BENCH_TIMINGS_PATH: selection.scope === 'runner-benchmark' && phase === 'tests' ? join(root, 'timings.json') : '',
     PWAPPY_MAIN_WORKERS: String(phase === 'cleanup' ? 1 : selection.workers),
     PWAPPY_MAIN_ACCOUNTS_PATH: join(root, 'accounts.json'),
     PWAPPY_MAIN_INTEGRITY_PATH: join(root, 'integrity.json'),
@@ -146,6 +150,10 @@ async function execute(selection, phase, root, env, dependencies, account) {
   for (const item of diagnostics) console.log('Main diagnostic: ' + JSON.stringify(item));
   for (const item of failures) console.log(`Main failure: ${item.status} ${item.kind} ${item.file}:${item.line}`);
   console.log(`Main ${selection.suite} ${phase}: ` + JSON.stringify({ ...final, exit }));
+  if (selection.scope === 'runner-benchmark' && phase === 'tests') {
+    const rows = require('./runner-benchmark-timings.cjs').read(childEnv.PWAPPY_BENCH_TIMINGS_PATH, exit === 0);
+    console.log('Runner benchmark timings: ' + JSON.stringify(rows));
+  }
   // A flaky pass is reported separately but never silently turns a failed attempt green.
   return exit || (counts.passed === 0 || final.attempts.failed + final.attempts.timedOut + final.attempts.interrupted > 0 ? 1 : 0);
 }

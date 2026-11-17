@@ -37,7 +37,8 @@ export default defineConfig({
   testDir: './tests',
   // WebMCP fixtures require their own build/server and empty authentication.
   // Run them with npm run test:webmcp; keep the existing live-suite/cleanup scope.
-  testIgnore: ['**/specs/webmcp/**', '**/*.test.mjs'],
+  testIgnore: ['**/specs/webmcp/**', '**/*.test.mjs',
+    ...(process.env.PWAPPY_RUNNER_BENCHMARK === 'true' ? [] : ['**/tools/runner-benchmark.spec.ts'])],
   /* Run tests in files in parallel */
   fullyParallel: false,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

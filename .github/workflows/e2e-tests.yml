@@ -79,6 +79,7 @@ on:
           - quick-property-regression
           - style-ownership-regression
           - points-smoke
+          - runner-benchmark
       normal_prepare_points:
         description: "通常テストのステージング残高準備（既定有効、falseは診断用）"
         type: boolean
@@ -135,10 +136,12 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           MATRIX_PARALLELISM_INPUT: ${{ inputs.matrix_parallelism }}
+          BENCH_SCOPE: ${{ inputs.test_scope }}
         run: |
           parallelism=2
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             parallelism="${MATRIX_PARALLELISM_INPUT:-2}"
+            if [[ "${BENCH_SCOPE:-}" == "runner-benchmark" ]]; then parallelism=1; fi
           fi
           case "$parallelism" in
             1|2|5) ;;
@@ -262,6 +265,8 @@ jobs:
           NORMAL_BROWSER_INPUT: ${{ inputs.normal_browser }}
           RUN_NORMAL: ${{ steps.get_suite.outputs.run_normal }}
           BASE_MATRIX: ${{ steps.set-matrix.outputs.matrix }}
+          BENCH_SCOPE: ${{ inputs.test_scope }}
+          TEST_SUITE_INPUT: ${{ inputs.test_suite }}
         run: |
           # Premium-only and scheduled runs retain the original matrix unchanged.
           node - <<'JS'
@@ -280,6 +285,14 @@ jobs:
             }
             matrix = JSON.stringify(selected);
           }
+          if (EVENT_NAME === 'workflow_dispatch' && process.env.BENCH_SCOPE === 'runner-benchmark') {
+            if (process.env.TEST_SUITE_INPUT !== 'normal') throw new Error('Benchmark is normal-only');
+            matrix = JSON.stringify([
+              {os:'ubuntu-latest',browser:'chromium',binary:'chromium',runner:'ubuntu-24.04'},
+              {os:'macos-latest',browser:'webkit',binary:'webkit',runner:'macos-26-intel'},
+              {os:'macos-latest',browser:'webkit',binary:'webkit',runner:'macos-26'},
+            ]);
+          }
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `normal_matrix=${matrix || '[]'}\n`);
           JS
 
@@ -287,7 +300,7 @@ jobs:
   # ジョブ 2: Normalテストの実行
   # ===================================================================
   e2e-normal:
-    name: e2e-normal (${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}, ${{ matrix.browser }})
+    name: e2e-normal (${{ matrix.runner || (matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os) }}, ${{ matrix.browser }})
     needs: prepare-matrix
     if: ${{ needs.prepare-matrix.outputs.run_normal == 'true' }}
     timeout-minutes: 120
@@ -301,7 +314,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.normal_matrix) }}
     # 7GiB ARMランナーで継続するswapを避け、同じmacOS 26の標準14GiB Intelランナーに固定。
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}
+    runs-on: ${{ matrix.runner || (matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os) }}
     concurrency:
       group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
       cancel-in-progress: false
