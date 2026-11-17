@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { verificationPlan, DEFERRED_FIREFOX_REASON } from '../scripts/branch-verification-plan.mjs';
 import { invocation, run } from '../scripts/run-branch-verification.mjs';
 
-const workflow = readFileSync(new URL('../.github/workflows/webmcp-branch-verification.yml', import.meta.url), 'utf8');
+const workflow = readFileSync(new URL('./fixtures/legacy-webmcp-branch-verification.yml', import.meta.url), 'utf8');
 test('fixed plan preserves ten existing suites and records both deferred Firefox suites', () => {
   const { matrix, deferred } = verificationPlan();
   assert.equal(matrix.length, 10);
