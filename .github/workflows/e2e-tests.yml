@@ -301,7 +301,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.normal_matrix) }}
     # 7GiB ARMランナーで継続するswapを避け、同じmacOS 26の標準14GiB Intelランナーに固定。
-    runs-on: ${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}
     concurrency:
       group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
       cancel-in-progress: false
@@ -492,7 +492,7 @@ jobs:
       max-parallel: 1
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os }}
     concurrency:
       group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
       cancel-in-progress: false
