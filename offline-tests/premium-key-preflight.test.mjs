@@ -161,7 +161,7 @@ test('registered key stops wrapper before started, spawn and workflow app cleanu
     assert.deepEqual(calls, ['stage-guard', 'key-check']);
     assert.equal(readFileSync(output, 'utf8'), '');
     assert.equal(f.calls.at(-1), 'dispose');
-    const workflow = readFileSync(new URL('../.github/workflows/webmcp-branch-verification.yml', import.meta.url), 'utf8');
+    const workflow = readFileSync(new URL('./fixtures/legacy-webmcp-branch-verification.yml', import.meta.url), 'utf8');
     assert.match(workflow, /always\(\) && steps.run_tests.outputs.started == 'true'/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

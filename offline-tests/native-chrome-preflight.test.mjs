@@ -45,7 +45,7 @@ test('probe rejects unsafe version metadata and any nonblank page before native 
   }
 });
 test('early workflow probe precedes live suite with no secret environment; guarded persistence smoke also precedes it', () => {
-  const workflow = readFileSync(new URL('../.github/workflows/webmcp-branch-verification.yml', import.meta.url), 'utf8');
+  const workflow = readFileSync(new URL('./fixtures/legacy-webmcp-branch-verification.yml', import.meta.url), 'utf8');
   const start = workflow.indexOf('      - name: Probe native WebMCP');
   const end = workflow.indexOf('      - name:', start + 1);
   const step = workflow.slice(start, end);

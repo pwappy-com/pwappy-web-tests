@@ -107,7 +107,7 @@ test('native transport source has no page evaluation or mocks, isolated evidence
   const config = readFileSync(new URL('../playwright.staging-native.config.ts', import.meta.url), 'utf8');
   assert.match(config, /testDir: '\.\/staging-tests'/); assert.doesNotMatch(config, /^import .*dotenv/m);
   assert.match(config, /trace: 'off', screenshot: 'off', video: 'off'/);
-  const workflow = readFileSync(new URL('../.github/workflows/webmcp-branch-verification.yml', import.meta.url), 'utf8');
+  const workflow = readFileSync(new URL('./fixtures/legacy-webmcp-branch-verification.yml', import.meta.url), 'utf8');
   const step = workflow.slice(workflow.indexOf('      - name: Verify native WebMCP'), workflow.indexOf('      - name: Clean only'));
   assert.match(step, /success\(\).*matrix\.suite == 'normal'.*matrix\.os == 'ubuntu-latest'.*matrix\.browser == 'chromium'/);
   assert.match(step, /npm run test:webmcp:staging/);

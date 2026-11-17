@@ -1,3 +1,17 @@
+> Historical workflow, retired from automatic execution. Its byte-identical YAML is
+> preserved at `offline-tests/fixtures/legacy-webmcp-branch-verification.yml` for
+> historical contract tests. It is no longer an Actions workflow or an active
+> dependency on the old feature branch.
+>
+> Current Normal/Premium staging suites and cleanup run through guarded
+> `e2e-tests.yml` on main. Isolated WebMCP source integration remains a separate
+> opt-in `webmcp-isolated.yml` workflow; it is not claimed as live-suite coverage.
+>
+> Equivalent credential-free local checks remain available:
+> `node --test offline-tests/*.test.mjs`, `npm run test:discovery`, and
+> `npm run test:webmcp:checks`. This retirement does not add those checks to the
+> scheduled workflow or claim that existing historical hash failures are fixed.
+
 # Branch-only staging verification
 
 This workflow is preparation for `feat/webmcp-authoring`, not proof of a successful

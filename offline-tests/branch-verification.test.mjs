@@ -16,7 +16,7 @@ const env = { GITHUB_EVENT_NAME: 'push', GITHUB_REF: BRANCH, GITHUB_SHA: TESTS,
   GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', PWAPPY_TEST_BASE_URL: STAGING_ORIGIN,
   PWAPPY_TEST_LOGIN_ENDPOINT: LOGIN_ENDPOINT, PWAPPY_TEST_LOGIN_PASSCODE: CANARY };
 const marker = { commit: SOURCE, run_id: '123', run_attempt: '1' };
-const workflow = readFileSync(new URL('../.github/workflows/webmcp-branch-verification.yml', import.meta.url), 'utf8');
+const workflow = readFileSync(new URL('./fixtures/legacy-webmcp-branch-verification.yml', import.meta.url), 'utf8');
 function response(value = marker, override = {}) {
   return { ok: true, redirected: false, url: `${STAGING_ORIGIN}/staging-deployment.json`,
     body: (async function* () { yield Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)); })(), ...override };
