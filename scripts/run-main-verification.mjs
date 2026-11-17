@@ -56,6 +56,7 @@ export function mainInvocation(selection, phase, root, env, account) {
     DOTENV_CONFIG_PATH: join(root, 'absent.env'),
     PWAPPY_MAIN_DISABLE_RAW_EVIDENCE: selection.mode === 'branch' || selection.scope === 'runner-benchmark' ? 'true' : 'false',
     PWAPPY_RUNNER_BENCHMARK: selection.scope === 'runner-benchmark' && phase === 'tests' ? 'true' : '',
+    PWAPPY_APP_STARTUP_COUNTERS_PATH: selection.scope === 'runner-benchmark' && phase === 'tests' ? join(root, 'app-startup-counters.json') : '',
     PWAPPY_APP_STARTUP_TIMINGS_PATH: selection.scope === 'runner-benchmark' && phase === 'tests' ? join(root, 'app-startup-timings.json') : '',
     PWAPPY_EDITOR_DETAIL_TIMINGS_PATH: selection.scope === 'runner-benchmark' && phase === 'tests' ? join(root, 'editor-detail-timings.json') : '',
     PWAPPY_BENCH_TIMINGS_PATH: selection.scope === 'runner-benchmark' && phase === 'tests' ? join(root, 'timings.json') : '',
@@ -156,6 +157,8 @@ async function execute(selection, phase, root, env, dependencies, account) {
     const rows = require('./runner-benchmark-timings.cjs').read(childEnv.PWAPPY_BENCH_TIMINGS_PATH, exit === 0);
     const details = require('./editor-detail-timings.cjs').read(childEnv.PWAPPY_EDITOR_DETAIL_TIMINGS_PATH, exit === 0, selection.browser);
     const appTimings = require('./app-startup-timings.cjs').read(childEnv.PWAPPY_APP_STARTUP_TIMINGS_PATH, exit === 0);
+    const counters = require('./app-startup-counters.cjs').read(childEnv.PWAPPY_APP_STARTUP_COUNTERS_PATH, exit === 0);
+    console.log('Runner app startup counters: ' + JSON.stringify(counters));
     console.log('Runner app startup timings: ' + JSON.stringify(appTimings));
     console.log('Runner benchmark timings: ' + JSON.stringify(rows));
     console.log('Runner editor detail timings: ' + JSON.stringify(details));

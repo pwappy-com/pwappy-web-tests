@@ -10,7 +10,7 @@ const atomic = (path, value) => {
 module.exports = class MainCountReporter extends Base {
   constructor() {
     super(); this.results = new Map(); this.attempts = empty(); this.accounts = new Set();
-    this.appStartupTimings = []; this.benchmarkTimings = []; this.editorDetailTimings = [];
+    this.appStartupCounters = []; this.appStartupTimings = []; this.benchmarkTimings = []; this.editorDetailTimings = [];
     this.begun = 0; this.recordingFailed = false; this.startedPublished = false;
   }
   record(operation) {
@@ -58,6 +58,9 @@ module.exports = class MainCountReporter extends Base {
       const schema = require('./app-startup-timings.cjs');
       this.appStartupTimings.push(...schema.attachmentRows(test, result));
       schema.validate(this.appStartupTimings);
+      const counterSchema = require('./app-startup-counters.cjs');
+      this.appStartupCounters.push(...counterSchema.attachmentRows(test, result));
+      counterSchema.validate(this.appStartupCounters);
     }
     super.onTestEnd(test, result);
   }); }
@@ -70,6 +73,7 @@ module.exports = class MainCountReporter extends Base {
     });
   }); }
   onEnd() {
+    this.record(() => { if (process.env.PWAPPY_APP_STARTUP_COUNTERS_PATH) atomic(process.env.PWAPPY_APP_STARTUP_COUNTERS_PATH, this.appStartupCounters); });
     this.record(() => { if (process.env.PWAPPY_APP_STARTUP_TIMINGS_PATH) atomic(process.env.PWAPPY_APP_STARTUP_TIMINGS_PATH, this.appStartupTimings); });
     this.record(() => { if (process.env.PWAPPY_EDITOR_DETAIL_TIMINGS_PATH) atomic(process.env.PWAPPY_EDITOR_DETAIL_TIMINGS_PATH, this.editorDetailTimings); });
     this.record(() => { if (process.env.PWAPPY_BENCH_TIMINGS_PATH) atomic(process.env.PWAPPY_BENCH_TIMINGS_PATH, this.benchmarkTimings); });
