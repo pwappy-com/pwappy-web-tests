@@ -17,7 +17,7 @@ test('fixed plan preserves ten existing suites and records both deferred Firefox
       'macos-latest/webkit', 'macos-latest/mobile-safari',
     ].sort());
     for (const row of matrix.filter(row => row.suite === suite)) {
-      assert.equal(row.runner, suite === 'premium' ? row.os : row.os === 'macos-latest' ? 'macos-26-intel' : row.os);
+      assert.equal(row.runner, row.os === 'macos-latest' ? 'macos-26' : row.os);
     }
   }
   assert.deepEqual(deferred, ['normal', 'premium'].map(suite => ({ suite, os: 'ubuntu-latest', browser: 'firefox',

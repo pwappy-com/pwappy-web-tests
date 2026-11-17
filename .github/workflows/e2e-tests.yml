@@ -287,7 +287,7 @@ jobs:
   # ジョブ 2: Normalテストの実行
   # ===================================================================
   e2e-normal:
-    name: e2e-normal (${{ matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}, ${{ matrix.browser }})
+    name: e2e-normal (${{ matrix.os == 'macos-latest' && 'macos-26' || matrix.os }}, ${{ matrix.browser }})
     needs: prepare-matrix
     if: ${{ needs.prepare-matrix.outputs.run_normal == 'true' }}
     timeout-minutes: 120
@@ -300,8 +300,8 @@ jobs:
       max-parallel: ${{ fromJSON(needs.prepare-matrix.outputs.matrix_parallelism) }}
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.normal_matrix) }}
-    # 7GiB ARMランナーで継続するswapを避け、同じmacOS 26の標準14GiB Intelランナーに固定。
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os }}
+    # macOSは所有者指定のApple Silicon標準ランナーに固定。論理OS名とアカウントは維持。
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os == 'macos-latest' && 'macos-26' || matrix.os }}
     concurrency:
       group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
       cancel-in-progress: false
@@ -492,7 +492,7 @@ jobs:
       max-parallel: 1
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.matrix) }}
-    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os == 'macos-latest' && 'macos-26' || matrix.os }}
     concurrency:
       group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
       cancel-in-progress: false
@@ -507,7 +507,7 @@ jobs:
 
       - name: Set cache key prefix
         run: |
-          echo "CACHE_KEY_PREFIX=${{ runner.os }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
+          echo "CACHE_KEY_PREFIX=${{ runner.os }}-${{ runner.arch }}-playwright-${{ matrix.binary }}-${{ hashFiles('**/package-lock.json') }}" >> $GITHUB_ENV
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
