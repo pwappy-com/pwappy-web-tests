@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {mainSelection,mainInvocation} from '../scripts/run-main-verification.mjs';
 const env={GITHUB_EVENT_NAME:'workflow_dispatch',PWAPPY_TEST_POINTS_ENABLED:'true',TEST_SCOPE:'test-tab-regression',TEST_WORKERS:'1',TEST_RETRIES:'0'};
-test('test tab opt-in selects exactly three existing cases with no benchmark additions',()=>{
+test('test tab opt-in selects exactly four existing cases with no benchmark additions',()=>{
  const s=mainSelection('normal','webkit','macos-latest',env);
- assert.deepEqual(s.testArgs,['tests/specs/normal/editor-ui-automation.spec.ts','tests/specs/normal/editor-ui-scripts.spec.ts','--grep','(?:テストシナリオの追加・編集・削除ができる|APIモックの追加・ON/OFFトグル・削除ができる|変更がある場合、確認ダイアログで「OK（はい）」を選択すると変更が保存されて一覧に戻る)$']);
+ assert.deepEqual(s.testArgs,['tests/specs/normal/editor-ui-automation.spec.ts','tests/specs/normal/editor-ui-scripts.spec.ts','--grep','(?:テストシナリオの追加・編集・削除ができる|APIモックの追加・ON/OFFトグル・削除ができる|変更がある場合、確認ダイアログで「OK（はい）」を選択すると変更が保存されて一覧に戻る|サービスワーカー管理：イベント定義、スクリプト紐付け、削除)$']);
 });
 test('single worker zero retries; scheduled run unchanged',()=>{
  for(const extra of [{TEST_WORKERS:'2'},{TEST_RETRIES:'1'}])assert.throws(()=>mainSelection('normal','webkit','macos-latest',{...env,...extra}));

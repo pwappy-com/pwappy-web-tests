@@ -37,7 +37,7 @@ export function mainSelection(suite, browser, os, env, cpuCount = cpus().length,
       '--grep', 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires'],
     'quick-property-regression': ['tests/specs/normal/editor-quick-property-editor.spec.ts'],
     'style-ownership-regression': ['tests/specs/normal/editor-style-ownership.spec.ts'],
-    'test-tab-regression': ['tests/specs/normal/editor-ui-automation.spec.ts', 'tests/specs/normal/editor-ui-scripts.spec.ts', '--grep', '(?:テストシナリオの追加・編集・削除ができる|APIモックの追加・ON/OFFトグル・削除ができる|変更がある場合、確認ダイアログで「OK（はい）」を選択すると変更が保存されて一覧に戻る)$'],
+    'test-tab-regression': ['tests/specs/normal/editor-ui-automation.spec.ts', 'tests/specs/normal/editor-ui-scripts.spec.ts', '--grep', '(?:テストシナリオの追加・編集・削除ができる|APIモックの追加・ON/OFFトグル・削除ができる|変更がある場合、確認ダイアログで「OK（はい）」を選択すると変更が保存されて一覧に戻る|サービスワーカー管理：イベント定義、スクリプト紐付け、削除)$'],
     'points-smoke': [],
     'runner-benchmark': ['tests/tools/runner-benchmark.spec.ts'],
   };
