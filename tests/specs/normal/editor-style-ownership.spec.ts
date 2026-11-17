@@ -136,6 +136,13 @@ async function commitStyleOnB(helper: EditorHelper, container: Locator, b: Locat
 }
 
 test('pending style stays with owner A across selection and tab boundaries (non-native boundary probes + native round-trip)', async ({ editorPage, editorHelper }) => {
+    if (process.env.PWAPPY_MONACO_DEMAND_REGRESSION === 'true') {
+        for (const selector of ['property-container', 'script-container']) {
+            const host = editorPage.locator(selector);
+            await expect(host).toHaveCount(1);
+            expect(await host.evaluate((element: any) => Boolean(element.styleEditor)), selector).toBe(false);
+        }
+    }
     const { a, b, previewA, previewB, container } = await setupPair(editorPage, editorHelper);
     const hostHandle = await container.elementHandle();
     expect(hostHandle).not.toBeNull();
@@ -495,4 +502,3 @@ test('native Monaco typing keeps cursor and editor Undo after its deferred commi
     await expect.poll(() => modelText(container)).toBe(seed);
     await expect(preview).toHaveCSS('width', '151px');
 });
-
