@@ -80,6 +80,7 @@ on:
           - style-ownership-regression
           - points-smoke
           - runner-benchmark
+          - test-tab-regression
       normal_prepare_points:
         description: "通常テストのステージング残高準備（既定有効、falseは診断用）"
         type: boolean

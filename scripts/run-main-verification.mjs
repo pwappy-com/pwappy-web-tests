@@ -37,11 +37,12 @@ export function mainSelection(suite, browser, os, env, cpuCount = cpus().length,
       '--grep', 'DOMContentLoaded|loadイベント|ライフサイクルイベント|グローバルなイベント委譲|JSDocの@fires'],
     'quick-property-regression': ['tests/specs/normal/editor-quick-property-editor.spec.ts'],
     'style-ownership-regression': ['tests/specs/normal/editor-style-ownership.spec.ts'],
+    'test-tab-regression': ['tests/specs/normal/editor-ui-automation.spec.ts', 'tests/specs/normal/editor-ui-scripts.spec.ts', '--grep', '(?:テストシナリオの追加・編集・削除ができる|APIモックの追加・ON/OFFトグル・削除ができる|変更がある場合、確認ダイアログで「OK（はい）」を選択すると変更が保存されて一覧に戻る)$'],
     'points-smoke': [],
     'runner-benchmark': ['tests/tools/runner-benchmark.spec.ts'],
   };
   const points = mode === 'branch' ? 'true' : env.PWAPPY_TEST_POINTS_ENABLED;
-  if (scope === 'runner-benchmark' && (suite !== 'normal' || workers !== 1 || retries !== '0')) fail();
+  if (['runner-benchmark', 'test-tab-regression'].includes(scope) && (suite !== 'normal' || workers !== 1 || retries !== '0')) fail();
   if (!Object.hasOwn(scopes, scope) || !['true', 'false'].includes(points)) fail();
   return { suite, browser, os, workers, retries: Number(retries), scope, points, mode,
     suffix: entry.suffix, code: entry.code, testArgs: scopes[scope] };
@@ -54,7 +55,7 @@ export function mainInvocation(selection, phase, root, env, account) {
     PWAPPY_TEST_RUN_ID: `${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}-${selection.suite}`,
     TEST_GEMINI_API_KEY: 'AIza_TEST_ONLY_WEBMCP', PWAPPY_LOGIN: '1', PWAPPY_TEST_USER_PREFIX: 'pwusr',
     DOTENV_CONFIG_PATH: join(root, 'absent.env'),
-    PWAPPY_MAIN_DISABLE_RAW_EVIDENCE: selection.mode === 'branch' || selection.scope === 'runner-benchmark' ? 'true' : 'false',
+    PWAPPY_MAIN_DISABLE_RAW_EVIDENCE: selection.mode === 'branch' || ['runner-benchmark', 'test-tab-regression'].includes(selection.scope) ? 'true' : 'false',
     PWAPPY_RUNNER_BENCHMARK: selection.scope === 'runner-benchmark' && phase === 'tests' ? 'true' : '',
     PWAPPY_APP_STARTUP_COUNTERS_PATH: selection.scope === 'runner-benchmark' && phase === 'tests' ? join(root, 'app-startup-counters.json') : '',
     PWAPPY_APP_STARTUP_TIMINGS_PATH: selection.scope === 'runner-benchmark' && phase === 'tests' ? join(root, 'app-startup-timings.json') : '',
