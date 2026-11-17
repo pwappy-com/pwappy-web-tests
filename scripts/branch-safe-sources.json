@@ -24,6 +24,7 @@
   "tests/specs/premium/snapshot-and-aiagent.spec.ts",
   "tests/specs/premium/test-mock-advanced.spec.ts",
   "tests/tools/a0-cleanup-all-apps.spec.ts",
+  "tests/tools/app-startup-timings.ts",
   "tests/tools/dashboard-helpers.ts",
   "tests/tools/editor-helpers.ts",
   "tests/tools/editor-phase-timing.ts",
