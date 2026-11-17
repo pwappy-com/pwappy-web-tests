@@ -4,7 +4,7 @@
 `mobile-safari`. It filters the existing OS-selected **normal** matrix, not the
 Playwright binary. For example, `os=macos-latest` plus
 `normal_browser=mobile-safari` retains only the Mobile Safari entry. Its OS,
-browser, binary, runner mapping (`macos-26-intel`), account/concurrency labels,
+browser, binary, runner mapping (`macos-26 (Apple Silicon)`), account/concurrency labels,
 and other entry properties remain unchanged. There are now nine manual inputs.
 
 - `test_suite=normal`: filter normal jobs.

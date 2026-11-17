@@ -109,9 +109,10 @@ The requested Normal and Premium scope is the prior five CI combinations plus Li
 
 - Linux Chromium, mobile Chrome emulation, and Firefox.
 - Windows Chromium.
-- macOS WebKit and mobile Safari emulation. Normal keeps the existing
-  `macos-26-intel` selection (the existing workflow documents ARM memory/swap
-  pressure); Premium keeps its existing `macos-latest` selection.
+- macOS WebKit and mobile Safari emulation. Normal and Premium both use explicit
+  `macos-26` Apple Silicon runners. The logical `macos-latest` selector and
+  account/concurrency identities are unchanged. Intel is reserved for separately
+  requested diagnostic comparisons, not standard CI.
 
 Firefox is an existing configured project and has its own account code `f`.
 It is explicitly tracked as deferred until the authorized staging account rollout and standalone Firefox trial succeed. Mobile rows are browser

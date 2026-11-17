@@ -11,7 +11,7 @@ export function verificationPlan() {
   const matrix = [], deferred = [];
   for (const suite of ['normal', 'premium']) {
     for (const entry of MATRIX) {
-      const row = { ...entry, suite, runner: suite === 'premium' ? entry.os : entry.runner };
+      const row = { ...entry, suite, runner: entry.os === 'macos-latest' ? 'macos-26' : suite === 'premium' ? entry.os : entry.runner };
       if (entry.browser === 'firefox' && entry.os === 'ubuntu-latest') {
         deferred.push({ suite, os: entry.os, browser: entry.browser, status: 'deferred', reason: DEFERRED_FIREFOX_REASON });
       } else matrix.push(row);

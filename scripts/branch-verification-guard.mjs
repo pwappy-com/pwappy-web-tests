@@ -12,8 +12,8 @@ export const MATRIX = Object.freeze([
   { os: 'ubuntu-latest', runner: 'ubuntu-latest', suffix: 'ubuntu', browser: 'mobile-chrome', binary: 'chromium', code: 'a' },
   { os: 'ubuntu-latest', runner: 'ubuntu-latest', suffix: 'ubuntu', browser: 'firefox', binary: 'firefox', code: 'f' },
   { os: 'windows-latest', runner: 'windows-latest', suffix: 'win', browser: 'chromium', binary: 'chromium', code: 'c' },
-  { os: 'macos-latest', runner: 'macos-26-intel', suffix: 'macos', browser: 'webkit', binary: 'webkit', code: 's' },
-  { os: 'macos-latest', runner: 'macos-26-intel', suffix: 'macos', browser: 'mobile-safari', binary: 'webkit', code: 'i' },
+  { os: 'macos-latest', runner: 'macos-26', suffix: 'macos', browser: 'webkit', binary: 'webkit', code: 's' },
+  { os: 'macos-latest', runner: 'macos-26', suffix: 'macos', browser: 'mobile-safari', binary: 'webkit', code: 'i' },
 ]);
 const fail = reason => { throw new Error(`Branch verification blocked: ${reason}.`); };
 const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
