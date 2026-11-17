@@ -26,6 +26,7 @@
   "tests/tools/a0-cleanup-all-apps.spec.ts",
   "tests/tools/dashboard-helpers.ts",
   "tests/tools/editor-helpers.ts",
+  "tests/tools/editor-phase-timing.ts",
   "tests/tools/http-failure-diagnostics.ts",
   "tests/tools/initial-dashboard-navigation.ts",
   "tests/tools/monaco-native-shortcut.ts",

@@ -1,3 +1,4 @@
+import { editorPhase } from './editor-phase-timing.ts';
 import { gotoInitialDashboard } from './initial-dashboard-navigation';
 import { observeHttpFailures, observePageHttpFailures } from './http-failure-diagnostics';
 import { expect, type Page, type BrowserContext } from '@playwright/test';
@@ -176,30 +177,33 @@ export async function openEditor(
 ): Promise<Page> {
     observeHttpFailures(context);
     const versionRow = page.locator('.version-card', { hasText: version }).first();
+    const editorBtn = versionRow.getByRole('button', { name: /エディタ/ });
+    await editorPhase('editor_preconditions', async () => {
     await expect(versionRow).toBeVisible({ timeout: 10000 });
 
-    const editorBtn = versionRow.getByRole('button', { name: /エディタ/ });
     await expect(editorBtn).toBeVisible({ timeout: 5000 });
 
     // アプリ作成直後など、背後でローディング中であれば消えるのを待つ
     await expect(page.locator('dashboard-loading-overlay')).toBeHidden({ timeout: 15000 }).catch(() => { });
 
+    });
+
     // 共通関数を使ってタブを開く
-    const editorPage = await clickAndOpenNewTabSafely(page, context, async () => {
+    const editorPage = await editorPhase('editor_popup', () => clickAndOpenNewTabSafely(page, context, async () => {
         await editorBtn.click({ force: true }).catch(async () => {
             await editorBtn.evaluate((el: HTMLElement) => el.click()).catch(() => { });
         });
-    });
+    }));
 
     const tempDialogHandler = async (dialog: any) => {
         await dialog.accept().catch(() => { });
     };
     editorPage.on('dialog', tempDialogHandler);
 
-    await editorPage.waitForLoadState('domcontentloaded');
+    await editorPhase('editor_domcontentloaded', () => editorPage.waitForLoadState('domcontentloaded'));
 
     // 開発用オーバーレイによるポインタ遮断を防ぐスタイルを注入
-    await editorPage.evaluate(() => {
+    await editorPhase('editor_overlay_setup', () => editorPage.evaluate(() => {
         const style = document.createElement('style');
         style.id = 'webpack-overlay-bypass';
         style.innerHTML = `
@@ -213,22 +217,24 @@ export async function openEditor(
            }
        `;
         document.head.appendChild(style);
-    }).catch(() => { });
+    }).catch(() => { }));
 
     const tempHelper = new EditorHelper(editorPage, false);
 
     // スナップショット復元ダイアログのスキップ
-    await tempHelper.handleSnapshotRestoreDialog();
+    await editorPhase('editor_snapshot', () => tempHelper.handleSnapshotRestoreDialog());
 
     // スターターテンプレートモーダルの処理（デフォルトでスキップ）
     if (options.skipStarterModal) {
-        await tempHelper.handleStarterTemplateModal();
+        await editorPhase('editor_starter', () => tempHelper.handleStarterTemplateModal());
     }
 
     editorPage.off('dialog', tempDialogHandler);
 
+    await editorPhase('editor_final_assertions', async () => {
     await expect(editorPage.locator('ios-component')).toBeVisible();
     await expect(page.getByText('処理中...')).toHaveCount(0, { timeout: 30000 });
+    });
     return editorPage;
 }
 

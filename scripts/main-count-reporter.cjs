@@ -10,7 +10,7 @@ const atomic = (path, value) => {
 module.exports = class MainCountReporter extends Base {
   constructor() {
     super(); this.results = new Map(); this.attempts = empty(); this.accounts = new Set();
-    this.benchmarkTimings = [];
+    this.benchmarkTimings = []; this.editorDetailTimings = [];
     this.begun = 0; this.recordingFailed = false; this.startedPublished = false;
   }
   record(operation) {
@@ -25,6 +25,11 @@ module.exports = class MainCountReporter extends Base {
     const schema = require('./runner-benchmark-timings.cjs');
     const row = schema.stepTiming(test, step);
     if (row) { this.benchmarkTimings.push(row); schema.validate(this.benchmarkTimings); }
+    if (process.env.PWAPPY_EDITOR_DETAIL_TIMINGS_PATH) {
+      const detailSchema = require('./editor-detail-timings.cjs');
+      const detail = detailSchema.stepTiming(test, step);
+      if (detail) { this.editorDetailTimings.push(detail); detailSchema.validate(this.editorDetailTimings); }
+    }
   }); }
   onTestBegin(_test, result) { this.record(() => {
     // Skipped/unstarted tests have workerIndex=-1. Retry workers retain parallelIndex.
@@ -60,6 +65,7 @@ module.exports = class MainCountReporter extends Base {
     });
   }); }
   onEnd() {
+    this.record(() => { if (process.env.PWAPPY_EDITOR_DETAIL_TIMINGS_PATH) atomic(process.env.PWAPPY_EDITOR_DETAIL_TIMINGS_PATH, this.editorDetailTimings); });
     this.record(() => { if (process.env.PWAPPY_BENCH_TIMINGS_PATH) atomic(process.env.PWAPPY_BENCH_TIMINGS_PATH, this.benchmarkTimings); });
     this.record(() => super.onEnd());
     this.record(() => atomic(process.env.PWAPPY_MAIN_INTEGRITY_PATH, {

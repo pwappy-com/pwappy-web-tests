@@ -1,3 +1,4 @@
+import { editorPhase } from './editor-phase-timing.ts';
 import { expect, Page, BrowserContext } from '@playwright/test';
 
 /**
@@ -20,7 +21,7 @@ export async function clickAndOpenNewTabSafely(page: Page, context: BrowserConte
         // 【ワークアラウンド】WebKit環境の window.open クラッシュバグ回避
         // =========================================================================
         console.warn(`[Workaround] WebKit環境の window.open クラッシュバグを回避するため、URLをインターセプトします。`);
-        await page.evaluate(() => {
+        await editorPhase('popup_interception', () => page.evaluate(() => {
             (window as any)._interceptedUrl = null;
             if (!(window as any)._isMockedForWebkit) {
                 (window as any)._isMockedForWebkit = true;
@@ -29,10 +30,10 @@ export async function clickAndOpenNewTabSafely(page: Page, context: BrowserConte
                     return null; // クラッシュする本来の呼び出しを防ぐ
                 };
             }
-        });
+        }));
 
         let urlString: string | null = null;
-        await expect(async () => {
+        await editorPhase('popup_trigger', () => expect(async () => {
             await page.evaluate(() => { (window as any)._interceptedUrl = null; });
             await action();
 
@@ -46,13 +47,13 @@ export async function clickAndOpenNewTabSafely(page: Page, context: BrowserConte
             } finally {
                 await targetUrlHandle.dispose();
             }
-        }).toPass({ timeout: 30000, intervals: [2000] });
+        }).toPass({ timeout: 30000, intervals: [2000] }));
 
         // URL取得後はタブを一度だけ作る。遷移の失敗でタブを増殖させない。
-        const spawnedPage = await context.newPage();
+        const spawnedPage = await editorPhase('popup_create', () => context.newPage());
         try {
             const absoluteUrl = new URL(urlString!, page.url()).toString();
-            await spawnedPage.goto(absoluteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+            await editorPhase('popup_navigation', () => spawnedPage.goto(absoluteUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }));
             newPage = spawnedPage;
         } catch (error) {
             await spawnedPage.close().catch(() => { });
@@ -63,13 +64,13 @@ export async function clickAndOpenNewTabSafely(page: Page, context: BrowserConte
         // =========================================================================
         // 【本道の処理】 (Chromium 等の正常なブラウザ向け)
         // =========================================================================
-        await expect(async () => {
+        await editorPhase('popup_trigger', () => expect(async () => {
             const pagePromise = context.waitForEvent('page', { timeout: 15000 }).catch(() => null);
             await action();
             const spawnedPage = await pagePromise;
             if (!spawnedPage) throw new Error('新しいタブが開かれませんでした。');
             newPage = spawnedPage;
-        }).toPass({ timeout: 30000, intervals: [2000] });
+        }).toPass({ timeout: 30000, intervals: [2000] }));
     }
 
     if (!newPage) throw new Error('新規タブのオープンに失敗しました。');

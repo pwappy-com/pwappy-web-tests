@@ -56,6 +56,7 @@ export function mainInvocation(selection, phase, root, env, account) {
     DOTENV_CONFIG_PATH: join(root, 'absent.env'),
     PWAPPY_MAIN_DISABLE_RAW_EVIDENCE: selection.mode === 'branch' || selection.scope === 'runner-benchmark' ? 'true' : 'false',
     PWAPPY_RUNNER_BENCHMARK: selection.scope === 'runner-benchmark' && phase === 'tests' ? 'true' : '',
+    PWAPPY_EDITOR_DETAIL_TIMINGS_PATH: selection.scope === 'runner-benchmark' && phase === 'tests' ? join(root, 'editor-detail-timings.json') : '',
     PWAPPY_BENCH_TIMINGS_PATH: selection.scope === 'runner-benchmark' && phase === 'tests' ? join(root, 'timings.json') : '',
     PWAPPY_MAIN_WORKERS: String(phase === 'cleanup' ? 1 : selection.workers),
     PWAPPY_MAIN_ACCOUNTS_PATH: join(root, 'accounts.json'),
@@ -152,7 +153,9 @@ async function execute(selection, phase, root, env, dependencies, account) {
   console.log(`Main ${selection.suite} ${phase}: ` + JSON.stringify({ ...final, exit }));
   if (selection.scope === 'runner-benchmark' && phase === 'tests') {
     const rows = require('./runner-benchmark-timings.cjs').read(childEnv.PWAPPY_BENCH_TIMINGS_PATH, exit === 0);
+    const details = require('./editor-detail-timings.cjs').read(childEnv.PWAPPY_EDITOR_DETAIL_TIMINGS_PATH, exit === 0, selection.browser);
     console.log('Runner benchmark timings: ' + JSON.stringify(rows));
+    console.log('Runner editor detail timings: ' + JSON.stringify(details));
   }
   // A flaky pass is reported separately but never silently turns a failed attempt green.
   return exit || (counts.passed === 0 || final.attempts.failed + final.attempts.timedOut + final.attempts.interrupted > 0 ? 1 : 0);
