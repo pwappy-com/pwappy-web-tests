@@ -302,7 +302,7 @@ jobs:
   # ジョブ 2: Normalテストの実行
   # ===================================================================
   e2e-normal:
-    name: e2e-normal (${{ matrix.runner || (matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os) }}, ${{ matrix.browser }})
+    name: e2e-normal (${{ matrix.runner || (matrix.os == 'macos-latest' && 'macos-26' || matrix.os) }}, ${{ matrix.browser }})
     needs: prepare-matrix
     if: ${{ needs.prepare-matrix.outputs.run_normal == 'true' }}
     timeout-minutes: 120
@@ -316,7 +316,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.prepare-matrix.outputs.normal_matrix) }}
     # 7GiB ARMランナーで継続するswapを避け、同じmacOS 26の標準14GiB Intelランナーに固定。
-    runs-on: ${{ matrix.runner || (matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os == 'macos-latest' && 'macos-26-intel' || matrix.os) }}
+    runs-on: ${{ matrix.runner || (matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os == 'macos-latest' && 'macos-26' || matrix.os) }}
     concurrency:
       group: pwappy-staging-account-${{ matrix.os }}-${{ matrix.browser }}
       cancel-in-progress: false
