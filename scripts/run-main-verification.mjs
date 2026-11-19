@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { startMainDiagnostics } from './main-safe-telemetry.mjs';
 import { mainGuard } from './main-verification-guard.mjs';
+import { omitScheduledMacTraceScreenshots } from './scheduled-mac-trace-policy.mjs';
 import { MATRIX, POINTS_ENDPOINT } from './branch-verification-guard.mjs';
 import { readCounts, spawnWithProgress } from './run-branch-verification.mjs';
 import { assertFreshTestAccountAuthCache, assertNoRegisteredTestAccountKey, assertNoRegisteredSmokeAccountKey, assertSessionIdentity,
@@ -52,6 +53,7 @@ export function mainInvocation(selection, phase, root, env, account) {
     PWAPPY_TEST_RUN_ID: `${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}-${selection.suite}`,
     TEST_GEMINI_API_KEY: 'AIza_TEST_ONLY_WEBMCP', PWAPPY_LOGIN: '1', PWAPPY_TEST_USER_PREFIX: 'pwusr',
     DOTENV_CONFIG_PATH: join(root, 'absent.env'),
+    PWAPPY_MAIN_TRACE_NO_SCREENSHOTS: omitScheduledMacTraceScreenshots(selection, phase, env) ? 'true' : 'false',
     PWAPPY_MAIN_DISABLE_RAW_EVIDENCE: selection.mode === 'branch' ? 'true' : 'false',
     PWAPPY_MAIN_WORKERS: String(phase === 'cleanup' ? 1 : selection.workers),
     PWAPPY_MAIN_ACCOUNTS_PATH: join(root, 'accounts.json'),
