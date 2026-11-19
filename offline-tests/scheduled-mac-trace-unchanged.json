@@ -1,0 +1,7 @@
+{
+  ".github/workflows/e2e-tests.yml": "dcd5028cd8cf666b5dffb69d3f1f5323fa72626efcd255c6de1f8b06d5100b65",
+  "scripts/main-verification-guard.mjs": "af1e68163ea485f96ce06cc8c046a44a0452021c5c1bbdcd2382699b7cbce710",
+  "scripts/main-count-reporter.cjs": "c8282d5e2c43a56a515d7aed9b9968608e41dba9641a96d01aa398907746233f",
+  "scripts/branch-verification-guard.mjs": "5dc6e4056ba84da3920485b9eb757676cb7a7bb0809b884d0e5514954b06b2bb",
+  "playwright.config.ts": "7e445b78165c0007cb9dde16d4e2b94dd6070f3786dbdbbb02da82d9f0f52754"
+}

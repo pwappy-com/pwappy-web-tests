@@ -1,0 +1,26 @@
+[
+  {
+    "file": "scripts/run-main-verification.mjs",
+    "sha256": "0a79153c14183e3bf68cac408a42e89bff8ebc7da54fd081fd90b97176b05f1f",
+    "edits": [
+      {
+        "before": "import { mainGuard } from './main-verification-guard.mjs';",
+        "after": "import { mainGuard } from './main-verification-guard.mjs';\nimport { omitScheduledMacTraceScreenshots } from './scheduled-mac-trace-policy.mjs';"
+      },
+      {
+        "before": "    PWAPPY_MAIN_DISABLE_RAW_EVIDENCE:",
+        "after": "    PWAPPY_MAIN_TRACE_NO_SCREENSHOTS: omitScheduledMacTraceScreenshots(selection, phase, env) ? 'true' : 'false',\n    PWAPPY_MAIN_DISABLE_RAW_EVIDENCE:"
+      }
+    ]
+  },
+  {
+    "file": "playwright.main-safe.config.ts",
+    "sha256": "2f468d4cb426aa393cf62b59813a3a1ebbb03e528ac53632719665750121358d",
+    "edits": [
+      {
+        "before": "  use: { ...base.use, ...(",
+        "after": "  use: { ...base.use, ...(process.env.PWAPPY_MAIN_TRACE_NO_SCREENSHOTS === 'true'\n    && process.env.CI === 'true' && process.env.PWAPPY_TEST_POINTS_PHASE === 'tests'\n    && process.platform === 'darwin' && process.arch === 'arm64'\n    ? { trace: { ...(typeof base.use?.trace === 'object' ? base.use.trace : {}), screenshots: false } } : {}), ...("
+      }
+    ]
+  }
+]
