@@ -293,7 +293,7 @@ test.describe('ファイルエクスプローラー操作テスト', () => {
         });
 
         await test.step('3. ダウンロードした zip をアップロード', async () => {
-            await editorHelper.uploadFiles([downloadPath]);
+            await editorHelper.uploadFiles([downloadPath], 'application/zip');
 
             // 検証: アップロードしたファイル名が表示されていること
             await expect(editorPage.locator('file-explorer .file', { hasText: 'download.zip' })).toBeVisible();

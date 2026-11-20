@@ -2,7 +2,6 @@ import { test as base, expect, Page, Locator } from '@playwright/test';
 import 'dotenv/config';
 import { createApp, deleteApp, gotoDashboard, openEditor, setAiCoding } from '../../tools/dashboard-helpers';
 import { EditorHelper } from '../../tools/editor-helpers';
-import { expectNativeRangeValue } from '../../tools/premium-control-helpers';
 
 const testRunSuffix = process.env.TEST_RUN_SUFFIX || 'local';
 
@@ -47,18 +46,18 @@ const test = base.extend<EditorFixtures>({
     },
 });
 
-// --- ランダム化のためのユーティリティ ---
-const getRandomItem = <T>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
-const getRandomTemp = (): string => (Math.random() * 2).toFixed(1);
-const getRandomHistory = (): string => Math.floor(Math.random() * 90 + 10).toString();
+// Independent acceptance expectation: don't use the application catalog as its own oracle.
+export const PREMIUM_GEMINI_MODELS = [
+    'gemini-3.8-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-4-argon',
+    'gemini-4-neon',
+] as const;
 
-/**
- * select要素から全オプションの値を取得し、ランダムに一つ返すヘルパー
- */
-async function getRandomOptionValue(selectLocator: Locator): Promise<string> {
-    const options = await selectLocator.locator('option').all();
-    const values = await Promise.all(options.map(opt => opt.getAttribute('value')));
-    return getRandomItem(values.filter((v): v is string => v !== null));
+export async function expectPremiumGeminiChoices(select: Locator): Promise<void> {
+    await expect.poll(() => select.locator('option').evaluateAll(
+        options => options.map(option => (option as HTMLOptionElement).value),
+    )).toEqual([...PREMIUM_GEMINI_MODELS]);
 }
 
 test.describe('AI設定の永続化テスト', () => {
@@ -71,12 +70,11 @@ test.describe('AI設定の永続化テスト', () => {
         await setAiCoding(page, true);
     });
 
-    test('AIコーダーの設定がUI上の選択肢からランダムに選んでもリロード後に保持される', async ({ editorPage, editorHelper }) => {
+    test('AIコーダーのモデルと設定がリロード後に保持される', async ({ editorPage, editorHelper }) => {
         let targetModel: string;
-        let targetTemp = getRandomTemp();
-        let targetOnsen = Math.random() > 0.5;
+        let targetOnsen: boolean;
 
-        await test.step('1. AIコーダー画面を開き、UIからモデルを取得してランダムに変更', async () => {
+        await test.step('1. AIコーダー画面を開き、モデルと設定を変更', async () => {
             await editorHelper.openMoveingHandle('right');
             const scriptContainer = editorPage.locator('script-container');
             await editorHelper.switchTabInContainer(scriptContainer, 'スクリプト');
@@ -92,24 +90,18 @@ test.describe('AI設定の永続化テスト', () => {
             await expect(settingWindow).toBeVisible();
 
             const select = settingWindow.locator('select.modern-select');
-            targetModel = await getRandomOptionValue(select);
-            console.log(`[AI Coder Test] UIから取得したランダムモデル: ${targetModel}`);
+            await expectPremiumGeminiChoices(select);
+            targetModel = (await select.inputValue()) === 'gemini-3.5-flash-lite'
+                ? 'gemini-3.8-flash' : 'gemini-3.5-flash-lite';
+            await select.selectOption(targetModel);
+            await expect(select).toHaveValue(targetModel);
+            await expect(settingWindow.locator('input[type="range"]')).toHaveCount(0);
+            await expect(settingWindow.getByText('創造性 (Temperature)', { exact: false })).toHaveCount(0);
 
-            await select.selectOption({ value: targetModel });
-
-            // input[type="range"] は fill できないブラウザがあるため、evaluate で直接 value をセットし、イベントを発火させる
-            const rangeInput = settingWindow.locator('input[type="range"]');
-            await rangeInput.evaluate((el: HTMLInputElement, val) => {
-                el.value = val;
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-            }, targetTemp);
-
-            // スイッチ部分をクリック
+            // Always change the value before verifying its persistence.
             const checkbox = settingWindow.locator('#use-onsenui-check');
-            if (await checkbox.isChecked() !== targetOnsen) {
-                await settingWindow.locator('label.switch').click();
-            }
+            targetOnsen = !(await checkbox.isChecked());
+            await settingWindow.locator('label.switch').click();
 
             // 閉じるボタンをクリック
             const closeBtn = settingWindow.locator('#close-btn');
@@ -139,7 +131,8 @@ test.describe('AI設定の永続化テスト', () => {
 
             // 保持されている値の検証
             await expect(settingWindow.locator('select.modern-select')).toHaveValue(targetModel);
-            await expectNativeRangeValue(settingWindow.locator('input[type="range"]'), Number(targetTemp));
+            await expect(settingWindow.locator('input[type="range"]')).toHaveCount(0);
+            await expect(settingWindow.getByText('創造性 (Temperature)', { exact: false })).toHaveCount(0);
             if (targetOnsen) {
                 await expect(settingWindow.locator('#use-onsenui-check')).toBeChecked();
             } else {
@@ -152,13 +145,13 @@ test.describe('AI設定の永続化テスト', () => {
         });
     });
 
-    test('AIエージェントの設定がUI上の選択肢からランダムに選んでもリロード後に保持される', async ({ editorPage, editorHelper }) => {
+    test('AIエージェントのモデルと設定がリロード後に保持される', async ({ editorPage, editorHelper }) => {
         let targetModel: string;
-        const targetHistory = getRandomHistory();
-        const targetRecovery = Math.floor(Math.random() * 5 + 1).toString();
-        const targetMode = Math.random() > 0.5 ? '自動' : '手動';
+        let targetHistory: string;
+        let targetRecovery: string;
+        let targetMode: string;
 
-        await test.step('1. AIエージェント画面を開き、UIからモデルを取得してランダムに変更', async () => {
+        await test.step('1. AIエージェント画面を開き、モデルと設定を変更', async () => {
             await editorPage.locator('#fab-bottom-menu-box').click();
             const bottomMenu = editorPage.locator('#platformBottomMenu');
             await expect(bottomMenu).toBeVisible()
@@ -170,18 +163,23 @@ test.describe('AI設定の永続化テスト', () => {
             const modal = agentWindow.locator('.modal-dialog');
 
             const select = modal.locator('#agent-model-select');
-            targetModel = await getRandomOptionValue(select);
-            console.log(`[AI Agent Test] UIから取得したランダムモデル: ${targetModel}`);
-
-            await select.selectOption({ value: targetModel });
+            await expectPremiumGeminiChoices(select);
+            targetModel = (await select.inputValue()) === 'gemini-4-neon'
+                ? 'gemini-4-argon' : 'gemini-4-neon';
+            await select.selectOption(targetModel);
+            await expect(select).toHaveValue(targetModel);
             const maxHistoryInput = modal.locator('#max-history-input');
             const maxRecoveryInput = modal.locator('#max-recovery-input');
             await expect(maxHistoryInput).toBeEditable();
             await expect(maxRecoveryInput).toBeEditable();
+            targetHistory = (await maxHistoryInput.inputValue()) === '61' ? '62' : '61';
+            targetRecovery = (await maxRecoveryInput.inputValue()) === '4' ? '5' : '4';
             await maxHistoryInput.fill(targetHistory);
             await maxRecoveryInput.fill(targetRecovery);
             await modal.locator('button', { hasText: '設定を保存' }).click();
 
+            const autoMode = agentWindow.locator('.mode-btn').filter({ hasText: '自動' });
+            targetMode = (await autoMode.getAttribute('class'))?.split(/\s+/).includes('active') ? '手動' : '自動';
             const modeBtn = agentWindow.locator('.mode-btn').filter({ hasText: targetMode });
             await modeBtn.click();
         });

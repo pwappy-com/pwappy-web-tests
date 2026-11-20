@@ -112,7 +112,7 @@ test.describe('AIエージェントとスナップショット機能の統合テ
                 const settingsModal = agentWindow.locator('.modal-dialog');
                 await expect(settingsModal).toBeVisible();
 
-                await expect(settingsModal.locator('#agent-model-select')).toHaveValue('gemini-flash-latest');
+                await expect(settingsModal.locator('#agent-model-select')).toHaveValue('gemini-3.8-flash');
                 await expect(settingsModal.locator('#max-history-input')).toHaveValue('20');
                 await expect(settingsModal.locator('#max-recovery-input')).toHaveValue('3');
 
