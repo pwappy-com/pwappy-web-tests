@@ -64,16 +64,24 @@ test('only exact reviewed retry edits are reversible to the base workflow Git bl
     assert.equal(hash, '0d269ff2f0e5ecac66e73efb274dade61016bc70');
     assert.throws(() => restoreApprovedPremiumRepairs(workflow.replace('--workers=1 --retries="$RETRIES"', '--workers=2 --retries="$RETRIES"')));
 });
-test('native numeric range oracle keeps input and reload persistence coverage', () => {
+test('Premium AI persists supported settings without rendering temperature for the new catalog', () => {
     const helper = read('../tests/tools/premium-control-helpers.ts');
     const spec = read('../tests/specs/premium/ai-settings-persistence.spec.ts');
+    const flow = read('../tests/specs/premium/agent-flow.spec.ts');
+    const snapshot = read('../tests/specs/premium/snapshot-and-aiagent.spec.ts');
+    // Keep the independent native-range fixture; the AI setting itself was removed.
     assert.match(helper, /range\.evaluate\(\(el: HTMLInputElement\) => el\.valueAsNumber\)/);
-    assert.match(helper, /toBe\(expected\)/);
-    assert.match(spec, /expectNativeRangeValue\(settingWindow\.locator\('input\[type="range"\]'\), Number\(targetTemp\)\)/);
-    for (const marker of ["el.dispatchEvent(new Event('input'", "el.dispatchEvent(new Event('change'", 'await editorPage.reload();']) {
+    for (const model of ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-4-argon', 'gemini-4-neon']) {
+        assert.ok(spec.includes("'" + model + "'"));
+    }
+    assert.equal(spec.split(`locator('input[type="range"]')).toHaveCount(0)`).length - 1, 2);
+    assert.equal(spec.split('await editorPage.reload();').length - 1, 2);
+    for (const marker of ['#use-onsenui-check', '#max-history-input', '#max-recovery-input', 'toHaveClass(/active/)', 'toHaveValue(targetModel)']) {
         assert.ok(spec.includes(marker));
     }
-    assert.doesNotMatch(spec, /toHaveValue\(targetTemp\)/);
+    assert.doesNotMatch(spec, /Math\.random|targetTemp|dispatchEvent/);
+    assert.ok(flow.includes("selectOption('gemini-4-argon')"));
+    assert.ok(snapshot.includes("toHaveValue('gemini-3.8-flash')"));
 });
 test('restore is one native confirmation attempt, with persistent success and menu oracles intact', () => {
     const helper = read('../tests/tools/premium-control-helpers.ts').split('export async function confirmArchiveRestore')[1];

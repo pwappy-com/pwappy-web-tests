@@ -114,8 +114,8 @@ test.describe('AIエージェント機能：UI・連携・コマンド反映テ�
 
             // モデルの選択変更
             const select = modal.locator('#agent-model-select');
-            await select.selectOption('gemini-2.5-pro');
-            await expect(select).toHaveValue('gemini-2.5-pro');
+            await select.selectOption('gemini-4-argon');
+            await expect(select).toHaveValue('gemini-4-argon');
 
             // キャンセルして閉じる
             await modal.locator('button', { hasText: 'キャンセル' }).click();
