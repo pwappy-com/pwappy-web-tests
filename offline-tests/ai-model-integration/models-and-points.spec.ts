@@ -119,6 +119,7 @@ test('Coding keeps the selected model after reload and records the actual points
     await expect(select).toHaveValue(models[3]);
     await coder.getByRole('button', {name: '設定を適用して戻る'}).click();
     await coder.locator('#user-input').fill('Return a local deterministic script');
+    const earlierResponses = await coder.locator('code-display').count();
     const codingPost = page.waitForResponse(r => r.url() === origin + '/rest/v1/ai-script-coding' && r.request().method() === 'POST');
     await coder.locator('#send-btn').click();
     const coding = await codingPost;
@@ -127,7 +128,7 @@ test('Coding keeps the selected model after reload and records the actual points
     expect(codingPayload.aiModel).toBe(models[3]);
     expect(codingPayload).not.toHaveProperty('temperature');
     await expect.poll(async () => (await ledger()).length, {timeout: 25000}).toBe(before + 1);
-    await expect(coder.locator('code-display')).toHaveCount(1);
+    await expect(coder.locator('code-display')).toHaveCount(earlierResponses + 1);
     await expect(coder.locator('code-display').getByText('pwappyFixtureResult', {exact: false}).first()).toBeVisible();
     const afterCoding = await balance();
     expect(start - afterCoding).toBe(233);

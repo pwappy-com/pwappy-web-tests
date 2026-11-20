@@ -1,6 +1,7 @@
 # Local AI model and points Playwright tests
 
-These checks load the real Web editor and dashboard points components in Chromium.
+These checks load the real Web editor and dashboard points components in
+desktop Chromium, Firefox, and WebKit, plus mobile Chrome and Safari emulation.
 They send real requests to an isolated WordPress Plugin instance. Only the Gemini
 provider response is synthetic; a synthetic account and fresh data are used.
 Do not use production or staging, a real cookie, or a real provider key.
@@ -27,7 +28,9 @@ This is not the full multi-browser Premium suite or the deployed /read gateway.
   (Coding Neon) and 310 PP (Agent Argon). The tests inspect request payload,
   rendered output, the actual balance, and displayed point history. They use
   the fixture REST read handlers, not the separate deployed read gateway.
-- Start from a clean database for the run. Use no CI, production app database,
+- Start from a clean database for the run. The five projects run sequentially
+  on one synthetic account (10 tests, expected final balance 97,285 PP).
+  Use no CI, production app database,
   live credentials, real provider request, or pre-existing browser session.
 
 ## Run from pwappy-web-tests
