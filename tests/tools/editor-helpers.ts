@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { observePageHttpFailures } from './http-failure-diagnostics';
 import { test, expect, type Page, type Locator, FrameLocator } from '@playwright/test';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
@@ -2001,14 +2003,23 @@ export class EditorHelper {
     /**
      * ファイルをアップロードします。
      * @param filePaths アップロードするファイルのローカルパス（配列）
+     * @param generatedMimeType テストで生成したファイルをバイト列で渡す場合のMIMEタイプ
      */
-    async uploadFiles(filePaths: string[]): Promise<void> {
+    async uploadFiles(filePaths: string[], generatedMimeType?: string): Promise<void> {
+        // Use the original download bytes rather than depending on Chromium's local path delivery.
+        const files = generatedMimeType
+            ? await Promise.all(filePaths.map(async filePath => ({
+                name: basename(filePath),
+                mimeType: generatedMimeType,
+                buffer: await readFile(filePath),
+            })))
+            : filePaths;
         const explorer = this.page.locator('file-explorer');
         // 隠しinput要素にファイルをセット
         const fileChooserPromise = this.page.waitForEvent('filechooser');
         await explorer.locator('.sidebar-icon', { hasText: 'アップロード' }).click();
         const fileChooser = await fileChooserPromise;
-        await fileChooser.setFiles(filePaths);
+        await fileChooser.setFiles(files);
 
         // アップロード完了（ローディング消去）を待つ
         await this.waitForFileExplorerLoading();
@@ -2125,7 +2136,12 @@ export class EditorHelper {
                 importLabel.click(),
             ]);
 
-            await fileChooser.setFiles(filePath);
+            await fileChooser.setFiles({
+                name: basename(filePath),
+                // .pwappy is an application-specific extension; the importer reads the bytes as text.
+                mimeType: 'application/octet-stream',
+                buffer: await readFile(filePath),
+            });
 
             // --- 完了判定 ---
             // 標準alertが発火したかをポーリング
