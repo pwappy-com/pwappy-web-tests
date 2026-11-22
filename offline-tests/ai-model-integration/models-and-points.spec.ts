@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
-const models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-4-argon', 'gemini-4-neon'];
+const models = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-4-argon', 'gemini-4-neon', 'gemini-4-hydrogen'];
 const balancePath = '/read/v1/pwappy-points';
 const historyPath = '/read/v1/point-history';
 const apiPaths = new Set([

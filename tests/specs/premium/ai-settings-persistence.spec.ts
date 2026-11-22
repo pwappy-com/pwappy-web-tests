@@ -52,6 +52,7 @@ export const PREMIUM_GEMINI_MODELS = [
     'gemini-3.5-flash-lite',
     'gemini-4-argon',
     'gemini-4-neon',
+    'gemini-4-hydrogen',
 ] as const;
 
 export async function expectPremiumGeminiChoices(select: Locator): Promise<void> {
