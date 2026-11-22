@@ -6,7 +6,7 @@
 
 - Pushes require the exact non-forced `main` tip. Schedules require `main` and an existing schedule. Manual dispatch accepts the selected branch's matching short or `refs/heads/…` event ref, never a tag or a different ref.
 - The checked-in `.github/webmcp-verification.json` pin must match the public staging deployment marker. Base URL, login and points endpoints must belong to the fixed staging service. The marker is checked again after key preflight and before each cleanup process.
-- Premium additionally requires `PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA` to equal the pin. This is source-specific authorization, not a persistent bypass.
+- Premium runs from the repository's exact main E2E workflow can run on its configured schedules, non-forced main pushes, or manual main dispatches without a second SHA setting. Manual dispatches on any other branch and isolated branch verification still require `PWAPPY_WEBMCP_LIVE_PREMIUM_AUTHORIZED_SHA` to equal the pin. The deployment marker, staging endpoints and dedicated account checks apply in every case.
 - Each candidate Normal/Premium account must have no reusable local auth cache and a server-issued identity cookie matching that exact account. A read-only settings check must report `isUserGeminiApiKeyRegistered === false`. Only the synthetic test key is passed to test processes. Smoke uses its dedicated `998` account with the same read-only identity/key check.
 
 The branch verification workflow retains its separate marked-feature-push trigger and index-zero contract. Main's broader trigger support does not change the branch guard.
